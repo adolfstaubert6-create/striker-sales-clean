@@ -3,7 +3,7 @@ import { COMPANY_TYPES, COUNTRIES } from '../constants/companyTypes.js'
 import { validateSearchInput } from '../utils/validateSearchInput.js'
 import { searchPlaces } from '../services/placesService.js'
 import { scoreAll } from '../services/aiScoringService.js'
-import { saveCompany } from '../services/firebaseService.js'
+import { saveCompany, saveCompanies } from '../services/firebaseService.js'
 
 const AI_CRITERIA = [
   { value: 'no_filter',   label: 'Všetky výsledky' },
@@ -64,8 +64,6 @@ export default function SearchPanel({ searching, setSearching }) {
       setGlobalError(e.message)
     } finally {
       setSearching(false)
-      setLoadingText('')
-      setProgress({ done: 0, total: 0 })
     }
   }
 
@@ -83,8 +81,34 @@ export default function SearchPanel({ searching, setSearching }) {
   }
 
   async function handleSaveAll() {
-    for (const c of results) {
-      if (!saved[c.place_id]) await handleSave(c)
+    const unsaved = results.filter(c => !saved[c.place_id])
+    if (!unsaved.length) return
+
+    // Mark all as saving immediately
+    setSaved(p => {
+      const next = { ...p }
+      unsaved.forEach(c => { next[c.place_id] = 'saving' })
+      return next
+    })
+
+    try {
+      const batchResults = await saveCompanies(unsaved, form.category, form.city, form.country)
+      // batchResults keyed by place_id or name — map back to place_id
+      setSaved(p => {
+        const next = { ...p }
+        unsaved.forEach(c => {
+          const key = c.place_id || c.googlePlaceId || c.name
+          next[c.place_id] = batchResults[key] || 'saved'
+        })
+        return next
+      })
+    } catch (e) {
+      setSaved(p => {
+        const next = { ...p }
+        unsaved.forEach(c => { next[c.place_id] = null })
+        return next
+      })
+      setGlobalError('Hromadné uloženie zlyhalo: ' + e.message)
     }
   }
 
