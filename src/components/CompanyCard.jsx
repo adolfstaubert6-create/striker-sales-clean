@@ -31,6 +31,7 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
             <div style={css.scoreEmpty}>–/100</div>
           )}
           {pri && !scoring && <div style={{ ...css.priLabel, color: pri.color }}>{pri.label}</div>}
+          <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.45rem', color: '#6b7280', marginTop: 1, letterSpacing: 1 }}>BPS</div>
         </div>
       </div>
 
@@ -68,7 +69,7 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
         {(company.aiScore === null || company.aiScore === undefined) && (
           <button style={{ ...css.aBtn, borderColor: '#ffaa00', color: '#ffaa00' }}
             onClick={() => onScore(company)} disabled={scoring}>
-            {scoring ? '⏳ Hodnotí...' : '✦ AI Score'}
+            {scoring ? '⏳ Počíta...' : '✦ BPS Skóre'}
           </button>
         )}
         {company.aiFactors?.positive?.length > 0 && (

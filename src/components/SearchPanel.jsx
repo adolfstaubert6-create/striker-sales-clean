@@ -34,10 +34,8 @@ export default function SearchPanel({ searching, setSearching }) {
     radius: '15', limit: '10', aiCriteria: 'no_filter',
   })
   const [errors, setErrors]           = useState({})
-  const [loadingText, setLoadingText] = useState('')
   const [results, setResults]         = useState([])
   const [saved, setSaved]             = useState({})
-  const [progress, setProgress]       = useState({ done: 0, total: 0 })
   const [globalError, setGlobalError] = useState('')
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -50,12 +48,9 @@ export default function SearchPanel({ searching, setSearching }) {
     setGlobalError('')
     setResults([])
     setSaved({})
-    setProgress({ done: 0, total: 0 })
     setSearching(true)
 
     try {
-      // Phase 1 — Google Places
-      setLoadingText(`🔍 Vyhľadáva ${CATEGORY_PLURAL[form.category] || 'firiem'} v ${form.city}...`)
       const places = await searchPlaces(form)
 
       if (!places.length) {
@@ -63,17 +58,8 @@ export default function SearchPanel({ searching, setSearching }) {
         return
       }
 
-      // Phase 2 — AI scoring
-      setProgress({ done: 0, total: places.length })
-      setLoadingText(`✦ AI analyzuje ${places.length} ${CATEGORY_PLURAL[form.category] || 'firiem'}...`)
-
       const withCategory = places.map(p => ({ ...p, category: form.category, city: form.city }))
-      const scored = await scoreAll(withCategory, (done, total) => {
-        setProgress({ done, total })
-        setLoadingText(`✦ AI analyzuje... ${done}/${total}`)
-      })
-
-      setResults(scored)
+      setResults(scoreAll(withCategory))
     } catch (e) {
       setGlobalError(e.message)
     } finally {
@@ -157,15 +143,8 @@ export default function SearchPanel({ searching, setSearching }) {
 
         <button style={{ ...css.searchBtn, opacity: searching ? 0.7 : 1 }}
           onClick={handleSearch} disabled={searching}>
-          {searching ? loadingText || '⏳ Pracuje...' : '🔍 Spustiť vyhľadávanie + AI analýzu'}
+          {searching ? `🔍 Vyhľadáva ${CATEGORY_PLURAL[form.category] || 'firiem'} v ${form.city}...` : '🔍 Spustiť vyhľadávanie'}
         </button>
-
-        {/* Progress bar */}
-        {searching && progress.total > 0 && (
-          <div style={css.progressWrap}>
-            <div style={{ ...css.progressBar, width: `${(progress.done / progress.total) * 100}%` }} />
-          </div>
-        )}
 
         {globalError && <div style={css.errBox}>⚠ {globalError}</div>}
       </div>
@@ -175,7 +154,7 @@ export default function SearchPanel({ searching, setSearching }) {
         <div style={{ marginTop: '1.25rem' }}>
           <div style={css.resHeader}>
             <span style={css.resTitle}>
-              {results.length} výsledkov · zoradené podľa AI skóre
+              {results.length} výsledkov · zoradené podľa Business Potential Score
             </span>
             <button style={css.saveAllBtn} onClick={handleSaveAll}>
               + Uložiť všetky do dashboardu
@@ -221,12 +200,13 @@ function ResultCard({ company: c, saveState, onSave }) {
           </div>
         </div>
 
-        {/* Score */}
+        {/* Business Potential Score */}
         <div style={css.scoreSide}>
           {sc !== null && sc !== undefined ? (
             <>
               <div style={{ ...css.scoreBig, color: col }}>{sc}</div>
               <div style={{ ...css.scoreSmall, color: col }}>{lbl}</div>
+              <div style={{ ...css.scoreSmall, color: '#6b7280', fontSize: '0.45rem', marginTop: 1 }}>BPS</div>
             </>
           ) : (
             <div style={css.scoreNa}>–</div>
