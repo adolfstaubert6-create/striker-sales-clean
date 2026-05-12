@@ -5,8 +5,8 @@ import {
 } from 'firebase/firestore'
 import { normalizeCompanyData } from '../utils/normalizeCompanyData.js'
 
-export async function saveCompany(raw, category, city) {
-  const data = normalizeCompanyData(raw, category, city)
+export async function saveCompany(raw, category, city, country = 'DE') {
+  const data = normalizeCompanyData(raw, category, city, country)
 
   // Duplicate detection: googlePlaceId → website → name+address
   const ref = collection(db, 'companies')

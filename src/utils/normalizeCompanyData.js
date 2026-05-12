@@ -1,8 +1,8 @@
-export function normalizeCompanyData(raw, category, city) {
+export function normalizeCompanyData(raw, category, city, country = 'DE') {
   return {
     name: (raw.name || '').trim(),
     category: category || '',
-    country: 'DE',
+    country: country || 'DE',
     city: raw.city || city || '',
     address: raw.address || raw.vicinity || '',
     website: raw.website || '',
