@@ -1,17 +1,26 @@
-const GOOGLE_TYPE_MAP = {
-  hotel:      'lodging',
-  laundry:    'laundry',
-  restaurant: 'restaurant',
+const CATEGORY_QUERIES = {
+  hotel:      'hotels',
+  laundry:    'laundry service',
+  restaurant: 'restaurants',
   hospital:   'hospital',
-  spa:        'spa',
+  spa:        'wellness spa',
 }
 
 const COUNTRY_NAMES = { DE: 'Germany', AT: 'Austria', CH: 'Switzerland' }
 
+const FIELD_MASK = [
+  'places.id',
+  'places.displayName',
+  'places.formattedAddress',
+  'places.location',
+  'places.rating',
+  'places.nationalPhoneNumber',
+  'places.websiteUri',
+].join(',')
+
 exports.handler = async (event) => {
-  // GET — health check
   if (event.httpMethod === 'GET') {
-    return { statusCode: 200, body: JSON.stringify({ ok: true, fn: 'search-places' }) }
+    return { statusCode: 200, body: JSON.stringify({ ok: true, fn: 'search-places', api: 'Places API New' }) }
   }
 
   if (event.httpMethod !== 'POST') {
@@ -31,78 +40,56 @@ exports.handler = async (event) => {
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY
   if (!apiKey) {
-    console.error('[search-places] GOOGLE_PLACES_API_KEY is not set in env vars')
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'GOOGLE_PLACES_API_KEY nie je nastavený v Netlify env vars' })
-    }
+    return { statusCode: 500, body: JSON.stringify({ error: 'GOOGLE_PLACES_API_KEY nie je nastavený v Netlify env vars' }) }
   }
 
-  const type        = GOOGLE_TYPE_MAP[category] || category
-  const radiusM     = Math.min(Math.max(parseInt(radius) * 1000, 1000), 50000)
   const maxRes      = Math.min(Math.max(parseInt(limit), 1), 20)
   const countryName = COUNTRY_NAMES[country] || 'Germany'
+  const query       = `${CATEGORY_QUERIES[category] || category} in ${city}, ${countryName}`
 
-  console.log(`[search-places] Request: city=${city}, type=${type}, radius=${radiusM}m, limit=${maxRes}, country=${country}`)
+  console.log(`[search-places] Query: "${query}", limit=${maxRes}`)
 
   try {
-    // Step 1 — Geocode city
-    const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city + ', ' + countryName)}&key=${apiKey}`
-    const geoRes  = await fetch(geoUrl)
-    const geoData = await geoRes.json()
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type':    'application/json',
+        'X-Goog-Api-Key':  apiKey,
+        'X-Goog-FieldMask': FIELD_MASK,
+      },
+      body: JSON.stringify({
+        textQuery:       query,
+        maxResultCount:  maxRes,
+        languageCode:    'de',
+      }),
+    })
 
-    console.log(`[search-places] Geocode status: ${geoData.status}`)
+    const data = await res.json()
 
-    if (geoData.status !== 'OK') {
-      const msg = geoData.error_message || geoData.status
-      console.error('[search-places] Geocode failed:', msg)
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: `Geocoding zlyhal: ${msg} — skontroluj či má API kľúč povolené Geocoding API` })
-      }
+    if (!res.ok || data.error) {
+      const msg = data.error?.message || `HTTP ${res.status}`
+      console.error('[search-places] API error:', msg)
+      return { statusCode: 500, body: JSON.stringify({ error: `Google Places: ${msg}` }) }
     }
 
-    const { lat, lng } = geoData.results[0].geometry.location
-    console.log(`[search-places] Geocoded ${city} → lat=${lat}, lng=${lng}`)
-
-    // Step 2 — Nearby search
-    const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radiusM}&type=${type}&key=${apiKey}`
-    const placesRes  = await fetch(placesUrl)
-    const placesData = await placesRes.json()
-
-    console.log(`[search-places] Places status: ${placesData.status}, count: ${placesData.results?.length ?? 0}`)
-
-    if (placesData.status === 'REQUEST_DENIED') {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: `Google Places REQUEST_DENIED — ${placesData.error_message || 'skontroluj či má kľúč povolené Places API'}` })
-      }
-    }
-
-    if (placesData.status !== 'OK' && placesData.status !== 'ZERO_RESULTS') {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: `Google Places: ${placesData.status} — ${placesData.error_message || ''}` })
-      }
-    }
-
-    let results = (placesData.results || []).map(p => ({
-      place_id: p.place_id,
-      name:     p.name,
-      address:  p.vicinity || '',
+    let results = (data.places || []).map(p => ({
+      place_id: p.id,
+      name:     p.displayName?.text || '',
+      address:  p.formattedAddress  || '',
       city,
       country,
       rating:   typeof p.rating === 'number' ? p.rating : null,
-      phone:    '',
-      website:  '',
+      phone:    p.nationalPhoneNumber || '',
+      website:  p.websiteUri
+        ? p.websiteUri.replace(/^https?:\/\//, '').replace(/\/$/, '')
+        : '',
     }))
 
     if (aiCriteria === 'high_rating') {
       results = results.filter(r => r.rating !== null && r.rating >= 4.0)
     }
 
-    results = results.slice(0, maxRes)
-    console.log(`[search-places] Returning ${results.length} results`)
+    console.log(`[search-places] Returning ${results.length} results for "${query}"`)
     return { statusCode: 200, body: JSON.stringify({ results }) }
 
   } catch (err) {
