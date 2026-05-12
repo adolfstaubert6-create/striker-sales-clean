@@ -82,9 +82,9 @@ export default function SearchPanel({ searching, setSearching }) {
 
   async function handleSaveAll() {
     const unsaved = results.filter(c => !saved[c.place_id])
+    console.log('[handleSaveAll] unsaved count:', unsaved.length)
     if (!unsaved.length) return
 
-    // Mark all as saving immediately
     setSaved(p => {
       const next = { ...p }
       unsaved.forEach(c => { next[c.place_id] = 'saving' })
@@ -93,22 +93,22 @@ export default function SearchPanel({ searching, setSearching }) {
 
     try {
       const batchResults = await saveCompanies(unsaved, form.category, form.city, form.country)
-      // batchResults keyed by place_id or name — map back to place_id
+      console.log('[handleSaveAll] batchResults:', batchResults)
       setSaved(p => {
         const next = { ...p }
         unsaved.forEach(c => {
-          const key = c.place_id || c.googlePlaceId || c.name
-          next[c.place_id] = batchResults[key] || 'saved'
+          next[c.place_id] = batchResults[c.place_id] || 'saved'
         })
         return next
       })
     } catch (e) {
+      console.error('[handleSaveAll] ERROR:', e)
       setSaved(p => {
         const next = { ...p }
         unsaved.forEach(c => { next[c.place_id] = null })
         return next
       })
-      setGlobalError('Hromadné uloženie zlyhalo: ' + e.message)
+      setGlobalError('Uloženie zlyhalo: ' + e.message)
     }
   }
 

@@ -1,21 +1,16 @@
 import { db } from '../firebase.js'
 import {
-  collection, addDoc, getDocs, query, where, writeBatch,
+  collection, addDoc, getDocs, query, where,
   serverTimestamp, orderBy, onSnapshot, doc, updateDoc
 } from 'firebase/firestore'
 import { normalizeCompanyData } from '../utils/normalizeCompanyData.js'
 
 export async function saveCompany(raw, category, city, country = 'DE') {
   const data = normalizeCompanyData(raw, category, city, country)
+  const ref  = collection(db, 'companies')
 
-  // Duplicate detection: googlePlaceId → website → name+address
-  const ref = collection(db, 'companies')
   if (data.googlePlaceId) {
     const snap = await getDocs(query(ref, where('googlePlaceId', '==', data.googlePlaceId)))
-    if (!snap.empty) return { id: snap.docs[0].id, duplicate: true }
-  }
-  if (data.website) {
-    const snap = await getDocs(query(ref, where('website', '==', data.website)))
     if (!snap.empty) return { id: snap.docs[0].id, duplicate: true }
   }
   if (data.name && data.address) {
@@ -28,40 +23,57 @@ export async function saveCompany(raw, category, city, country = 'DE') {
 }
 
 export async function saveCompanies(companies, category, city, country = 'DE') {
+  console.log('[saveCompanies] start — count:', companies.length, '| db:', !!db, '| projectId:', db?.app?.options?.projectId)
+
   const ref     = collection(db, 'companies')
-  const ts      = serverTimestamp()
   const results = {}
 
-  // 1. Duplicate checks in parallel
+  // 1. Parallel duplicate checks
   const checked = await Promise.all(
-    companies.map(async raw => {
+    companies.map(async (raw) => {
       const data = normalizeCompanyData(raw, category, city, country)
-      const key  = raw.place_id || raw.googlePlaceId || data.name  // must match place_id used in SearchPanel
+      const key  = raw.place_id
+
+      console.log('[saveCompanies] checking:', data.name, '| key:', key, '| googlePlaceId:', data.googlePlaceId)
 
       if (data.googlePlaceId) {
         const snap = await getDocs(query(ref, where('googlePlaceId', '==', data.googlePlaceId)))
-        if (!snap.empty) { results[key] = 'dup'; return null }
+        if (!snap.empty) {
+          console.log('[saveCompanies] duplicate (placeId):', data.name)
+          results[key] = 'dup'
+          return null
+        }
       }
       if (data.name && data.address) {
         const snap = await getDocs(query(ref, where('name', '==', data.name), where('address', '==', data.address)))
-        if (!snap.empty) { results[key] = 'dup'; return null }
+        if (!snap.empty) {
+          console.log('[saveCompanies] duplicate (name+addr):', data.name)
+          results[key] = 'dup'
+          return null
+        }
       }
       return { key, data }
     })
   )
 
-  // 2. Batch write all non-duplicates
+  // 2. Save non-duplicates individually (avoids writeBatch doc-ref issues)
   const toWrite = checked.filter(Boolean)
-  if (toWrite.length) {
-    const batch = writeBatch(db)
-    toWrite.forEach(({ key, data }) => {
-      const newRef = doc(ref)
-      batch.set(newRef, { ...data, createdAt: ts, updatedAt: ts })
-      results[key] = 'saved'
-    })
-    await batch.commit()
-  }
+  console.log('[saveCompanies] to write:', toWrite.length, '| duplicates:', Object.values(results).filter(v => v === 'dup').length)
 
+  await Promise.all(
+    toWrite.map(async ({ key, data }) => {
+      try {
+        const docRef = await addDoc(ref, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+        console.log('[saveCompanies] saved:', data.name, '| docId:', docRef.id)
+        results[key] = 'saved'
+      } catch (err) {
+        console.error('[saveCompanies] addDoc failed for', data.name, ':', err.code, err.message)
+        results[key] = 'error'
+      }
+    })
+  )
+
+  console.log('[saveCompanies] done — results:', results)
   return results
 }
 
