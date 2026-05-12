@@ -29,6 +29,7 @@ const EVENT_ICONS = {
   note_deleted:     '🗑️',
   task_created:     '✅',
   draft_created:    '✉',
+  draft_approved:   '✅',
   email_generated:  '✉',
   email_sent:       '📤',
   reply_received:   '📥',
@@ -51,6 +52,78 @@ function fmtTs(ts) {
 function extractDomain(w) {
   if (!w) return null
   return w.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
+}
+
+// ── AI response parser ───────────────────────────────────────────────────────
+function parseAiResponse(text) {
+  const match = text.match(/<SUGGEST_STATUS:([a-z]+)>/)
+  if (!match) return { text, suggestion: null }
+  return {
+    text: text.replace(/<SUGGEST_STATUS:[a-z]+>/g, '').trim(),
+    suggestion: { type: 'status', value: match[1] },
+  }
+}
+
+// ── Email Workflow Card ───────────────────────────────────────────────────────
+function EmailWorkflowCard({ email, onApprove, onSend, sending }) {
+  const [body, setBody]   = useState(email.body || '')
+  const [subj, setSubj]   = useState(email.subject || '')
+  const isDraft    = email.status === 'draft'
+  const isApproved = email.status === 'approved'
+  const isSent     = email.status === 'sent'
+
+  const borderColor = isSent ? '#00cc88' : isApproved ? '#3b82f6' : '#ffaa00'
+  const statusLabel = isSent ? '✓ Odoslaný' : isApproved ? '● Schválený — pripravený na odoslanie' : '○ Čaká na schválenie'
+  const statusColor = isSent ? '#00cc88' : isApproved ? '#3b82f6' : '#ffaa00'
+
+  return (
+    <div style={{ border: `1px solid ${borderColor}44`, borderLeft: `3px solid ${borderColor}`, borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.6rem', background: '#0d1117' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', color: statusColor }}>{statusLabel}</span>
+        {isSent && email.sentAt && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#4b5563' }}>{fmtTs(email.sentAt)}</span>}
+      </div>
+      <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#6b7280', marginBottom: '0.4rem' }}>
+        Predmet: {email.subject}
+      </div>
+      {(isDraft || isApproved) ? (
+        <>
+          {isDraft && (
+            <>
+              <input
+                style={{ width: '100%', background: '#161b22', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.5rem', borderRadius: 2, outline: 'none', marginBottom: '0.4rem' }}
+                value={subj} onChange={e => setSubj(e.target.value)} placeholder="Predmet..." />
+              <textarea
+                style={{ width: '100%', background: '#161b22', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.62rem', padding: '0.4rem 0.5rem', borderRadius: 2, outline: 'none', resize: 'vertical', minHeight: 100, lineHeight: 1.6, marginBottom: '0.5rem' }}
+                value={body} onChange={e => setBody(e.target.value)} />
+            </>
+          )}
+          {isApproved && (
+            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', background: '#161b22', padding: '0.5rem', borderRadius: 2, marginBottom: '0.5rem', whiteSpace: 'pre-wrap', maxHeight: 80, overflowY: 'auto' }}>
+              {email.body}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {isDraft && (
+              <button
+                style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: 'none', background: '#3b82f6', color: '#fff', borderRadius: 2, fontWeight: 700, cursor: 'pointer' }}
+                onClick={() => onApprove(email.id, subj, body)}>
+                ✓ Schváliť draft
+              </button>
+            )}
+            {isApproved && (
+              <button
+                style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer', opacity: sending ? 0.6 : 1 }}
+                onClick={() => onSend(email)} disabled={sending}>
+                {sending ? '⏳ Odosiela...' : '📤 Odoslať email'}
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#4b5563' }}>Email bol odoslaný na {email.to || '–'}</div>
+      )}
+    </div>
+  )
 }
 
 // ── AiBadge ──────────────────────────────────────────────────────────────────
@@ -146,6 +219,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [draftOpen, setDraftOpen] = useState(false)
   const [fb, setFb]               = useState({})
   const [toast, setToast]         = useState(null)
+  const [emails, setEmails]           = useState([])
+  const [sendingEmail, setSendingEmail] = useState(false)
   const [aiMessages, setAiMessages] = useState([])
   const [aiInput, setAiInput]       = useState('')
   const [aiLoading, setAiLoading]   = useState(false)
@@ -198,7 +273,20 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       }
     )
 
-    return () => { unsubDoc(); unsubInter(); unsubNotes(); unsubTasks() }
+    const unsubEmails = onSnapshot(
+      query(collection(db, 'emails'), where('companyId', '==', id)),
+      snap => {
+        const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        rows.sort((a, b) => {
+          const ta = a.createdAt?.toDate?.() || new Date(0)
+          const tb = b.createdAt?.toDate?.() || new Date(0)
+          return tb - ta
+        })
+        setEmails(rows)
+      }
+    )
+
+    return () => { unsubDoc(); unsubInter(); unsubNotes(); unsubTasks(); unsubEmails() }
   }, [initialCompany.id])
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -306,6 +394,59 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
     logEvent('email_generated', `${CURRENT_USER} vygeneroval email draft`)
   }
 
+  // ── Email workflow handlers ────────────────────────────────────────────────
+  async function handleCreateDraft(subject, body) {
+    const { subject: defSubj, body: defBody } = generateEmailDraft(live)
+    await withFb('createDraft', async () => {
+      await addDoc(collection(db, 'emails'), {
+        companyId:  live.id,
+        companyName: live.name,
+        to:         live.email || '',
+        subject:    subject || defSubj,
+        body:       body    || defBody,
+        status:     'draft',
+        createdAt:  serverTimestamp(),
+        createdBy:  CURRENT_USER,
+        sentAt:     null,
+      })
+      await logEvent('draft_created', `${CURRENT_USER} vytvoril email draft`)
+    })
+  }
+
+  async function handleApproveDraft(emailId, subject, body) {
+    try {
+      await updateDoc(doc(db, 'emails', emailId), {
+        status: 'approved', subject, body,
+        approvedAt: serverTimestamp(), approvedBy: CURRENT_USER,
+      })
+      await logEvent('draft_approved', `${CURRENT_USER} schválil email draft`)
+      showToast('Draft schválený ✓')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  async function handleSendEmail(email) {
+    if (!email.to) { showToast('Chýba emailová adresa príjemcu', 'err'); return }
+    setSendingEmail(true)
+    try {
+      const res = await fetch('/.netlify/functions/send-email', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ to: email.to, subject: email.subject, message: email.body }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Odoslanie zlyhalo')
+      await updateDoc(doc(db, 'emails', email.id), {
+        status: 'sent', sentAt: serverTimestamp(),
+      })
+      await logEvent('email_sent', `${CURRENT_USER} odoslal email`)
+      showToast('Email odoslaný ✓')
+    } catch (e) {
+      showToast('Chyba odoslania: ' + e.message, 'err')
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
   // ── AI Advisor ─────────────────────────────────────────────────────────────
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -347,7 +488,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      setAiMessages(m => [...m, { role: 'assistant', content: data.text }])
+      const parsed = parseAiResponse(data.text)
+      setAiMessages(m => [...m, { role: 'assistant', content: parsed.text, suggestion: parsed.suggestion }])
     } catch (e) {
       setAiMessages(m => [...m, { role: 'assistant', content: `⚠ Chyba: ${e.message}` }])
     } finally {
@@ -497,28 +639,29 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
 
         <div style={css.divider} />
 
-        {/* ══ EMAIL ══ */}
+        {/* ══ EMAIL WORKFLOW ══ */}
         <div style={css.section}>
-          <ColTitle>Email</ColTitle>
-          <div style={css.emailStatus}>
+          <ColTitle>Email Workflow</ColTitle>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
             <span style={live.email ? css.emailFoundBadge : css.emailMissingBadge}>
-              {live.email ? `✓ Email nájdený — ${live.email}` : '⚠ Email chýba'}
+              {live.email ? `✓ ${live.email}` : '⚠ Email chýba'}
             </span>
+            <button style={css.btnPrimary} onClick={() => handleCreateDraft()}>
+              {fb.createDraft === 'saving' ? '⏳' : '+ Vytvoriť draft'}
+            </button>
           </div>
-          <div style={css.emailBtns}>
-            <button style={css.btnPrimary} onClick={openDraft}>✦ Generovať draft</button>
-            <button style={css.btnSecondary} onClick={() => setDraftOpen(o => !o)}>✎ Editovať</button>
-            <button style={{ ...css.btnSecondary, color: '#ffaa00', borderColor: '#ffaa0055' }}
-              onClick={() => handleStatusChange('contacted')}>✓ Schváliť</button>
-          </div>
-          {draftOpen && (
-            <div style={css.draftBox}>
-              <label style={css.draftLabel}>Predmet</label>
-              <input style={css.draftInput} value={draftSubj} onChange={e => setDraftSubj(e.target.value)} />
-              <label style={css.draftLabel}>Text</label>
-              <textarea style={css.draftArea} value={draftBody} onChange={e => setDraftBody(e.target.value)} />
+
+          {emails.length === 0 && (
+            <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#4b5563', padding: '0.5rem 0' }}>
+              Žiadne emaily — klikni "Vytvoriť draft" pre začatie.
             </div>
           )}
+          {emails.map(email => (
+            <EmailWorkflowCard key={email.id} email={email}
+              onApprove={handleApproveDraft}
+              onSend={handleSendEmail}
+              sending={sendingEmail} />
+          ))}
         </div>
 
         <div style={css.divider} />
@@ -588,12 +731,39 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
               </div>
             )}
             {aiMessages.map((m, i) => (
-              <div key={i} style={m.role === 'user' ? css.msgUserWrap : css.msgAiWrap}>
-                <div style={m.role === 'user' ? css.msgUser : css.msgAi}>
-                  {m.role === 'user'
-                    ? <span style={css.msgUserText}>{m.content}</span>
-                    : <span style={css.msgAiText}>{m.content}</span>}
+              <div key={i}>
+                <div style={m.role === 'user' ? css.msgUserWrap : css.msgAiWrap}>
+                  <div style={m.role === 'user' ? css.msgUser : css.msgAi}>
+                    {m.role === 'user'
+                      ? <span style={css.msgUserText}>{m.content}</span>
+                      : <span style={css.msgAiText}>{m.content}</span>}
+                  </div>
                 </div>
+                {/* Status change suggestion card */}
+                {m.role === 'assistant' && m.suggestion?.type === 'status' && (() => {
+                  const sKey = m.suggestion.value
+                  const sObj = COMPANY_STATUSES[sKey]
+                  if (!sObj) return null
+                  return (
+                    <div style={{ marginLeft: '1rem', marginTop: '0.4rem', background: '#0d1117', border: `1px solid ${sObj.color}44`, borderLeft: `3px solid ${sObj.color}`, borderRadius: 3, padding: '0.6rem 0.85rem', maxWidth: '88%' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.62rem', color: sObj.color, marginBottom: '0.4rem' }}>
+                        ✦ AI navrhuje zmenu statusu → <strong>{sObj.label}</strong>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button
+                          style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.65rem', border: 'none', background: sObj.color, color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' }}
+                          onClick={() => handleStatusChange(sKey)}>
+                          ✓ Schváliť
+                        </button>
+                        <button
+                          style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.6rem', border: '1px solid #21262d', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' }}
+                          onClick={() => setAiMessages(prev => prev.map((msg, idx) => idx === i ? { ...msg, suggestion: null } : msg))}>
+                          Zamietnuť
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             ))}
             {aiLoading && (
