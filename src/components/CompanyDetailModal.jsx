@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { db } from '../firebase.js'
 import {
   doc, collection, onSnapshot, updateDoc, addDoc,
@@ -146,6 +146,10 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [draftOpen, setDraftOpen] = useState(false)
   const [fb, setFb]               = useState({})
   const [toast, setToast]         = useState(null)
+  const [aiMessages, setAiMessages] = useState([])
+  const [aiInput, setAiInput]       = useState('')
+  const [aiLoading, setAiLoading]   = useState(false)
+  const chatEndRef                   = useRef(null)
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -301,6 +305,64 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
     setDraftSubj(subject); setDraftBody(body); setDraftOpen(true)
     logEvent('email_generated', `${CURRENT_USER} vygeneroval email draft`)
   }
+
+  // ── AI Advisor ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [aiMessages, aiLoading])
+
+  function buildCompanyContext() {
+    return {
+      name:        live.name,
+      category:    live.category,
+      city:        live.city,
+      website:     live.website,
+      phone:       live.phone,
+      email:       live.email,
+      rating:      live.rating,
+      aiScore:     live.aiScore,
+      aiReason:    live.aiReason,
+      aiPositive:  live.aiPositive || [],
+      aiRisks:     live.aiRisks    || [],
+      aiNextStep:  live.aiNextStep  || '',
+      status:      live.status,
+      recentNotes: notes.slice(0, 3).map(n => n.text),
+      recentEvents: interactions.slice(0, 5).map(e => e.message).filter(Boolean),
+    }
+  }
+
+  async function sendAiMessage(text) {
+    const msg = (text || aiInput).trim()
+    if (!msg || aiLoading) return
+    const userMsg   = { role: 'user', content: msg }
+    const newMsgs   = [...aiMessages, userMsg]
+    setAiMessages(newMsgs)
+    setAiInput('')
+    setAiLoading(true)
+    try {
+      const res = await fetch('/.netlify/functions/ai-advisor', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ messages: newMsgs, companyContext: buildCompanyContext() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setAiMessages(m => [...m, { role: 'assistant', content: data.text }])
+    } catch (e) {
+      setAiMessages(m => [...m, { role: 'assistant', content: `⚠ Chyba: ${e.message}` }])
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const QUICK_PROMPTS = [
+    { label: '🏢 Zhodnoť firmu',       text: 'Zhodnoť túto firmu pre STRIKER sales.' },
+    { label: '🎯 Ďalší krok',          text: 'Aký je najlepší ďalší krok pre túto firmu?' },
+    { label: '✉ Prvý email',           text: 'Navrhni konkrétny prvý email pre túto firmu.' },
+    { label: '⚠️ Riziká',              text: 'Aké sú hlavné riziká pri kontaktovaní tejto firmy?' },
+    { label: '🔥 Argumenty',           text: 'Aké argumenty by na nich najviac fungovali?' },
+    { label: '💰 Obchodný potenciál',  text: 'Zhrň obchodný potenciál tejto firmy pre STRIKER.' },
+  ]
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const st       = COMPANY_STATUSES[live.status] || COMPANY_STATUSES.new
@@ -501,6 +563,66 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
           )}
         </div>
 
+        <div style={css.divider} />
+
+        {/* ══ STRIKER AI ADVISOR ══ */}
+        <div style={css.aiSection}>
+          <div style={css.aiTitle}>✦ STRIKER AI ADVISOR</div>
+
+          {/* Quick buttons */}
+          <div style={css.quickBtns}>
+            {QUICK_PROMPTS.map(q => (
+              <button key={q.label} style={css.quickBtn}
+                onClick={() => sendAiMessage(q.text)}
+                disabled={aiLoading}>
+                {q.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Chat history */}
+          <div style={css.chatBox}>
+            {aiMessages.length === 0 && (
+              <div style={css.chatEmpty}>
+                Vyber rýchlu otázku alebo napíš vlastnú — AI poradí konkrétne pre túto firmu.
+              </div>
+            )}
+            {aiMessages.map((m, i) => (
+              <div key={i} style={m.role === 'user' ? css.msgUserWrap : css.msgAiWrap}>
+                <div style={m.role === 'user' ? css.msgUser : css.msgAi}>
+                  {m.role === 'user'
+                    ? <span style={css.msgUserText}>{m.content}</span>
+                    : <span style={css.msgAiText}>{m.content}</span>}
+                </div>
+              </div>
+            ))}
+            {aiLoading && (
+              <div style={css.msgAiWrap}>
+                <div style={css.msgAi}>
+                  <span style={css.loadingMsg}>✦ Analyzujem...</span>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input */}
+          <div style={css.aiInputRow}>
+            <input
+              style={css.aiInput}
+              placeholder="Opýtaj sa na túto firmu..."
+              value={aiInput}
+              onChange={e => setAiInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendAiMessage()}
+              disabled={aiLoading}
+            />
+            <button style={{ ...css.aiSendBtn, opacity: aiLoading ? 0.5 : 1 }}
+              onClick={() => sendAiMessage()} disabled={aiLoading}>
+              {aiLoading ? '⏳' : 'Odoslať'}
+            </button>
+          </div>
+        </div>
+
         <Toast msg={toast?.msg} type={toast?.type} />
       </div>
     </div>
@@ -587,4 +709,21 @@ const css = {
   tlIcon:        { fontSize: '0.72rem', flexShrink: 0, width: 18 },
   tlTime:        { fontFamily: mono, fontSize: '0.6rem', color: '#4b5563', flexShrink: 0, width: 120 },
   tlMsg:         { fontFamily: mono, fontSize: '0.65rem', color: '#9ca3af' },
+  // AI Advisor
+  aiSection:    { background: '#080c11', border: '1px solid #ff5c0033', borderLeft: '3px solid #ff5c00', borderRadius: 4, padding: '1.25rem 1.4rem', marginTop: '0.25rem' },
+  aiTitle:      { fontFamily: mono, fontSize: '0.8rem', fontWeight: 700, color: '#ff5c00', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.9rem' },
+  quickBtns:    { display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.9rem' },
+  quickBtn:     { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '0.5px', padding: '0.3rem 0.7rem', border: '1px solid #ff5c0044', background: 'rgba(255,92,0,0.07)', color: '#ff5c00', borderRadius: 2, cursor: 'pointer' },
+  chatBox:      { maxHeight: 400, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.55rem', marginBottom: '0.75rem', paddingRight: '0.25rem' },
+  chatEmpty:    { fontFamily: mono, fontSize: '0.65rem', color: '#4b5563', fontStyle: 'italic', padding: '1rem 0', textAlign: 'center' },
+  msgUserWrap:  { display: 'flex', justifyContent: 'flex-end' },
+  msgAiWrap:    { display: 'flex', justifyContent: 'flex-start' },
+  msgUser:      { background: '#161b22', border: '1px solid #21262d', borderRadius: '3px 3px 0 3px', padding: '0.55rem 0.75rem', maxWidth: '80%' },
+  msgAi:        { background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: '3px 3px 3px 0', padding: '0.7rem 0.9rem', maxWidth: '92%' },
+  msgUserText:  { fontFamily: mono, fontSize: '0.68rem', color: '#e8eaed' },
+  msgAiText:    { fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', color: '#c9d1d9', lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' },
+  loadingMsg:   { fontFamily: mono, fontSize: '0.7rem', color: '#ff5c00', animation: 'priPulse 1s ease-in-out infinite' },
+  aiInputRow:   { display: 'flex', gap: '0.5rem' },
+  aiInput:      { flex: 1, background: '#161b22', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.72rem', padding: '0.48rem 0.65rem', borderRadius: 2, outline: 'none' },
+  aiSendBtn:    { background: '#ff5c00', border: 'none', color: '#fff', fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.48rem 0.9rem', borderRadius: 2, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' },
 }
