@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk')
+const { SCORING_MODEL } = require('./scoringCriteria.cjs')
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -11,8 +12,8 @@ exports.handler = async (event) => {
   }
 
   const { company } = body
-  if (!company) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'company required' }) }
+  if (!company?.name) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'company.name required' }) }
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -23,39 +24,48 @@ exports.handler = async (event) => {
   try {
     const client = new Anthropic({ apiKey })
 
-    const prompt = `Ohodnoť potenciál tejto firmy ako zákazníka pre STRIKER Wärmetechnologie.
+    const prompt = `${SCORING_MODEL}
 
-STRIKER predáva priemyselný tepelný systém: 45 kW elektrická spotreba → 120-160 kW tepelný výkon (70% úspora vs. konvenčné systémy). Cena: od 8 000 EUR. Ideálni zákazníci: hotely, práčovne, nemocnice, wellness centrá — kdekoľvek s vysokou spotrebou teplej vody alebo vykurovania.
-
-Firma:
+Ohodnoť túto firmu:
 - Názov: ${company.name}
-- Kategória: ${company.category}
-- Mesto: ${company.city}, Nemecko
-- Hodnotenie: ${company.rating ? company.rating + '/5' : 'neznáme'}
-${company.address ? `- Adresa: ${company.address}` : ''}
+- Kategória: ${company.category || '–'}
+- Mesto: ${company.city || '–'}, Nemecko
+- Hodnotenie Google: ${company.rating ? company.rating + '/5' : '–'}
+- Adresa: ${company.address || '–'}
 
-Odpovedz VÝLUČNE v JSON formáte (bez markdown, bez kódu):
-{"score": <číslo 0-100>, "reason": "<max 120 znakov, prečo>"}
-
-Score 80-100 = vysoký potenciál, 50-79 = stredný, 0-49 = nízky.`
+Odpovedz VÝLUČNE v JSON (bez markdown):
+{
+  "score": <číslo 0-100>,
+  "reason": "<max 120 znakov>",
+  "factors": {
+    "positive": ["<faktor1>", "<faktor2>"],
+    "risks": ["<riziko1>"],
+    "nextStep": "<odporúčaný ďalší krok>"
+  }
+}`
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 150,
+      max_tokens: 300,
       messages: [{ role: 'user', content: prompt }],
     })
 
     const raw = message.content[0].text.trim()
     const parsed = JSON.parse(raw)
 
-    if (typeof parsed.score !== 'number' || !parsed.reason) {
-      throw new Error('Invalid AI response format')
+    if (typeof parsed.score !== 'number' || parsed.score < 0 || parsed.score > 100) {
+      throw new Error('Score must be 0-100')
     }
+    if (!parsed.reason) throw new Error('Missing reason')
 
     console.log(`[ai-score] ${company.name}: ${parsed.score}/100`)
     return {
       statusCode: 200,
-      body: JSON.stringify({ score: parsed.score, reason: parsed.reason })
+      body: JSON.stringify({
+        score: Math.round(parsed.score),
+        reason: parsed.reason,
+        factors: parsed.factors || null,
+      })
     }
 
   } catch (err) {
