@@ -147,15 +147,11 @@ export default function Dashboard() {
         ))
       )}
 
-      {/* Detail modal */}
+      {/* Detail modal — handles all Firebase ops internally */}
       {selected && (
         <CompanyDetailModal
           company={selected}
           onClose={() => setSelected(null)}
-          onStatusChange={handleStatusChange}
-          onGenerateEmail={handleGenerateEmail}
-          onSaveNote={handleSaveNote}
-          onCreateTask={handleCreateTask}
         />
       )}
 
