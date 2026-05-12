@@ -9,6 +9,11 @@ const GOOGLE_TYPE_MAP = {
 const COUNTRY_NAMES = { DE: 'Germany', AT: 'Austria', CH: 'Switzerland' }
 
 exports.handler = async (event) => {
+  // GET — health check
+  if (event.httpMethod === 'GET') {
+    return { statusCode: 200, body: JSON.stringify({ ok: true, fn: 'search-places' }) }
+  }
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
   }
@@ -19,37 +24,66 @@ exports.handler = async (event) => {
   }
 
   const { city, category, radius = 15, limit = 10, country = 'DE', aiCriteria = 'no_filter' } = body
+
   if (!city || !category) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'city and category required' }) }
+    return { statusCode: 400, body: JSON.stringify({ error: 'Chýba city alebo category' }) }
   }
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY
   if (!apiKey) {
-    console.warn('[search-places] GOOGLE_PLACES_API_KEY not set — returning empty')
-    return { statusCode: 200, body: JSON.stringify({ results: [], warning: 'GOOGLE_PLACES_API_KEY not configured' }) }
+    console.error('[search-places] GOOGLE_PLACES_API_KEY is not set in env vars')
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'GOOGLE_PLACES_API_KEY nie je nastavený v Netlify env vars' })
+    }
   }
 
+  const type        = GOOGLE_TYPE_MAP[category] || category
+  const radiusM     = Math.min(Math.max(parseInt(radius) * 1000, 1000), 50000)
+  const maxRes      = Math.min(Math.max(parseInt(limit), 1), 20)
+  const countryName = COUNTRY_NAMES[country] || 'Germany'
+
+  console.log(`[search-places] Request: city=${city}, type=${type}, radius=${radiusM}m, limit=${maxRes}, country=${country}`)
+
   try {
-    const type      = GOOGLE_TYPE_MAP[category] || category
-    const radiusM   = Math.min(Math.max(parseInt(radius) * 1000, 1000), 50000)
-    const maxRes    = Math.min(Math.max(parseInt(limit), 1), 20)
-    const countryName = COUNTRY_NAMES[country] || 'Germany'
-
-    // Geocode
-    const geoRes  = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city + ', ' + countryName)}&key=${apiKey}`)
+    // Step 1 — Geocode city
+    const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city + ', ' + countryName)}&key=${apiKey}`
+    const geoRes  = await fetch(geoUrl)
     const geoData = await geoRes.json()
-    if (geoData.status !== 'OK' || !geoData.results?.length) {
-      console.warn('[search-places] Geocode status:', geoData.status)
-      return { statusCode: 200, body: JSON.stringify({ results: [] }) }
-    }
-    const { lat, lng } = geoData.results[0].geometry.location
 
-    // Nearby search
-    const placesRes  = await fetch(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radiusM}&type=${type}&key=${apiKey}`)
+    console.log(`[search-places] Geocode status: ${geoData.status}`)
+
+    if (geoData.status !== 'OK') {
+      const msg = geoData.error_message || geoData.status
+      console.error('[search-places] Geocode failed:', msg)
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: `Geocoding zlyhal: ${msg} — skontroluj či má API kľúč povolené Geocoding API` })
+      }
+    }
+
+    const { lat, lng } = geoData.results[0].geometry.location
+    console.log(`[search-places] Geocoded ${city} → lat=${lat}, lng=${lng}`)
+
+    // Step 2 — Nearby search
+    const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radiusM}&type=${type}&key=${apiKey}`
+    const placesRes  = await fetch(placesUrl)
     const placesData = await placesRes.json()
 
+    console.log(`[search-places] Places status: ${placesData.status}, count: ${placesData.results?.length ?? 0}`)
+
+    if (placesData.status === 'REQUEST_DENIED') {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: `Google Places REQUEST_DENIED — ${placesData.error_message || 'skontroluj či má kľúč povolené Places API'}` })
+      }
+    }
+
     if (placesData.status !== 'OK' && placesData.status !== 'ZERO_RESULTS') {
-      return { statusCode: 500, body: JSON.stringify({ error: `Google Places: ${placesData.status}` }) }
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: `Google Places: ${placesData.status} — ${placesData.error_message || ''}` })
+      }
     }
 
     let results = (placesData.results || []).map(p => ({
@@ -63,17 +97,16 @@ exports.handler = async (event) => {
       website:  '',
     }))
 
-    // AI criteria filter (client hint — backend enforces)
     if (aiCriteria === 'high_rating') {
       results = results.filter(r => r.rating !== null && r.rating >= 4.0)
     }
 
     results = results.slice(0, maxRes)
-    console.log(`[search-places] ${city}/${type} (${country}): ${results.length} results`)
+    console.log(`[search-places] Returning ${results.length} results`)
     return { statusCode: 200, body: JSON.stringify({ results }) }
 
   } catch (err) {
-    console.error('[search-places] Error:', err.message)
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) }
+    console.error('[search-places] Unexpected error:', err.message)
+    return { statusCode: 500, body: JSON.stringify({ error: `Neočakávaná chyba: ${err.message}` }) }
   }
 }
