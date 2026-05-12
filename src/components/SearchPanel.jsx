@@ -2,22 +2,42 @@ import { useState } from 'react'
 import { COMPANY_TYPES, COUNTRIES } from '../constants/companyTypes.js'
 import { validateSearchInput } from '../utils/validateSearchInput.js'
 import { searchPlaces } from '../services/placesService.js'
+import { scoreAll } from '../services/aiScoringService.js'
 import { saveCompany } from '../services/firebaseService.js'
 
 const AI_CRITERIA = [
-  { value: 'high_rating',  label: 'Len hodnotenie 4★+' },
-  { value: 'large_only',   label: 'Len väčšie prevádzky' },
-  { value: 'no_filter',    label: 'Všetky výsledky' },
+  { value: 'no_filter',   label: 'Všetky výsledky' },
+  { value: 'high_rating', label: 'Len hodnotenie 4★+' },
 ]
+
+const CATEGORY_PLURAL = {
+  hotel: 'hotelov', laundry: 'práčovní', spa: 'wellness centier',
+  hospital: 'nemocníc', restaurant: 'reštaurácií',
+}
+
+function scoreColor(s) {
+  if (s === null || s === undefined) return '#6b7280'
+  if (s >= 80) return '#00cc88'
+  if (s >= 50) return '#ffaa00'
+  return '#ff3333'
+}
+function scoreLabel(s) {
+  if (s === null || s === undefined) return null
+  if (s >= 80) return 'Vysoký'
+  if (s >= 50) return 'Stredný'
+  return 'Nízky'
+}
 
 export default function SearchPanel({ searching, setSearching }) {
   const [form, setForm] = useState({
     country: 'DE', city: '', category: 'hotel',
     radius: '15', limit: '10', aiCriteria: 'no_filter',
   })
-  const [errors, setErrors]       = useState({})
-  const [results, setResults]     = useState([])
-  const [saved, setSaved]         = useState({})
+  const [errors, setErrors]           = useState({})
+  const [loadingText, setLoadingText] = useState('')
+  const [results, setResults]         = useState([])
+  const [saved, setSaved]             = useState({})
+  const [progress, setProgress]       = useState({ done: 0, total: 0 })
   const [globalError, setGlobalError] = useState('')
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -26,18 +46,40 @@ export default function SearchPanel({ searching, setSearching }) {
     const { valid, errors: errs } = validateSearchInput(form)
     setErrors(errs)
     if (!valid) return
+
     setGlobalError('')
-    setSearching(true)
     setResults([])
     setSaved({})
+    setProgress({ done: 0, total: 0 })
+    setSearching(true)
+
     try {
-      const res = await searchPlaces({ ...form })
-      setResults(res)
-      if (!res.length) setGlobalError('Žiadne výsledky. Skús iné mesto alebo kategóriu.')
+      // Phase 1 — Google Places
+      setLoadingText(`🔍 Vyhľadáva ${CATEGORY_PLURAL[form.category] || 'firiem'} v ${form.city}...`)
+      const places = await searchPlaces(form)
+
+      if (!places.length) {
+        setGlobalError('Žiadne výsledky. Skús iné mesto alebo kategóriu.')
+        return
+      }
+
+      // Phase 2 — AI scoring
+      setProgress({ done: 0, total: places.length })
+      setLoadingText(`✦ AI analyzuje ${places.length} ${CATEGORY_PLURAL[form.category] || 'firiem'}...`)
+
+      const withCategory = places.map(p => ({ ...p, category: form.category, city: form.city }))
+      const scored = await scoreAll(withCategory, (done, total) => {
+        setProgress({ done, total })
+        setLoadingText(`✦ AI analyzuje... ${done}/${total}`)
+      })
+
+      setResults(scored)
     } catch (e) {
       setGlobalError(e.message)
     } finally {
       setSearching(false)
+      setLoadingText('')
+      setProgress({ done: 0, total: 0 })
     }
   }
 
@@ -60,16 +102,15 @@ export default function SearchPanel({ searching, setSearching }) {
     }
   }
 
-  const saveState = k => saved[k]
-
   return (
-    <div style={{ maxWidth: 680 }}>
-      {/* Panel */}
+    <div style={{ maxWidth: 700 }}>
+
+      {/* Search form */}
       <div style={css.panel}>
-        <div style={css.panelTitle}>🔍 Vyhľadať firmy · Google Places</div>
+        <div style={css.panelTitle}>🔍 Vyhľadať firmy · Google Places + AI</div>
 
         <div style={css.grid2}>
-          <Field label="Krajina" error={errors.country}>
+          <Field label="Krajina">
             <select style={css.select} value={form.country} onChange={e => set('country', e.target.value)}>
               {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
@@ -107,16 +148,24 @@ export default function SearchPanel({ searching, setSearching }) {
                 <input type="radio" name="aiCriteria" value={c.value}
                   checked={form.aiCriteria === c.value}
                   onChange={() => set('aiCriteria', c.value)}
-                  style={{ marginRight: 6 }} />
+                  style={{ marginRight: 6, accentColor: '#ffaa00' }} />
                 {c.label}
               </label>
             ))}
           </div>
         </Field>
 
-        <button style={css.searchBtn} onClick={handleSearch} disabled={searching}>
-          {searching ? '⏳ Vyhľadáva...' : '🔍 Spustiť vyhľadávanie'}
+        <button style={{ ...css.searchBtn, opacity: searching ? 0.7 : 1 }}
+          onClick={handleSearch} disabled={searching}>
+          {searching ? loadingText || '⏳ Pracuje...' : '🔍 Spustiť vyhľadávanie + AI analýzu'}
         </button>
+
+        {/* Progress bar */}
+        {searching && progress.total > 0 && (
+          <div style={css.progressWrap}>
+            <div style={{ ...css.progressBar, width: `${(progress.done / progress.total) * 100}%` }} />
+          </div>
+        )}
 
         {globalError && <div style={css.errBox}>⚠ {globalError}</div>}
       </div>
@@ -125,36 +174,102 @@ export default function SearchPanel({ searching, setSearching }) {
       {results.length > 0 && (
         <div style={{ marginTop: '1.25rem' }}>
           <div style={css.resHeader}>
-            <span style={css.resTitle}>{results.length} firiem nájdených</span>
+            <span style={css.resTitle}>
+              {results.length} výsledkov · zoradené podľa AI skóre
+            </span>
             <button style={css.saveAllBtn} onClick={handleSaveAll}>
-              + Uložiť všetky
+              + Uložiť všetky do dashboardu
             </button>
           </div>
 
-          {results.map(c => {
-            const st = saveState(c.place_id)
-            return (
-              <div key={c.place_id} style={css.resRow}>
-                <div style={{ flex: 1 }}>
-                  <div style={css.resName}>{c.name}</div>
-                  <div style={css.resMeta}>
-                    {c.address || '–'}
-                    {c.rating  ? <span style={css.rating}> ⭐ {c.rating}</span> : null}
-                    {c.phone   ? <span> · {c.phone}</span> : null}
-                  </div>
-                </div>
-                <button
-                  style={st === 'saved' ? css.btnSaved : st === 'dup' ? css.btnDup : css.btnSave}
-                  onClick={() => handleSave(c)}
-                  disabled={!!st}
-                >
-                  {st === 'saving' ? '...' : st === 'saved' ? '✓ Uložené' : st === 'dup' ? '⚠ Duplikát' : '+ Uložiť'}
-                </button>
-              </div>
-            )
-          })}
+          {results.map(c => (
+            <ResultCard key={c.place_id} company={c}
+              saveState={saved[c.place_id]}
+              onSave={() => handleSave(c)} />
+          ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function ResultCard({ company: c, saveState, onSave }) {
+  const sc   = c.score
+  const col  = scoreColor(sc)
+  const lbl  = scoreLabel(sc)
+
+  const statusStyle = saveState === 'saved' ? css.badgeSaved
+    : saveState === 'dup'   ? css.badgeDup
+    : css.badgeNew
+
+  const statusText = saveState === 'saved' ? 'Uložený'
+    : saveState === 'dup'   ? 'Duplikát'
+    : saveState === 'saving'? '...'
+    : 'Nový'
+
+  return (
+    <div style={{ ...css.card, borderLeftColor: col }}>
+
+      {/* Header */}
+      <div style={css.cardTop}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={css.cardName}>{c.name}</div>
+          <div style={css.cardMeta}>
+            {c.address || '–'}
+            {c.rating ? <span style={{ color: '#ffaa00', marginLeft: 8 }}>⭐ {c.rating}</span> : null}
+            {c.phone  ? <span style={{ marginLeft: 8 }}>{c.phone}</span> : null}
+          </div>
+        </div>
+
+        {/* Score */}
+        <div style={css.scoreSide}>
+          {sc !== null && sc !== undefined ? (
+            <>
+              <div style={{ ...css.scoreBig, color: col }}>{sc}</div>
+              <div style={{ ...css.scoreSmall, color: col }}>{lbl}</div>
+            </>
+          ) : (
+            <div style={css.scoreNa}>–</div>
+          )}
+        </div>
+      </div>
+
+      {/* AI reason */}
+      {c.reason && (
+        <div style={css.reason}>✦ {c.reason}</div>
+      )}
+
+      {/* Factors */}
+      {(c.positive?.length > 0 || c.risks?.length > 0) && (
+        <div style={css.factors}>
+          {c.positive?.map((f, i) => (
+            <span key={i} style={css.factorPos}>✓ {f}</span>
+          ))}
+          {c.risks?.map((r, i) => (
+            <span key={i} style={css.factorRisk}>⚠ {r}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Next step */}
+      {c.nextStep && (
+        <div style={css.nextStep}>→ {c.nextStep}</div>
+      )}
+
+      {/* Footer */}
+      <div style={css.cardFooter}>
+        <span style={statusStyle}>{statusText}</span>
+        <button
+          style={saveState === 'saved' ? css.btnSaved : saveState === 'dup' ? css.btnDup : css.btnSave}
+          onClick={onSave}
+          disabled={!!saveState}
+        >
+          {saveState === 'saving' ? '⏳ Ukladá...'
+            : saveState === 'saved' ? '✓ Uložené v dashboarde'
+            : saveState === 'dup'   ? '⚠ Už existuje'
+            : '+ Uložiť do dashboardu'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -170,27 +285,42 @@ function Field({ label, error, children }) {
 }
 
 const css = {
-  panel: { background: '#111418', border: '1px solid #1e2530', borderRadius: 4, padding: '1.4rem' },
-  panelTitle: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '1.25rem' },
-  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' },
-  grid3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' },
-  label: { display: 'block', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.28rem' },
-  input: { width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.8rem', padding: '0.48rem 0.65rem', borderRadius: 2, outline: 'none' },
-  inputErr: { borderColor: '#ff3333' },
-  select: { width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.8rem', padding: '0.48rem 0.65rem', borderRadius: 2, outline: 'none' },
-  radioRow: { display: 'flex', gap: '1.25rem', flexWrap: 'wrap' },
-  radio: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.7rem', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center' },
-  searchBtn: { marginTop: '0.5rem', width: '100%', background: '#ffaa00', border: 'none', color: '#0a0c0f', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.72rem', letterSpacing: '2px', textTransform: 'uppercase', padding: '0.68rem', borderRadius: 2, fontWeight: 700 },
-  errBox: { marginTop: '0.65rem', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', color: '#ff3333', background: 'rgba(255,51,51,0.08)', padding: '0.4rem 0.6rem', borderRadius: 2 },
-  fieldErr: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', color: '#ff3333', marginTop: '0.2rem' },
-  resHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', borderBottom: '1px solid #1e2530', paddingBottom: '0.5rem' },
-  resTitle: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#6b7280' },
-  saveAllBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.6rem', border: '1px solid #ffaa00', background: 'transparent', color: '#ffaa00', borderRadius: 2 },
-  resRow: { background: '#111418', border: '1px solid #1e2530', borderRadius: 2, padding: '0.65rem 0.9rem', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '1rem' },
-  resName: { fontWeight: 600, fontSize: '0.88rem', marginBottom: '0.1rem' },
-  resMeta: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', color: '#6b7280' },
-  rating: { color: '#ffaa00' },
-  btnSave: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.65rem', border: '1px solid #00cc88', background: 'transparent', color: '#00cc88', borderRadius: 2, whiteSpace: 'nowrap' },
-  btnSaved: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.65rem', border: '1px solid #1e2530', background: 'transparent', color: '#6b7280', borderRadius: 2, whiteSpace: 'nowrap', cursor: 'default' },
-  btnDup: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.65rem', border: '1px solid #ffaa00', background: 'transparent', color: '#ffaa00', borderRadius: 2, whiteSpace: 'nowrap', cursor: 'default' },
+  panel:       { background: '#111418', border: '1px solid #1e2530', borderRadius: 4, padding: '1.4rem' },
+  panelTitle:  { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '1.25rem' },
+  grid2:       { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' },
+  grid3:       { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' },
+  label:       { display: 'block', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.28rem' },
+  input:       { width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.8rem', padding: '0.48rem 0.65rem', borderRadius: 2, outline: 'none' },
+  inputErr:    { borderColor: '#ff3333' },
+  select:      { width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.8rem', padding: '0.48rem 0.65rem', borderRadius: 2, outline: 'none' },
+  radioRow:    { display: 'flex', gap: '1.5rem', flexWrap: 'wrap' },
+  radio:       { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.7rem', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center' },
+  searchBtn:   { marginTop: '0.5rem', width: '100%', background: '#ffaa00', border: 'none', color: '#0a0c0f', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.72rem', letterSpacing: '2px', textTransform: 'uppercase', padding: '0.68rem', borderRadius: 2, fontWeight: 700 },
+  progressWrap:{ marginTop: '0.6rem', height: 3, background: '#1e2530', borderRadius: 2, overflow: 'hidden' },
+  progressBar: { height: '100%', background: '#ffaa00', borderRadius: 2, transition: 'width 0.3s' },
+  errBox:      { marginTop: '0.65rem', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', color: '#ff3333', background: 'rgba(255,51,51,0.08)', padding: '0.4rem 0.6rem', borderRadius: 2 },
+  fieldErr:    { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', color: '#ff3333', marginTop: '0.2rem' },
+  resHeader:   { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' },
+  resTitle:    { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#6b7280' },
+  saveAllBtn:  { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.65rem', border: '1px solid #ffaa00', background: 'transparent', color: '#ffaa00', borderRadius: 2 },
+  card:        { background: '#111418', border: '1px solid #1e2530', borderLeft: '3px solid #1e2530', borderRadius: 2, padding: '0.9rem 1rem', marginBottom: '0.5rem' },
+  cardTop:     { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '0.45rem' },
+  cardName:    { fontWeight: 600, fontSize: '0.92rem', marginBottom: '0.15rem' },
+  cardMeta:    { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', color: '#6b7280' },
+  scoreSide:   { textAlign: 'right', flexShrink: 0, minWidth: 52 },
+  scoreBig:    { fontFamily: "'IBM Plex Mono',monospace", fontSize: '1.5rem', fontWeight: 700, lineHeight: 1 },
+  scoreSmall:  { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: 2 },
+  scoreNa:     { fontFamily: "'IBM Plex Mono',monospace", fontSize: '1.2rem', color: '#6b7280' },
+  reason:      { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.65rem', color: '#9ca3af', fontStyle: 'italic', marginBottom: '0.4rem', lineHeight: 1.5 },
+  factors:     { display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.4rem' },
+  factorPos:   { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', color: '#00cc88', background: 'rgba(0,204,136,0.08)', border: '1px solid rgba(0,204,136,0.2)', padding: '0.1rem 0.38rem', borderRadius: 2 },
+  factorRisk:  { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', color: '#ffaa00', background: 'rgba(255,170,0,0.08)', border: '1px solid rgba(255,170,0,0.2)', padding: '0.1rem 0.38rem', borderRadius: 2 },
+  nextStep:    { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', color: '#00cc88', marginBottom: '0.5rem' },
+  cardFooter:  { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2530' },
+  badgeNew:    { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.4rem', borderRadius: 2, background: 'rgba(0,102,255,0.1)', color: '#0066ff', border: '1px solid rgba(0,102,255,0.3)' },
+  badgeSaved:  { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.4rem', borderRadius: 2, background: 'rgba(0,204,136,0.1)', color: '#00cc88', border: '1px solid rgba(0,204,136,0.3)' },
+  badgeDup:    { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.4rem', borderRadius: 2, background: 'rgba(255,170,0,0.1)', color: '#ffaa00', border: '1px solid rgba(255,170,0,0.3)' },
+  btnSave:     { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: '1px solid #00cc88', background: 'transparent', color: '#00cc88', borderRadius: 2 },
+  btnSaved:    { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: '1px solid #1e2530', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'default' },
+  btnDup:      { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: '1px solid #ffaa00', background: 'transparent', color: '#ffaa00', borderRadius: 2, cursor: 'default' },
 }
