@@ -96,6 +96,40 @@ function extractDomain(w) {
   return w.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
 }
 
+function applyInlineMd(text) {
+  const parts = []
+  let last = 0
+  const re = /\*\*([^*]+)\*\*/g
+  let m
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index))
+    parts.push(<strong key={m.index} style={{ color: '#e8eaed', fontWeight: 700 }}>{m[1]}</strong>)
+    last = m.index + m[0].length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return parts.length ? parts : text
+}
+
+function renderMarkdown(text) {
+  if (!text) return null
+  return text.split('\n').map((line, i) => {
+    if (/^#{1,3}\s/.test(line))
+      return <div key={i} style={{ fontWeight: 700, color: '#e8eaed', fontSize: '0.83rem', marginTop: '0.45rem', marginBottom: '0.1rem' }}>{applyInlineMd(line.replace(/^#{1,3}\s+/, ''))}</div>
+    if (/^\d+\.\s/.test(line))
+      return <div key={i} style={{ paddingLeft: '1.1rem', position: 'relative', marginBottom: '0.1rem', color: '#c9d1d9' }}>
+        <span style={{ position: 'absolute', left: 0, color: '#ff5c0099' }}>{line.match(/^\d+/)[0]}.</span>
+        {applyInlineMd(line.replace(/^\d+\.\s+/, ''))}
+      </div>
+    if (/^[-•*]\s/.test(line.trim()))
+      return <div key={i} style={{ paddingLeft: '1rem', position: 'relative', marginBottom: '0.1rem', color: '#c9d1d9' }}>
+        <span style={{ position: 'absolute', left: '0.1rem', color: '#ff5c00' }}>·</span>
+        {applyInlineMd(line.trim().replace(/^[-•*]\s+/, ''))}
+      </div>
+    if (line.trim() === '') return <div key={i} style={{ height: '0.35rem' }} />
+    return <div key={i} style={{ marginBottom: '0.05rem', color: '#c9d1d9' }}>{applyInlineMd(line)}</div>
+  })
+}
+
 function stripAiNoise(text) {
   return text
     .split('\n')
@@ -401,7 +435,7 @@ function AuditRow({ ev, onDelete }) {
 }
 
 // ── AI Chat Message ──────────────────────────────────────────────────────────
-function ChatMessage({ msg, displayText, role, onDelete, onEdit }) {
+function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit }) {
   const [copied, setCopied]     = useState(false)
   const [editing, setEditing]   = useState(false)
   const [editText, setEditText] = useState(displayText)
@@ -443,6 +477,8 @@ function ChatMessage({ msg, displayText, role, onDelete, onEdit }) {
               onChange={e => setEditText(e.target.value)}
               autoFocus
             />
+          ) : useMarkdown ? (
+            <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', lineHeight: 1.75 }}>{renderMarkdown(displayText)}</div>
           ) : (
             <span style={{ fontFamily: textFamily, fontSize: textSize, color: textColor, lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
           )}
@@ -479,6 +515,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [newNote, setNewNote]     = useState('')
   const [notesOpen, setNotesOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
+  const [chatOpen,  setChatOpen]  = useState(false)
   const [taskText, setTaskText]   = useState('')
   const [draftSubj, setDraftSubj] = useState('')
   const [draftBody, setDraftBody] = useState('')
@@ -1091,6 +1128,14 @@ PRAVIDLÁ EMAILU:
     }
   }, [chatsLoaded])
 
+  const DRAWER_QUICK = [
+    { label: '🏢 Zhodnoť firmu', text: 'Analyzuj túto firmu a daj mi okamžitý verdikt.' },
+    { label: '🎯 Ďalší krok',    text: 'Aký je najlepší ďalší krok pre túto firmu?' },
+    { label: '✉ Prvý email',     text: 'Navrhni konkrétny prvý email pre túto firmu.' },
+    { label: '📧 Follow-up',     text: 'Napíš follow-up email pre túto firmu.' },
+    { label: '📋 Zhrň históriu', text: 'Zhrň históriu kontaktu s touto firmou.' },
+  ]
+
   const QUICK_PROMPTS = [
     // Row 1
     { label: '🏢 Zhodnoť firmu',    text: 'Analyzuj túto firmu a daj mi okamžitý verdikt.' },
@@ -1420,145 +1465,146 @@ PRAVIDLÁ EMAILU:
 
         <div style={css.divider} />
 
-        {/* ══ STRIKER AI ADVISOR ══ */}
-        <div style={css.aiSection}>
-          <div style={css.aiTitle}>✦ STRIKER AI ADVISOR</div>
+        {/* ══ STRIKER AI ADVISOR — trigger button ══ */}
+        <div style={{ padding: '0.25rem 0 0.5rem' }}>
+          <button
+            style={{ fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.35rem 0.85rem', border: '1px solid #ff5c0055', background: 'rgba(255,92,0,0.08)', color: '#ff5c00', borderRadius: 2, cursor: 'pointer', fontWeight: 700 }}
+            onClick={() => setChatOpen(true)}>
+            ✦ Striker AI Advisor {aiChats.length > 0 ? `(${aiChats.length})` : ''}
+          </button>
+        </div>
 
-          {/* Missing data warning */}
-          {(() => {
-            const missing = []
-            if (!live.email)   missing.push('email')
-            if (!live.phone)   missing.push('telefón')
-            if (!live.website) missing.push('web')
-            if (!live.contactPerson) missing.push('kontaktná osoba')
-            if (live.aiScore == null) missing.push('BPS skóre')
-            if (!missing.length) return null
-            return (
-              <div style={css.missingBar}>
-                ⚠ Chýbajúce údaje: <span style={{ color: '#e8eaed' }}>{missing.join(', ')}</span>
-              </div>
-            )
-          })()}
+        {/* ══ STRIKER AI ADVISOR DRAWER ══ */}
+        {chatOpen && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 599, background: 'rgba(0,0,0,0.72)' }} onClick={() => setChatOpen(false)} />
+            <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none' }}>
+              <div style={{ width: '100%', maxWidth: 600, height: '100%', background: '#080c11', borderLeft: '3px solid #ff5c0044', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 40px rgba(255,92,0,0.12)', pointerEvents: 'auto' }}>
 
-          {/* AI NAVRHUJE — pending suggestions */}
-          {aiSuggestions.length > 0 && (
-            <div style={css.aiSuggestSection}>
-              <div style={css.aiSuggestTitle}>✦ AI NAVRHUJE</div>
-              {aiSuggestions.map(s => {
-                const priColor = s.priority === 'high' ? '#ff5c00' : s.priority === 'medium' ? '#ffaa00' : '#6b7280'
-                return (
-                  <div key={s.id} style={{ ...css.aiSuggestCard, borderLeftColor: priColor }}>
-                    <div style={css.aiSuggestRow}>
-                      <div>
-                        <span style={{ fontFamily: mono, fontSize: '0.72rem', color: '#e8eaed', fontWeight: 700 }}>{s.title}</span>
-                        <span style={{ ...css.priChip, color: priColor, borderColor: priColor + '55', marginLeft: '0.5rem' }}>
-                          {s.priority === 'high' ? 'Vysoká' : s.priority === 'medium' ? 'Stredná' : 'Nízka'} priorita
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
-                        <button style={css.suggApprove} onClick={() => handleApproveSuggestion(s)}>✓ Schváliť</button>
-                        <button style={css.suggTask}    onClick={() => handleSuggestionToTask(s)}>→ Úloha</button>
-                        <button style={css.suggReject}  onClick={() => handleRejectSuggestion(s.id)}>✕</button>
-                      </div>
-                    </div>
-                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#6b7280', marginTop: '0.2rem' }}>{s.reason}</div>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.4rem', borderBottom: '1px solid #ff5c0022', flexShrink: 0 }}>
+                  <div>
+                    <div style={{ fontFamily: mono, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', color: '#ff5c00' }}>✦ STRIKER AI ADVISOR</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#4b5563', marginTop: '0.15rem' }}>{live.name}</div>
                   </div>
-                )
-              })}
-            </div>
-          )}
+                  <button style={{ background: 'transparent', border: '1px solid #ff5c0033', color: '#ff5c0099', width: 30, height: 30, borderRadius: 3, fontSize: '0.9rem', cursor: 'pointer' }} onClick={() => setChatOpen(false)}>✕</button>
+                </div>
 
-          {/* Quick buttons — 2 rows */}
-          <div style={css.quickBtns}>
-            {QUICK_PROMPTS.map(q => (
-              <button key={q.label} style={css.quickBtn}
-                onClick={() => sendAiMessage(q.text)}
-                disabled={aiLoading}>
-                {q.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Chat history — loaded from ai_chats Firestore collection */}
-          <div style={css.chatBox}>
-            {aiChats.length === 0 && !aiLoading && (
-              <div style={css.chatEmpty}>
-                Vyber rýchlu otázku alebo napíš vlastnú — AI poradí konkrétne pre túto firmu.
-              </div>
-            )}
-            {aiChats.map((m, i) => {
-              const parsed = m.role === 'assistant' ? parseAiResponse(m.message) : null
-              const displayText = parsed ? parsed.text : m.message
-              const suggestion  = parsed?.suggestion || null
-              return (
-              <div key={m.id || i}>
-                <ChatMessage
-                  msg={m}
-                  displayText={m.role === 'user' ? m.message : displayText}
-                  role={m.role}
-                  onDelete={handleDeleteAiChat}
-                  onEdit={handleEditAiChat}
-                />
-                {/* Confidence badge */}
-                {m.role === 'assistant' && (() => {
-                  const conf = extractConfidence(displayText)
-                  if (!conf) return null
-                  return <div style={{ marginLeft: '0.75rem', marginTop: '0.25rem', fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', color: conf.color, background: conf.color + '18', border: `1px solid ${conf.color}44`, padding: '0.08rem 0.4rem', borderRadius: 2, display: 'inline-block' }}>{conf.label}</div>
-                })()}
-                {/* Status change suggestion card */}
-                {m.role === 'assistant' && suggestion?.type === 'status' && (() => {
-                  const sKey = suggestion.value
-                  const sObj = COMPANY_STATUSES[sKey]
-                  if (!sObj) return null
+                {/* Missing data warning */}
+                {(() => {
+                  const missing = []
+                  if (!live.email)   missing.push('email')
+                  if (!live.phone)   missing.push('telefón')
+                  if (!live.website) missing.push('web')
+                  if (live.aiScore == null) missing.push('BPS skóre')
+                  if (!missing.length) return null
                   return (
-                    <div style={{ marginLeft: '1rem', marginTop: '0.4rem', background: '#0d1117', border: `1px solid ${sObj.color}44`, borderLeft: `3px solid ${sObj.color}`, borderRadius: 3, padding: '0.6rem 0.85rem', maxWidth: '88%' }}>
-                      <div style={{ fontFamily: mono, fontSize: '0.62rem', color: sObj.color, marginBottom: '0.4rem' }}>
-                        ✦ AI navrhuje zmenu statusu → <strong>{sObj.label}</strong>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.4rem' }}>
-                        <button
-                          style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.65rem', border: 'none', background: sObj.color, color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' }}
-                          onClick={() => handleStatusChange(sKey)}>
-                          ✓ Schváliť
-                        </button>
-                        <button
-                          style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.6rem', border: '1px solid #21262d', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' }}
-                          onClick={() => setAiMessages(prev => prev.map((msg, idx) => idx === i ? { ...msg, suggestion: null } : msg))}>
-                          Zamietnuť
-                        </button>
-                      </div>
+                    <div style={{ ...css.missingBar, borderRadius: 0, margin: 0, borderLeft: 'none', borderRight: 'none', flexShrink: 0 }}>
+                      ⚠ Chýba: <span style={{ color: '#e8eaed' }}>{missing.join(', ')}</span>
                     </div>
                   )
                 })()}
-              </div>
-            )})}
 
-            {aiLoading && (
-              <div style={css.msgAiWrap}>
-                <div style={css.msgAi}>
-                  <span style={css.loadingMsg}>✦ Analyzujem...</span>
+                {/* AI suggestions */}
+                {aiSuggestions.length > 0 && (
+                  <div style={{ padding: '0.6rem 1.4rem', borderBottom: '1px solid #ff5c0011', flexShrink: 0 }}>
+                    <div style={css.aiSuggestTitle}>✦ AI NAVRHUJE</div>
+                    {aiSuggestions.map(s => {
+                      const priColor = s.priority === 'high' ? '#ff5c00' : s.priority === 'medium' ? '#ffaa00' : '#6b7280'
+                      return (
+                        <div key={s.id} style={{ ...css.aiSuggestCard, borderLeftColor: priColor, marginBottom: '0.3rem' }}>
+                          <div style={css.aiSuggestRow}>
+                            <div style={{ minWidth: 0 }}>
+                              <span style={{ fontFamily: mono, fontSize: '0.68rem', color: '#e8eaed', fontWeight: 700 }}>{s.title}</span>
+                              <span style={{ ...css.priChip, color: priColor, borderColor: priColor + '55', marginLeft: '0.4rem' }}>
+                                {s.priority === 'high' ? 'Vysoká' : s.priority === 'medium' ? 'Stredná' : 'Nízka'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.3rem', flexShrink: 0 }}>
+                              <button style={css.suggApprove} onClick={() => handleApproveSuggestion(s)}>✓</button>
+                              <button style={css.suggTask}    onClick={() => handleSuggestionToTask(s)}>→</button>
+                              <button style={css.suggReject}  onClick={() => handleRejectSuggestion(s.id)}>✕</button>
+                            </div>
+                          </div>
+                          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280', marginTop: '0.15rem' }}>{s.reason}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Chat history */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.4rem', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                  {aiChats.length === 0 && !aiLoading && (
+                    <div style={css.chatEmpty}>Vyber rýchlu otázku alebo napíš vlastnú — AI poradí konkrétne pre túto firmu.</div>
+                  )}
+                  {aiChats.map((m, i) => {
+                    const parsed = m.role === 'assistant' ? parseAiResponse(m.message) : null
+                    const displayText = parsed ? parsed.text : m.message
+                    const suggestion  = parsed?.suggestion || null
+                    return (
+                      <div key={m.id || i}>
+                        <ChatMessage
+                          msg={m}
+                          displayText={m.role === 'user' ? m.message : displayText}
+                          role={m.role}
+                          useMarkdown={m.role === 'assistant'}
+                          onDelete={handleDeleteAiChat}
+                          onEdit={handleEditAiChat}
+                        />
+                        {m.role === 'assistant' && (() => {
+                          const conf = extractConfidence(displayText)
+                          if (!conf) return null
+                          return <div style={{ marginLeft: '0.75rem', marginTop: '0.2rem', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', color: conf.color, background: conf.color + '18', border: `1px solid ${conf.color}44`, padding: '0.07rem 0.38rem', borderRadius: 2, display: 'inline-block' }}>{conf.label}</div>
+                        })()}
+                        {m.role === 'assistant' && suggestion?.type === 'status' && (() => {
+                          const sObj = COMPANY_STATUSES[suggestion.value]
+                          if (!sObj) return null
+                          return (
+                            <div style={{ marginLeft: '1rem', marginTop: '0.35rem', background: '#0d1117', border: `1px solid ${sObj.color}44`, borderLeft: `3px solid ${sObj.color}`, borderRadius: 3, padding: '0.55rem 0.8rem', maxWidth: '88%' }}>
+                              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: sObj.color, marginBottom: '0.35rem' }}>✦ AI navrhuje → <strong>{sObj.label}</strong></div>
+                              <button style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: 'none', background: sObj.color, color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' }} onClick={() => handleStatusChange(suggestion.value)}>✓ Schváliť</button>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )
+                  })}
+                  {aiLoading && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                      <div style={{ background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: '3px 3px 3px 0', padding: '0.7rem 0.9rem' }}>
+                        <span style={css.loadingMsg}>✦ Analyzujem...</span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Footer: quick buttons + input */}
+                <div style={{ padding: '0.75rem 1.4rem', borderTop: '1px solid #ff5c0022', flexShrink: 0, background: '#080c11' }}>
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.55rem' }}>
+                    {DRAWER_QUICK.map(q => (
+                      <button key={q.label} style={css.quickBtn} onClick={() => sendAiMessage(q.text)} disabled={aiLoading}>{q.label}</button>
+                    ))}
+                  </div>
+                  <div style={css.aiInputRow}>
+                    <input
+                      style={css.aiInput}
+                      placeholder="Opýtaj sa na túto firmu..."
+                      value={aiInput}
+                      onChange={e => setAiInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendAiMessage()}
+                      disabled={aiLoading}
+                    />
+                    <button style={{ ...css.aiSendBtn, opacity: aiLoading ? 0.5 : 1 }} onClick={() => sendAiMessage()} disabled={aiLoading}>
+                      {aiLoading ? '⏳' : 'Odoslať'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Input */}
-          <div style={css.aiInputRow}>
-            <input
-              style={css.aiInput}
-              placeholder="Opýtaj sa na túto firmu..."
-              value={aiInput}
-              onChange={e => setAiInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendAiMessage()}
-              disabled={aiLoading}
-            />
-            <button style={{ ...css.aiSendBtn, opacity: aiLoading ? 0.5 : 1 }}
-              onClick={() => sendAiMessage()} disabled={aiLoading}>
-              {aiLoading ? '⏳' : 'Odoslať'}
-            </button>
-          </div>
-        </div>
+            </div>
+          </>
+        )}
 
         <Toast msg={toast?.msg} type={toast?.type} />
       </div>
