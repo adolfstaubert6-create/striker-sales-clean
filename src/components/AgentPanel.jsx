@@ -4,10 +4,10 @@ const mono = "'IBM Plex Mono',monospace"
 
 const SEGMENTS = [
   { value: 'hotel',      label: '🏨 Hotel' },
-  { value: 'restaurant', label: '🍽️ Restaurant' },
+  { value: 'restaurant', label: '🍽️ Reštaurácia' },
   { value: 'spa',        label: '💆 Spa / Wellness' },
-  { value: 'laundry',    label: '🧺 Laundry' },
-  { value: 'hospital',   label: '🏥 Hospital' },
+  { value: 'laundry',    label: '🧺 Práčovňa' },
+  { value: 'hospital',   label: '🏥 Nemocnica' },
 ]
 
 const STEPS = [
@@ -65,7 +65,8 @@ export default function AgentPanel({ onDone }) {
       setResult(data)
       data.report?.forEach(r => {
         const icon = r.status === 'done' ? '✅' : '❌'
-        addLog(`${icon} ${r.name} — BPS ${r.bps ?? '–'} · ${r.email || 'bez emailu'} · ${r.priority || '–'}`)
+        const priorityLabel = r.priority === 'high' ? 'VYSOKÝ' : r.priority === 'medium' ? 'STREDNÝ' : r.priority === 'low' ? 'NÍZKY' : (r.priority || '–')
+        addLog(`${icon} ${r.name} — BPS ${r.bps ?? '–'} · ${r.email || 'EMAIL NENÁJDENÝ'} · ${priorityLabel}`)
       })
       addLog(`Hotovo: ${data.done}/${data.total} · ${data.elapsed}`)
       if (onDone) onDone()
@@ -124,7 +125,7 @@ export default function AgentPanel({ onDone }) {
             {running ? '⏳ Agent pracuje...' : '▶ Spustiť agenta'}
           </button>
           {(result || log.length > 0) && !running && (
-            <button style={css.resetBtn} onClick={handleReset}>↺ Reset</button>
+            <button style={css.resetBtn} onClick={handleReset}>↺ Resetovať</button>
           )}
         </div>
       </div>
@@ -182,7 +183,7 @@ export default function AgentPanel({ onDone }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                 <div>
                   <span style={css.resultName}>{r.name}</span>
-                  {r.duplicate && <span style={css.dupTag}>duplikát</span>}
+                  {r.duplicate && <span style={css.dupTag}>DUPLIKÁT</span>}
                 </div>
                 <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
                   {r.bps !== undefined && (
@@ -192,15 +193,18 @@ export default function AgentPanel({ onDone }) {
                   )}
                   {r.priority && (
                     <span style={{ ...css.chip, color: r.priority === 'high' ? '#ff5c00' : r.priority === 'medium' ? '#ffaa00' : '#6b7280', borderColor: r.priority === 'high' ? '#ff5c0044' : '#ffaa0044' }}>
-                      {r.priority}
+                      {r.priority === 'high' ? 'VYSOKÝ' : r.priority === 'medium' ? 'STREDNÝ' : 'NÍZKY'}
                     </span>
                   )}
                 </div>
               </div>
-              {r.email && <div style={css.resultEmail}>📧 {r.email}</div>}
+              {r.email
+                ? <div style={css.resultEmail}>📧 {r.email}</div>
+                : <div style={{ ...css.resultEmail, color: '#4b5563' }}>📧 EMAIL NENÁJDENÝ</div>
+              }
               {r.draftDe && <div style={css.resultDraft}>✉ {r.draftDe}</div>}
-              {r.nextStep && <div style={css.resultNext}>→ {r.nextStep}</div>}
-              {r.error && <div style={css.resultError}>⚠ {r.error}</div>}
+              {r.nextStep && <div style={css.resultNext}>→ ĎALŠÍ KROK: {r.nextStep}</div>}
+              {r.error && <div style={css.resultError}>⚠ CHYBA: {r.error}</div>}
             </div>
           ))}
         </div>
