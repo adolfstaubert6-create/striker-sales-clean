@@ -153,6 +153,13 @@ function stripAiNoise(text) {
     .trim()
 }
 
+function parseEmailBlock(text) {
+  if (!text) return { preText: '', emailContent: null, postText: '' }
+  const m = text.match(/([\s\S]*?)\[EMAIL_START\]([\s\S]*?)\[EMAIL_END\]([\s\S]*)/i)
+  if (!m) return { preText: text, emailContent: null, postText: '' }
+  return { preText: m[1].trim(), emailContent: m[2].trim(), postText: m[3].trim() }
+}
+
 function cleanDraftText(text) {
   return (text || '')
     .replace(/^#{1,3}\s+/gm, '')
@@ -473,14 +480,19 @@ function AuditRow({ ev, onDelete }) {
 
 // ── AI Chat Message ──────────────────────────────────────────────────────────
 function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, onToDraft, isLatest }) {
-  const [copied, setCopied]   = useState(false)
-  const [editing, setEditing] = useState(false)
+  const [copied, setCopied]     = useState(false)
+  const [editing, setEditing]   = useState(false)
   const [editText, setEditText] = useState(displayText)
-  const [glowing, setGlowing] = useState(isLatest && role === 'assistant')
+  const [glowing, setGlowing]   = useState(isLatest && role === 'assistant')
 
   const isAi = role === 'assistant'
 
-  // Fade glow after 3 s on mount (only fires once per component instance)
+  // Parse email block from AI messages
+  const { preText, emailContent, postText } = isAi
+    ? parseEmailBlock(displayText)
+    : { preText: displayText, emailContent: null, postText: '' }
+
+  // Fade glow after 3 s on mount
   useEffect(() => {
     if (!glowing) return
     const t = setTimeout(() => setGlowing(false), 3000)
@@ -505,7 +517,7 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
 
   function doDraft() {
     if (window.confirm('Preniesť túto správu do SK draftu?'))
-      onToDraft(cleanDraftText(displayText))
+      onToDraft(cleanDraftText(emailContent || displayText))
   }
 
   const bubbleStyle = isAi
@@ -522,6 +534,10 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
   const textSize   = isAi ? '0.8rem' : '0.68rem'
   const maxW       = isAi ? '92%' : '80%'
 
+  const renderText = (t) => useMarkdown
+    ? <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', lineHeight: 1.75 }}>{renderMarkdown(t)}</div>
+    : <span style={{ fontFamily: textFamily, fontSize: textSize, color: textColor, lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{t}</span>
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isAi ? 'flex-start' : 'flex-end' }}>
       {/* Bubble */}
@@ -533,23 +549,36 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
             onChange={e => setEditText(e.target.value)}
             autoFocus
           />
-        ) : useMarkdown ? (
-          <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', lineHeight: 1.75 }}>{renderMarkdown(displayText)}</div>
+        ) : emailContent ? (
+          <>
+            {/* Analysis / pre-email text */}
+            {preText  && <div style={{ marginBottom: '0.75rem' }}>{renderText(preText)}</div>}
+
+            {/* Email box */}
+            <div style={{ background: 'rgba(255,92,0,0.07)', border: '1px solid rgba(255,92,0,0.25)', borderLeft: '3px solid #ff5c00', borderRadius: 3, padding: '0.65rem 0.8rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#ff5c0088', marginBottom: '0.5rem' }}>✉ Email</div>
+              <div style={{ fontFamily: mono, fontSize: '0.7rem', color: '#e8eaed', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{emailContent}</div>
+              {onToDraft && (
+                <button
+                  style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.7rem', border: 'none', background: '#ff5c00', color: '#fff', borderRadius: 2, fontWeight: 700, cursor: 'pointer', marginTop: '0.6rem', display: 'block' }}
+                  onClick={doDraft}>
+                  📋 → Draft
+                </button>
+              )}
+            </div>
+
+            {/* Post-email text */}
+            {postText && <div style={{ marginTop: '0.75rem' }}>{renderText(postText)}</div>}
+          </>
+        ) : isAi ? (
+          renderText(displayText)
         ) : (
           <span style={{ fontFamily: textFamily, fontSize: textSize, color: textColor, lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
         )}
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons — no → Draft here */}
       <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem', flexWrap: 'wrap', maxWidth: maxW, alignItems: 'center' }}>
-        {/* Prominent → Draft on latest AI message */}
-        {isAi && isLatest && onToDraft && (
-          <button
-            style={{ fontFamily: mono, fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.8rem', border: 'none', background: '#ff5c00', color: '#fff', borderRadius: 2, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-            onClick={doDraft}>
-            📋 → Draft
-          </button>
-        )}
         <button style={css.chatActionBtn} onClick={doCopy}>
           {copied ? '✓ Skopírované' : '📋 Kopírovať'}
         </button>
@@ -566,14 +595,6 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
           onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
           onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
           onClick={doDelete}>🗑 Zmazať</button>
-        {/* Small → Draft on older AI messages */}
-        {isAi && !isLatest && onToDraft && (
-          <button
-            style={{ ...css.chatActionBtn, color: '#ff5c00', borderColor: '#ff5c0044', background: 'rgba(255,92,0,0.07)' }}
-            onClick={doDraft}>
-            → Draft
-          </button>
-        )}
       </div>
     </div>
   )
