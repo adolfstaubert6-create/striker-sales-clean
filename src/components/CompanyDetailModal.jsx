@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { db, storage } from '../firebase.js'
-import { ref as storageRef, uploadBytesResumable, getBlob, deleteObject } from 'firebase/storage'
+import { ref as storageRef, uploadBytesResumable, deleteObject } from 'firebase/storage'
 import {
   doc, collection, onSnapshot, updateDoc, addDoc, getDocs, deleteDoc,
   query, where, serverTimestamp,
@@ -201,6 +201,7 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
   const [savingSk, setSavingSk]       = useState(false)
   const [savingDe, setSavingDe]       = useState(false)
   const [flash, setFlash]             = useState(null)
+  const attachRef                     = useRef(null)
 
   function showFlash(msg) { setFlash(msg); setTimeout(() => setFlash(null), 2000) }
 
@@ -325,11 +326,11 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
       )}
 
       {/* Attachments */}
-      <EmailAttachments emailId={email.id} companyId={email.companyId} />
+      <EmailAttachments ref={attachRef} emailId={email.id} companyId={email.companyId} />
 
       {/* Send */}
       {companyEmail
-        ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1, width: '100%', justifyContent: 'center', marginTop: '0.75rem' }} onClick={() => onSend(email, subjDe, bodyDe)} disabled={sending}>
+        ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1, width: '100%', justifyContent: 'center', marginTop: '0.75rem' }} onClick={() => onSend(email, subjDe, bodyDe, attachRef.current?.getAttachments() || [])} disabled={sending}>
             {sending ? '⏳ Odosielam...' : `📤 Odoslať na ${companyEmail}`}
           </button>
         : <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00', display: 'block', marginTop: '0.75rem' }}>⚠ Pridaj email firmy v Kontaktných údajoch</span>
@@ -623,12 +624,18 @@ function fmtFileSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function EmailAttachments({ emailId, companyId }) {
+const EmailAttachments = forwardRef(function EmailAttachments({ emailId, companyId }, ref) {
   const [attachments, setAttachments] = useState([])
   const [uploading, setUploading]     = useState(false)
   const [progress, setProgress]       = useState(0)
   const [attachErr, setAttachErr]     = useState(null)
+  const [b64Cache, setB64Cache]       = useState({})  // { fileName: base64 }
   const fileInputRef = useRef(null)
+
+  // Expose cache to parent via ref — called at send time, no Storage reads
+  useImperativeHandle(ref, () => ({
+    getAttachments: () => Object.entries(b64Cache).map(([filename, content]) => ({ filename, content })),
+  }))
 
   useEffect(() => {
     if (!emailId) return
@@ -644,8 +651,17 @@ function EmailAttachments({ emailId, companyId }) {
     if (!ATTACH_TYPES.has(file.type)) { setAttachErr('Nepodporovaný formát súboru'); return }
     if (file.size > MAX_ATTACH_BYTES)  { setAttachErr('Súbor je príliš veľký (max 10 MB)'); return }
     setAttachErr(null)
-    setUploading(true)
-    setProgress(0)
+
+    // Read as base64 NOW while we have the File object — store in memory
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const b64 = ev.target.result.split(',')[1]  // strip data:...;base64, prefix
+      setB64Cache(prev => ({ ...prev, [file.name]: b64 }))
+    }
+    reader.readAsDataURL(file)
+
+    // Upload to Storage in parallel
+    setUploading(true); setProgress(0)
     const path = `attachments/${companyId}/${emailId}/${Date.now()}_${file.name}`
     const task = uploadBytesResumable(storageRef(storage, path), file)
     task.on(
@@ -665,6 +681,7 @@ function EmailAttachments({ emailId, companyId }) {
   async function handleDeleteAttach(att) {
     try { await deleteObject(storageRef(storage, att.storagePath)) } catch {}
     await deleteDoc(doc(db, 'emails', emailId, 'attachments', att.id))
+    setB64Cache(prev => { const n = { ...prev }; delete n[att.fileName]; return n })
   }
 
   return (
@@ -700,7 +717,7 @@ function EmailAttachments({ emailId, companyId }) {
       </button>
     </div>
   )
-}
+})
 
 // ── Confirm Delete Modal ─────────────────────────────────────────────────────
 function ConfirmDeleteModal({ companyName, onConfirm, onCancel }) {
@@ -1213,27 +1230,11 @@ PRAVIDLÁ EMAILU:
     })
   }
 
-  async function handleSendEmail(email, subjectDe, bodyDe) {
+  async function handleSendEmail(email, subjectDe, bodyDe, attachments = []) {
     if (!live.email) { showToast('Firma nemá email', 'err'); return }
     setSendingEmail(true)
+    console.log('[send] attachments from cache:', attachments.length)
     try {
-      // Fetch and base64-encode attachments from Firebase Storage
-      const attSnap = await getDocs(collection(db, 'emails', email.id, 'attachments'))
-      console.log('[send] attachment docs in Firestore:', attSnap.size)
-      const attachments = await Promise.all(attSnap.docs.map(async d => {
-        const att = d.data()
-        console.log('[send] downloading via SDK:', att.fileName)
-        // Use getBlob — avoids CORS entirely, uses Firebase SDK auth internally
-        const blob = await getBlob(storageRef(storage, att.storagePath))
-        const buf  = await blob.arrayBuffer()
-        let binary = ''
-        const bytes = new Uint8Array(buf)
-        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-        const content = btoa(binary)
-        console.log('[send] encoded:', att.fileName, buf.byteLength, 'bytes →', content.length, 'b64 chars')
-        return { filename: att.fileName, content }
-      }))
-      console.log('[send] attachments ready:', attachments.length)
 
       const res = await fetch('/.netlify/functions/send-email', {
         method:  'POST',
