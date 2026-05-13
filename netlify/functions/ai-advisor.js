@@ -6,15 +6,24 @@ Pripoj len ak je skutočne opodstatnené.
 
 OBMEDZENIA: Ak používateľ žiada zakázanú akciu (odoslanie emailu, zmena údajov, mazanie): "Môžem pripraviť návrh, ale túto akciu musíš schváliť ty. [NÁVRH AKCIE: <popis>]"`
 
-const EMAIL_INTENT_RE = /email|draft|napíš.*email|sprav.*email|vytvor.*email|prvý kontakt|first contact/i
+const EMAIL_DRAFT_RE  = /vytvor.*email|email.*draft|prvý.*kontakt|generuj.*email|napíš.*email/i
+const TRANSLATE_RE    = /prelož|preložiť|translate/i
 
-const EMAIL_FORMAT_BLOCK = `
+const DRAFT_BLOCK = `
 
-EMAIL GENEROVANIE: Keď generuješ email, použi STRIKER knowledge base. Email musí byť v nemčine, max 150 slov, profesionálny B2B štýl, Sie-forma, jasný ďalší krok. Žiadne agresívne predajné frázy. Personalizuj podľa typu firmy a BPS reasoning.
-FORMAT — odpoveď musí začínať PRESNE TAKTO (žiadny iný text pred tým):
-BETREFF: <predmet emailu>
+EMAIL DRAFT: Vytvor email draft v SLOVENČINE. Email bude neskôr preložený do nemčiny. Použi STRIKER knowledge base. Personalizuj podľa typu firmy a BPS reasoning. Max 150 slov, profesionálny B2B štýl, jasný ďalší krok.
+FORMAT — odpoveď musí začínať PRESNE TAKTO (nič pred tým):
+PREDMET: <predmet emailu v slovenčine>
 
-<telo emailu>`
+<telo emailu v slovenčine>`
+
+const TRANSLATE_BLOCK = `
+
+PREKLAD: Prelož email do profesionálnej nemčiny. B2B štýl, Sie-forma, max 150 slov, zachovaj štruktúru originálu. Žiadne agresívne predajné frázy.
+FORMAT — odpoveď musí začínať PRESNE TAKTO (nič pred tým):
+BETREFF: <predmet v nemčine>
+
+<telo emailu v nemčine>`
 
 exports.handler = async (event) => {
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -51,12 +60,13 @@ exports.handler = async (event) => {
     ? `\n\nSTRIKER KNOWLEDGE BASE:\n${knowledgeBase.map(e => `[${(e.category || '').toUpperCase()}] ${e.title}: ${e.content}`).join('\n\n')}`
     : ''
 
-  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || ''
-  const isEmailMode = EMAIL_INTENT_RE.test(lastUserMsg)
-  const emailBlock  = (isEmailMode || knowledgeBase?.length) ? EMAIL_FORMAT_BLOCK : ''
+  const lastUserMsg  = [...messages].reverse().find(m => m.role === 'user')?.content || ''
+  const isTranslation = TRANSLATE_RE.test(lastUserMsg)
+  const isNewDraft    = !isTranslation && (EMAIL_DRAFT_RE.test(lastUserMsg) || !!knowledgeBase?.length)
+  const emailBlock    = isTranslation ? TRANSLATE_BLOCK : isNewDraft ? DRAFT_BLOCK : ''
 
   try {
-    console.log('[ai-advisor] calling Anthropic | company:', companyContext?.name, '| messages:', messages.length, '| emailMode:', isEmailMode, '| kb:', knowledgeBase?.length ?? 0)
+    console.log('[ai-advisor] calling Anthropic | company:', companyContext?.name, '| messages:', messages.length, '| mode:', isTranslation ? 'translate' : isNewDraft ? 'draft' : 'chat', '| kb:', knowledgeBase?.length ?? 0)
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

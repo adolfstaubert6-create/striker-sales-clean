@@ -34,6 +34,7 @@ const EVENT_ICONS = {
   email_sent:       '📤',
   reply_received:   '📥',
   email_found:      '🔍',
+  email_translated: '🇩🇪',
 }
 
 const SCORE_COLOR = s =>
@@ -98,16 +99,38 @@ function parseAiResponse(text) {
 }
 
 // ── Email Workflow Card ───────────────────────────────────────────────────────
-function EmailWorkflowCard({ email, onApprove, onSend, sending }) {
-  const [body, setBody]   = useState(email.body || '')
-  const [subj, setSubj]   = useState(email.subject || '')
-  const isDraft    = email.status === 'draft'
-  const isApproved = email.status === 'approved'
-  const isSent     = email.status === 'sent'
+function EmailWorkflowCard({ email, onApprove, onSend, onTranslate, sending }) {
+  const [body, setBody]           = useState(email.body || '')
+  const [subj, setSubj]           = useState(email.subject || '')
+  const [translating, setTranslating] = useState(false)
 
-  const borderColor = isSent ? '#00cc88' : isApproved ? '#3b82f6' : '#ffaa00'
-  const statusLabel = isSent ? '✓ Odoslaný' : isApproved ? '● Schválený — pripravený na odoslanie' : '○ Čaká na schválenie'
-  const statusColor = isSent ? '#00cc88' : isApproved ? '#3b82f6' : '#ffaa00'
+  const isDraft      = email.status === 'draft'
+  const isApproved   = email.status === 'approved'
+  const isSent       = email.status === 'sent'
+  const isTranslated = email.translated === true
+
+  // Sync local edit state when Firestore updates the body after translation
+  useEffect(() => {
+    if (email.translated) {
+      setSubj(email.subject || '')
+      setBody(email.body || '')
+    }
+  }, [email.translated, email.subject, email.body])
+
+  async function doTranslate() {
+    setTranslating(true)
+    try { await onTranslate(email) } finally { setTranslating(false) }
+  }
+
+  const borderColor = isSent ? '#00cc88' : isTranslated ? '#3b82f6' : isApproved ? '#3b82f6' : '#ffaa00'
+  const statusLabel = isSent
+    ? '✓ Odoslaný'
+    : isTranslated
+    ? '● Preložené — pripravené na odoslanie'
+    : isApproved
+    ? '● Schválený'
+    : '○ Draft v slovenčine'
+  const statusColor = isSent ? '#00cc88' : (isTranslated || isApproved) ? '#3b82f6' : '#ffaa00'
 
   return (
     <div style={{ border: `1px solid ${borderColor}44`, borderLeft: `3px solid ${borderColor}`, borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.6rem', background: '#0d1117' }}>
@@ -118,9 +141,18 @@ function EmailWorkflowCard({ email, onApprove, onSend, sending }) {
       <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#6b7280', marginBottom: '0.4rem' }}>
         Predmet: {email.subject}
       </div>
-      {(isDraft || isApproved) ? (
+
+      {(isDraft || isApproved) && (
         <>
-          {isDraft && (
+          {/* Slovak note — only when not yet translated */}
+          {!isTranslated && (
+            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#ffaa00', background: 'rgba(255,170,0,0.07)', border: '1px solid rgba(255,170,0,0.2)', padding: '0.25rem 0.55rem', borderRadius: 2, marginBottom: '0.5rem' }}>
+              📝 Draft v slovenčine — pred odoslaním bude preložený do nemčiny
+            </div>
+          )}
+
+          {/* Body: editable for untranslated draft, read-only otherwise */}
+          {isDraft && !isTranslated ? (
             <>
               <input
                 style={{ width: '100%', background: '#161b22', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.5rem', borderRadius: 2, outline: 'none', marginBottom: '0.4rem' }}
@@ -129,31 +161,45 @@ function EmailWorkflowCard({ email, onApprove, onSend, sending }) {
                 style={{ width: '100%', background: '#161b22', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.62rem', padding: '0.4rem 0.5rem', borderRadius: 2, outline: 'none', resize: 'vertical', minHeight: 100, lineHeight: 1.6, marginBottom: '0.5rem' }}
                 value={body} onChange={e => setBody(e.target.value)} />
             </>
-          )}
-          {isApproved && (
+          ) : (
             <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', background: '#161b22', padding: '0.5rem', borderRadius: 2, marginBottom: '0.5rem', whiteSpace: 'pre-wrap', maxHeight: 80, overflowY: 'auto' }}>
               {email.body}
             </div>
           )}
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {isDraft && (
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {isDraft && !isTranslated && (
               <button
                 style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: 'none', background: '#3b82f6', color: '#fff', borderRadius: 2, fontWeight: 700, cursor: 'pointer' }}
                 onClick={() => onApprove(email.id, subj, body)}>
                 ✓ Schváliť draft
               </button>
             )}
-            {isApproved && (
+            {!isTranslated && (
+              <button
+                style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: '1px solid #6b728055', background: 'transparent', color: '#e8eaed', borderRadius: 2, fontWeight: 700, cursor: 'pointer', opacity: translating ? 0.6 : 1 }}
+                onClick={doTranslate}
+                disabled={translating}>
+                {translating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do nemčiny'}
+              </button>
+            )}
+            {isTranslated && (
               <button
                 style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer', opacity: sending ? 0.6 : 1 }}
-                onClick={() => onSend(email)} disabled={sending}>
+                onClick={() => onSend(email)}
+                disabled={sending}>
                 {sending ? '⏳ Odosiela...' : '📤 Odoslať email'}
               </button>
             )}
           </div>
         </>
-      ) : (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#4b5563' }}>Email bol odoslaný na {email.to || '–'}</div>
+      )}
+
+      {isSent && (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#4b5563' }}>
+          Email bol odoslaný na {email.to || '–'}
+        </div>
       )}
     </div>
   )
@@ -543,8 +589,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
 
         const text  = data.text || ''
         const lines = text.split('\n')
-        const sLine = lines.find(l => /^betreff:/i.test(l.trim()))
-        finalSubj   = sLine ? sLine.replace(/^betreff:\s*/i, '').trim() : `STRIKER — ${live.name}`
+        const sLine = lines.find(l => /^predmet:/i.test(l.trim()))
+        finalSubj   = sLine ? sLine.replace(/^predmet:\s*/i, '').trim() : `STRIKER — ${live.name}`
         const after = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
         finalBody   = after.replace(/^\s*\n+/, '').trim()
       }
@@ -573,6 +619,41 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       await logEvent('draft_approved', `${CURRENT_USER} schválil email draft`)
       showToast('Draft schválený ✓')
     } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  async function handleTranslateDraft(email) {
+    const prompt = `Prelož tento email do profesionálnej nemčiny, B2B štýl, Sie-forma, zachovaj štruktúru:\n\nPredmet: ${email.subject}\n\n${email.body}`
+    try {
+      const res = await fetch('/.netlify/functions/ai-advisor', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          messages:       [{ role: 'user', content: prompt }],
+          companyContext: buildCompanyContext(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Chyba prekladu')
+
+      const text   = data.text || ''
+      const lines  = text.split('\n')
+      const sLine  = lines.find(l => /^betreff:/i.test(l.trim()))
+      const deSubj = sLine ? sLine.replace(/^betreff:\s*/i, '').trim() : email.subject
+      const after  = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
+      const deBody = after.replace(/^\s*\n+/, '').trim()
+
+      await updateDoc(doc(db, 'emails', email.id), {
+        subject:      deSubj,
+        body:         deBody,
+        translated:   true,
+        translatedAt: serverTimestamp(),
+      })
+      await logEvent('email_translated', `${CURRENT_USER} preložil email do nemčiny`)
+      showToast('✓ Preložené do nemčiny')
+    } catch (e) {
+      showToast('Chyba prekladu: ' + e.message, 'err')
+      throw e
+    }
   }
 
   async function handleFindEmail() {
@@ -938,6 +1019,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
             <EmailWorkflowCard key={email.id} email={email}
               onApprove={handleApproveDraft}
               onSend={handleSendEmail}
+              onTranslate={handleTranslateDraft}
               sending={sendingEmail} />
           ))}
         </div>
