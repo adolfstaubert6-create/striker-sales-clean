@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
-import { db, storage } from '../firebase.js'
-import { ref as storageRef, uploadBytesResumable, deleteObject } from 'firebase/storage'
+import { useState, useEffect, useRef } from 'react'
+import { db } from '../firebase.js'
 import {
   doc, collection, onSnapshot, updateDoc, addDoc, getDocs, deleteDoc,
   query, where, serverTimestamp,
@@ -201,7 +200,6 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
   const [savingSk, setSavingSk]       = useState(false)
   const [savingDe, setSavingDe]       = useState(false)
   const [flash, setFlash]             = useState(null)
-  const attachRef                     = useRef(null)
 
   function showFlash(msg) { setFlash(msg); setTimeout(() => setFlash(null), 2000) }
 
@@ -325,12 +323,9 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
         </>
       )}
 
-      {/* Attachments */}
-      <EmailAttachments ref={attachRef} emailId={email.id} companyId={email.companyId} />
-
       {/* Send */}
       {companyEmail
-        ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1, width: '100%', justifyContent: 'center', marginTop: '0.75rem' }} onClick={() => onSend(email, subjDe, bodyDe, attachRef.current?.getAttachments() || [])} disabled={sending}>
+        ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1, width: '100%', justifyContent: 'center', marginTop: '0.75rem' }} onClick={() => onSend(email, subjDe, bodyDe)} disabled={sending}>
             {sending ? '⏳ Odosielam...' : `📤 Odoslať na ${companyEmail}`}
           </button>
         : <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00', display: 'block', marginTop: '0.75rem' }}>⚠ Pridaj email firmy v Kontaktných údajoch</span>
@@ -608,116 +603,6 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
     </div>
   )
 }
-
-// ── Email Attachments ────────────────────────────────────────────────────────
-const ATTACH_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png'
-const ATTACH_TYPES  = new Set(['application/pdf','application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'image/jpeg','image/png'])
-const MAX_ATTACH_BYTES = 10 * 1024 * 1024
-
-function fmtFileSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-const EmailAttachments = forwardRef(function EmailAttachments({ emailId, companyId }, ref) {
-  const [attachments, setAttachments] = useState([])
-  const [uploading, setUploading]     = useState(false)
-  const [progress, setProgress]       = useState(0)
-  const [attachErr, setAttachErr]     = useState(null)
-  const [b64Cache, setB64Cache]       = useState({})  // { fileName: base64 }
-  const fileInputRef = useRef(null)
-
-  // Expose cache to parent via ref — called at send time, no Storage reads
-  useImperativeHandle(ref, () => ({
-    getAttachments: () => Object.entries(b64Cache).map(([filename, content]) => ({ filename, content })),
-  }))
-
-  useEffect(() => {
-    if (!emailId) return
-    return onSnapshot(collection(db, 'emails', emailId, 'attachments'), snap =>
-      setAttachments(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    )
-  }, [emailId])
-
-  function handleFileChange(e) {
-    const file = e.target.files[0]
-    e.target.value = ''
-    if (!file) return
-    if (!ATTACH_TYPES.has(file.type)) { setAttachErr('Nepodporovaný formát súboru'); return }
-    if (file.size > MAX_ATTACH_BYTES)  { setAttachErr('Súbor je príliš veľký (max 10 MB)'); return }
-    setAttachErr(null)
-
-    // Read as base64 NOW while we have the File object — store in memory
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const b64 = ev.target.result.split(',')[1]  // strip data:...;base64, prefix
-      setB64Cache(prev => ({ ...prev, [file.name]: b64 }))
-    }
-    reader.readAsDataURL(file)
-
-    // Upload to Storage in parallel
-    setUploading(true); setProgress(0)
-    const path = `attachments/${companyId}/${emailId}/${Date.now()}_${file.name}`
-    const task = uploadBytesResumable(storageRef(storage, path), file)
-    task.on(
-      'state_changed',
-      s => setProgress(Math.round((s.bytesTransferred / s.totalBytes) * 100)),
-      err => { setAttachErr(err.message); setUploading(false) },
-      async () => {
-        await addDoc(collection(db, 'emails', emailId, 'attachments'), {
-          fileName: file.name, contentType: file.type,
-          size: file.size, storagePath: path, createdAt: serverTimestamp(),
-        })
-        setUploading(false); setProgress(0)
-      }
-    )
-  }
-
-  async function handleDeleteAttach(att) {
-    try { await deleteObject(storageRef(storage, att.storagePath)) } catch {}
-    await deleteDoc(doc(db, 'emails', emailId, 'attachments', att.id))
-    setB64Cache(prev => { const n = { ...prev }; delete n[att.fileName]; return n })
-  }
-
-  return (
-    <div style={{ marginTop: '0.75rem', borderTop: '1px solid #1e2530', paddingTop: '0.6rem' }}>
-      <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#4b5563', marginBottom: '0.45rem' }}>
-        📎 Prílohy {attachments.length > 0 ? `(${attachments.length})` : ''}
-      </div>
-      {attachments.map(att => (
-        <div key={att.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.22rem 0', borderBottom: '1px solid #161b22' }}>
-          <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#e8eaed', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.fileName}</span>
-          <span style={{ fontFamily: mono, fontSize: '0.56rem', color: '#4b5563', flexShrink: 0 }}>{fmtFileSize(att.size)}</span>
-          <button style={{ background: 'transparent', border: 'none', color: '#ef444455', cursor: 'pointer', fontSize: '0.72rem', padding: '0 0.15rem', flexShrink: 0, lineHeight: 1 }}
-            onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
-            onMouseOut={e => e.currentTarget.style.color  = '#ef444455'}
-            onClick={() => handleDeleteAttach(att)}>🗑</button>
-        </div>
-      ))}
-      {uploading && (
-        <div style={{ marginTop: '0.4rem' }}>
-          <div style={{ height: 3, background: '#1e2530', borderRadius: 2 }}>
-            <div style={{ height: '100%', width: `${progress}%`, background: '#ff5c00', borderRadius: 2, transition: 'width 0.15s' }} />
-          </div>
-          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#ff5c0088', marginTop: '0.15rem' }}>Nahrávam... {progress}%</div>
-        </div>
-      )}
-      {attachErr && <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#ef4444', marginTop: '0.3rem' }}>{attachErr}</div>}
-      <input ref={fileInputRef} type="file" accept={ATTACH_ACCEPT} style={{ display: 'none' }} onChange={handleFileChange} />
-      <button
-        style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '0.5px', padding: '0.22rem 0.6rem', border: '1px solid #ff5c0044', background: 'rgba(255,92,0,0.07)', color: '#ff5c00', borderRadius: 2, cursor: uploading ? 'not-allowed' : 'pointer', marginTop: '0.5rem', opacity: uploading ? 0.5 : 1 }}
-        disabled={uploading}
-        onClick={() => fileInputRef.current?.click()}>
-        📎 Priložiť súbor
-      </button>
-    </div>
-  )
-})
 
 // ── Confirm Delete Modal ─────────────────────────────────────────────────────
 function ConfirmDeleteModal({ companyName, onConfirm, onCancel }) {
@@ -1230,12 +1115,10 @@ PRAVIDLÁ EMAILU:
     })
   }
 
-  async function handleSendEmail(email, subjectDe, bodyDe, attachments = []) {
+  async function handleSendEmail(email, subjectDe, bodyDe) {
     if (!live.email) { showToast('Firma nemá email', 'err'); return }
     setSendingEmail(true)
-    console.log('[send] attachments from cache:', attachments.length)
     try {
-
       const res = await fetch('/.netlify/functions/send-email', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1245,7 +1128,6 @@ PRAVIDLÁ EMAILU:
           bodyDe:      bodyDe    || email.bodyDe,
           companyId:   live.id,
           companyName: live.name,
-          attachments,
         }),
       })
       const data = await res.json()
