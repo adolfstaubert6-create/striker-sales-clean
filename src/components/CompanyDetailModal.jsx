@@ -124,14 +124,16 @@ function parseAiResponse(text) {
 }
 
 // ── Email Workflow Card ───────────────────────────────────────────────────────
-function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslate, onApprove, onSend, onDelete, onCopy, sending }) {
+function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslate, onSend, onDelete, onCopy, sending }) {
+  const isSk = email.status === 'active_draft' || email.status === 'draft'
+  const isDe = email.status === 'translated'
+
   const [subjSk, setSubjSk]           = useState(email.subjectSk || '')
   const [bodySk, setBodySk]           = useState(email.bodySk    || '')
   const [subjDe, setSubjDe]           = useState(email.subjectDe || '')
   const [bodyDe, setBodyDe]           = useState(email.bodyDe    || '')
   const [translating, setTranslating] = useState(false)
 
-  // Sync DE fields when Firestore delivers a fresh translation
   useEffect(() => {
     setSubjDe(email.subjectDe || '')
     setBodyDe(email.bodyDe    || '')
@@ -142,81 +144,57 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
     try { await onTranslate(email, subjSk, bodySk) } finally { setTranslating(false) }
   }
 
-  const st        = email.status
-  const hasDE     = !!(email.subjectDe && email.bodyDe)
-  const canSend   = st === 'approved' && !!companyEmail
-
-  const borderColor = st === 'sent' || st === 'approved' ? '#00cc88' : st === 'translated' ? '#3b82f6' : '#ffaa00'
-  const statusLabel = st === 'sent' ? '✓ Odoslaný' : st === 'approved' ? '✓ Schválené' : st === 'translated' ? '● SK + DE' : '○ SK Draft'
-  const statusColor = borderColor
-
   const inp  = { width: '100%', background: '#0d1117', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.55rem', borderRadius: 2, outline: 'none', marginBottom: '0.35rem', boxSizing: 'border-box' }
   const area = { ...inp, resize: 'vertical', minHeight: 90, lineHeight: 1.6, fontSize: '0.63rem', marginBottom: '0.4rem' }
 
-  return (
-    <div style={{ border: `1px solid ${borderColor}44`, borderLeft: `3px solid ${borderColor}`, borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.7rem', background: '#0d1117' }}>
+  const headerBtn = (label, onClick, extra = {}) => (
+    <button style={{ ...css.btnIcon, ...extra }} onClick={onClick}>{label}</button>
+  )
 
-      {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-        <span style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: statusColor }}>{statusLabel}</span>
+  if (isSk) return (
+    <div style={{ border: '1px solid #ffaa0044', borderLeft: '3px solid #ffaa00', borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.7rem', background: '#0d1117' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#ffaa00' }}>🇸🇰 SK Draft</span>
         <div style={{ display: 'flex', gap: '0.3rem' }}>
-          <button style={css.btnIcon} onClick={() => onCopy(email)} title="Kopírovať">📋</button>
-          {st !== 'sent' && (
-            <button style={{ ...css.btnIcon, color: '#ef444466' }}
-              onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
-              onMouseOut={e => e.currentTarget.style.color = '#ef444466'}
-              onClick={() => onDelete(email.id)} title="Zmazať">🗑</button>
-          )}
+          {headerBtn('📋', () => onCopy(email))}
+          {headerBtn('🗑', () => onDelete(email.id), { color: '#ef444466', onMouseOver: e => e.currentTarget.style.color='#ef4444', onMouseOut: e => e.currentTarget.style.color='#ef444466' })}
         </div>
       </div>
-
-      {/* SK section */}
-      <div style={{ marginBottom: '0.6rem' }}>
-        <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#4b5563', marginBottom: '0.4rem' }}>🇸🇰 Slovenčina</div>
-        <input style={inp} value={subjSk} onChange={e => setSubjSk(e.target.value)} placeholder="Predmet SK..." />
-        <textarea style={area} value={bodySk} onChange={e => setBodySk(e.target.value)} />
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          <button style={css.btnSave} onClick={() => onSaveSk(email.id, subjSk, bodySk)}>💾 Uložiť SK</button>
-          {bodySk && st !== 'sent' && (
-            <button style={{ ...css.btnTranslate, opacity: translating ? 0.5 : 1 }} onClick={doTranslate} disabled={translating}>
-              {translating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do nemčiny'}
-            </button>
-          )}
-        </div>
+      <input style={inp} value={subjSk} onChange={e => setSubjSk(e.target.value)} placeholder="Predmet SK..." />
+      <textarea style={area} value={bodySk} onChange={e => setBodySk(e.target.value)} />
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+        <button style={css.btnSave} onClick={() => onSaveSk(email.id, subjSk, bodySk)}>💾 Uložiť</button>
+        <button style={{ ...css.btnTranslate, opacity: translating ? 0.5 : 1 }} onClick={doTranslate} disabled={translating}>
+          {translating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do nemčiny'}
+        </button>
       </div>
-
-      {/* DE section — shown once translation exists */}
-      {hasDE && (
-        <div style={{ borderTop: '1px solid #1e2530', paddingTop: '0.6rem', marginBottom: '0.5rem' }}>
-          <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#4b5563', marginBottom: '0.4rem' }}>🇩🇪 Nemčina</div>
-          <input style={inp} value={subjDe} onChange={e => setSubjDe(e.target.value)} placeholder="Betreff..." />
-          <textarea style={area} value={bodyDe} onChange={e => setBodyDe(e.target.value)} />
-          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-            <button style={css.btnSave} onClick={() => onSaveDe(email.id, subjDe, bodyDe)}>💾 Uložiť DE</button>
-            {st !== 'approved' && st !== 'sent' && (
-              <button style={css.btnApprove} onClick={() => onApprove(email.id)}>✓ Schváliť</button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Send button */}
-      {st === 'approved' && (
-        canSend
-          ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1 }} onClick={() => onSend(email)} disabled={sending}>
-              {sending ? '⏳ Odosiela...' : `📤 Odoslať na ${companyEmail}`}
-            </button>
-          : <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00', marginTop: '0.4rem' }}>⚠ Pridaj email firmy v Kontaktných údajoch</div>
-      )}
-
-      {/* Sent confirmation */}
-      {st === 'sent' && (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#00cc88', marginTop: '0.25rem' }}>
-          ✓ Odoslaný na {companyEmail || '–'}{email.sentAt ? ` · ${fmtTs(email.sentAt)}` : ''}
-        </div>
-      )}
     </div>
   )
+
+  if (isDe) return (
+    <div style={{ border: '1px solid #3b82f644', borderLeft: '3px solid #3b82f6', borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.7rem', background: '#0d1117' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#3b82f6' }}>🇩🇪 DE Preložené</span>
+        <div style={{ display: 'flex', gap: '0.3rem' }}>
+          {headerBtn('📋', () => onCopy(email))}
+          {headerBtn('🗑', () => onDelete(email.id), { color: '#ef444466' })}
+        </div>
+      </div>
+      <input style={inp} value={subjDe} onChange={e => setSubjDe(e.target.value)} placeholder="Betreff..." />
+      <textarea style={area} value={bodyDe} onChange={e => setBodyDe(e.target.value)} />
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button style={css.btnSave} onClick={() => onSaveDe(email.id, subjDe, bodyDe)}>💾 Uložiť</button>
+        {companyEmail
+          ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1 }} onClick={() => onSend(email, subjDe, bodyDe)} disabled={sending}>
+              {sending ? '⏳ Odosiela...' : `📤 Odoslať na ${companyEmail}`}
+            </button>
+          : <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00' }}>⚠ Pridaj email firmy</span>
+        }
+      </div>
+    </div>
+  )
+
+  return null
 }
 
 // ── Confidence badge parser ──────────────────────────────────────────────────
@@ -577,6 +555,9 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
 
   // ── Email workflow handlers ────────────────────────────────────────────────
   async function handleCreateDraft() {
+    const existing = emails.find(e => ['active_draft', 'translated', 'draft'].includes(e.status))
+    if (existing && !window.confirm('Existujúci draft bude prepísaný. Pokračovať?')) return
+
     await withFb('createDraft', async () => {
       const kbSnap = await getDocs(collection(db, 'knowledge_base'))
       const knowledgeBase = kbSnap.docs.map(d => d.data())
@@ -603,19 +584,26 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       const after     = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
       const bodySk    = after.replace(/^\s*\n+/, '').trim()
 
-      await addDoc(collection(db, 'emails'), {
-        companyId:   live.id,
-        type:        'first_contact',
-        subjectSk,   bodySk,
-        subjectDe:   '',  bodyDe: '',
-        status:      'draft',
+      const fields = {
+        subjectSk, bodySk,
+        subjectDe: '', bodyDe: '',
+        status:      'active_draft',
         generatedBy: CURRENT_USER,
         aiModel:     'claude-haiku-4-5',
-        createdAt:   serverTimestamp(),
         updatedAt:   serverTimestamp(),
         edited:      false,
-      })
-      await logEvent('email_draft_created_sk', `${CURRENT_USER} vytvoril AI SK draft pre ${live.name}`)
+      }
+
+      if (existing) {
+        await updateDoc(doc(db, 'emails', existing.id), fields)
+        await logEvent('email_draft_overwritten', `${CURRENT_USER} prepísal draft pre ${live.name}`)
+      } else {
+        await addDoc(collection(db, 'emails'), {
+          companyId: live.id, type: 'first_contact',
+          createdAt: serverTimestamp(), ...fields,
+        })
+        await logEvent('email_draft_created', `${CURRENT_USER} vytvoril AI draft pre ${live.name}`)
+      }
     })
   }
 
@@ -728,7 +716,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
     })
   }
 
-  async function handleSendEmail(email) {
+  async function handleSendEmail(email, subjectDe, bodyDe) {
     if (!live.email) { showToast('Firma nemá email', 'err'); return }
     setSendingEmail(true)
     try {
@@ -737,8 +725,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           to:          live.email,
-          subjectDe:   email.subjectDe,
-          bodyDe:      email.bodyDe,
+          subjectDe:   subjectDe || email.subjectDe,
+          bodyDe:      bodyDe    || email.bodyDe,
           companyId:   live.id,
           companyName: live.name,
         }),
@@ -886,7 +874,11 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const confidence = live.aiConfidence || null
   const domain     = extractDomain(live.website)
 
-  const CONF_COLORS = { vysoká: '#00cc88', stredná: '#ffaa00', nízka: '#ef4444' }
+  const CONF_COLORS  = { vysoká: '#00cc88', stredná: '#ffaa00', nízka: '#ef4444' }
+  const activeDraft  = emails.find(e => ['active_draft', 'translated', 'draft'].includes(e.status)) || null
+  const lastSentEmail = [...emails].filter(e => e.status === 'sent').sort((a, b) =>
+    (b.sentAt?.toDate?.()?.getTime() || 0) - (a.sentAt?.toDate?.()?.getTime() || 0)
+  )[0] || null
 
   return (
     <div style={css.overlay} onKeyDown={e => e.key === 'Escape' && onClose()} tabIndex={-1}>
@@ -1052,32 +1044,31 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
         {/* ══ EMAIL WORKFLOW ══ */}
         <div style={css.section}>
           <ColTitle>Email Workflow</ColTitle>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-            <span style={live.email ? css.emailFoundBadge : css.emailMissingBadge}>
-              {live.email ? `✓ ${live.email}` : '⚠ Email chýba'}
-            </span>
-            <button style={css.btnPrimary} onClick={() => handleCreateDraft()}>
-              {fb.createDraft === 'saving' ? '⏳ AI generuje...' : '+ Vytvoriť AI draft'}
-            </button>
-          </div>
 
-          {emails.filter(e => e.status !== 'deleted').length === 0 && (
-            <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#4b5563', padding: '0.5rem 0' }}>
-              Žiadne drafty — klikni "+ Vytvoriť AI draft" pre začatie.
+          {/* Last sent info line */}
+          {lastSentEmail && (
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#00cc88', marginBottom: '0.6rem' }}>
+              ✓ Posledný email odoslaný: {fmtTs(lastSentEmail.sentAt)}
             </div>
           )}
-          {emails.filter(e => e.status !== 'deleted').map(email => (
-            <EmailWorkflowCard key={email.id} email={email}
+
+          {/* Active draft card (max 1) */}
+          {activeDraft && (
+            <EmailWorkflowCard key={activeDraft.id} email={activeDraft}
               companyEmail={live.email}
               onSaveSk={handleSaveSkDraft}
               onSaveDe={handleSaveDeDraft}
               onTranslate={handleTranslateDraft}
-              onApprove={handleApproveEmail}
               onSend={handleSendEmail}
               onDelete={handleDeleteEmail}
               onCopy={handleCopyEmail}
               sending={sendingEmail} />
-          ))}
+          )}
+
+          {/* Create / overwrite button */}
+          <button style={css.btnPrimary} onClick={() => handleCreateDraft()} disabled={fb.createDraft === 'saving'}>
+            {fb.createDraft === 'saving' ? '⏳ AI generuje...' : activeDraft ? '↺ Prepísať novým AI draftom' : '+ Vytvoriť AI draft'}
+          </button>
         </div>
 
         <div style={css.divider} />
