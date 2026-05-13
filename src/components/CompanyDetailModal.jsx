@@ -466,41 +466,43 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit }) 
   const textFamily = isAi ? "'IBM Plex Sans',sans-serif" : mono
   const textSize   = isAi ? '0.8rem' : '0.68rem'
 
+  const maxW = isAi ? '92%' : '80%'
+
   return (
-    <div style={{ display: 'flex', justifyContent: isAi ? 'flex-start' : 'flex-end' }}>
-      <div style={{ maxWidth: isAi ? '92%' : '80%' }}>
-        <div style={bubbleStyle}>
-          {editing ? (
-            <textarea
-              style={{ width: '100%', background: 'transparent', border: 'none', color: textColor, fontFamily: textFamily, fontSize: textSize, lineHeight: 1.75, resize: 'vertical', outline: 'none', minHeight: 60, display: 'block' }}
-              value={editText}
-              onChange={e => setEditText(e.target.value)}
-              autoFocus
-            />
-          ) : useMarkdown ? (
-            <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', lineHeight: 1.75 }}>{renderMarkdown(displayText)}</div>
-          ) : (
-            <span style={{ fontFamily: textFamily, fontSize: textSize, color: textColor, lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.25rem', justifyContent: isAi ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
-          <button style={css.chatActionBtn} onClick={doCopy}>
-            {copied ? '✓ Skopírované' : '📋 Kopírovať'}
-          </button>
-          {editing ? (
-            <>
-              <button style={{ ...css.chatActionBtn, color: '#00cc88', borderColor: '#00cc8833' }} onClick={doSave}>✓ Uložiť</button>
-              <button style={css.chatActionBtn} onClick={() => { setEditing(false); setEditText(displayText) }}>Zrušiť</button>
-            </>
-          ) : (
-            <button style={css.chatActionBtn} onClick={() => setEditing(true)}>✏️ Upraviť</button>
-          )}
-          <button
-            style={css.chatActionBtn}
-            onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
-            onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
-            onClick={doDelete}>🗑 Zmazať</button>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isAi ? 'flex-start' : 'flex-end' }}>
+      {/* Bubble */}
+      <div style={{ ...bubbleStyle, maxWidth: maxW, width: 'fit-content' }}>
+        {editing ? (
+          <textarea
+            style={{ width: '100%', minWidth: 240, background: 'transparent', border: 'none', color: textColor, fontFamily: textFamily, fontSize: textSize, lineHeight: 1.75, resize: 'vertical', outline: 'none', minHeight: 60, display: 'block' }}
+            value={editText}
+            onChange={e => setEditText(e.target.value)}
+            autoFocus
+          />
+        ) : useMarkdown ? (
+          <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', lineHeight: 1.75 }}>{renderMarkdown(displayText)}</div>
+        ) : (
+          <span style={{ fontFamily: textFamily, fontSize: textSize, color: textColor, lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
+        )}
+      </div>
+      {/* Action buttons — directly below the bubble */}
+      <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.2rem', flexWrap: 'wrap', maxWidth: maxW }}>
+        <button style={css.chatActionBtn} onClick={doCopy}>
+          {copied ? '✓ Skopírované' : '📋 Kopírovať'}
+        </button>
+        {editing ? (
+          <>
+            <button style={{ ...css.chatActionBtn, color: '#00cc88', borderColor: '#00cc8833' }} onClick={doSave}>✓ Uložiť</button>
+            <button style={css.chatActionBtn} onClick={() => { setEditing(false); setEditText(displayText) }}>Zrušiť</button>
+          </>
+        ) : (
+          <button style={css.chatActionBtn} onClick={() => setEditing(true)}>✏️ Upraviť</button>
+        )}
+        <button
+          style={css.chatActionBtn}
+          onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
+          onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
+          onClick={doDelete}>🗑 Zmazať</button>
       </div>
     </div>
   )
