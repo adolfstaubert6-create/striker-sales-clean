@@ -583,11 +583,6 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem', flexWrap: 'wrap', maxWidth: maxW, alignItems: 'center' }}>
-        {isAi && onToDraft && (
-          <button style={{ ...css.chatActionBtn, color: '#ff5c00', borderColor: '#ff5c0044', background: 'rgba(255,92,0,0.07)' }} onClick={doDraft}>
-            📋 → Draft
-          </button>
-        )}
         <button style={css.chatActionBtn} onClick={doCopy}>
           {copied ? '✓ Skopírované' : '📋 Kopírovať'}
         </button>
