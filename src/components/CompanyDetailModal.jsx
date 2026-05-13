@@ -140,10 +140,16 @@ function stripAiNoise(text) {
       if (/Môžem pripraviť|Mozem pripravit|túto akciu musíš|tuto akciu musis/i.test(t)) return false
       if (/^Poznámka:|^Poznamka:|^Komentár:|^Komentar:/i.test(t)) return false
       if (/^\*\s+\S/.test(t)) return false
+      if (/^---$/.test(t)) return false
       return true
     })
     .join('\n')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/ČO CHÝBA:.*$/gm, '')
+    .replace(/NAJLEPŠÍ ĎALŠÍ KROK:.*$/gm, '')
+    .replace(/ODPORÚČANÁ AKCIA:.*$/gm, '')
+    .replace(/STRIKER —.*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 
@@ -847,7 +853,9 @@ PRAVIDLÁ EMAILU:
 - 3-4 krátke odseky, prirodzený B2B tón
 - Personalizuj podľa typu firmy (${typeName})
 - CTA = krátky videohovor alebo osobné stretnutie
-- Žiadny meta-text ani komentáre — iba čistý email`
+- Žiadny meta-text ani komentáre — iba čistý email
+- NEVER include sections like ČO CHÝBA, NAJLEPŠÍ ĎALŠÍ KROK, ODPORÚČANÁ AKCIA, or any meta-commentary
+- Write ONLY the email subject (PREDMET:) and body. Nothing else.`
 
       const res = await fetch('/.netlify/functions/ai-advisor', {
         method:  'POST',
