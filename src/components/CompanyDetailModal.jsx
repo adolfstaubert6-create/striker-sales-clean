@@ -1456,9 +1456,9 @@ PRAVIDLÁ EMAILU:
 
   return (
     <div className="cdm-overlay" style={css.overlay} onKeyDown={e => e.key === 'Escape' && onClose()} tabIndex={-1}>
-      <style>{`@keyframes priPulse{0%,100%{opacity:1}50%{opacity:.85}}`}</style>
+      <style>{`@keyframes priPulse{0%,100%{opacity:1}50%{opacity:.85}}@keyframes modalIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      <div className="cdm-modal" style={css.modal}>
+      <div className="cdm-modal" style={{ ...css.modal, animation: 'modalIn 0.2s ease' }}>
 
         {/* ══ HEADER ══ */}
         <div style={css.header}>
@@ -1505,7 +1505,7 @@ PRAVIDLÁ EMAILU:
               {live.email
                 ? <span style={{ color: '#00cc88', fontFamily: mono, fontSize: '0.72rem' }}>{live.email}</span>
                 : emailSearch.state === 'searching'
-                ? <span style={{ color: '#9ca3af', fontFamily: mono, fontSize: '0.68rem' }}>🔍 Hľadám email...</span>
+                ? <span style={{ color: '#9ca3af', fontFamily: mono, fontSize: '0.68rem' }}>⏳ Hľadám email...</span>
                 : emailSearch.state === 'found'
                 ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                     <span style={{ color: '#00cc88', fontFamily: mono, fontSize: '0.68rem' }}>✓ Email nájdený: {emailSearch.email}</span>
@@ -1913,7 +1913,7 @@ PRAVIDLÁ EMAILU:
                   {aiLoading && (
                     <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                       <div style={{ background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: '3px 3px 3px 0', padding: '0.7rem 0.9rem' }}>
-                        <span style={css.loadingMsg}>✦ Analyzujem...</span>
+                        <span style={css.loadingMsg}>⏳ AI premýšľa...</span>
                       </div>
                     </div>
                   )}
@@ -1937,7 +1937,7 @@ PRAVIDLÁ EMAILU:
                       disabled={aiLoading}
                     />
                     <button style={{ ...css.aiSendBtn, opacity: aiLoading ? 0.5 : 1 }} onClick={() => sendAiMessage()} disabled={aiLoading}>
-                      {aiLoading ? '⏳' : 'Odoslať'}
+                      {aiLoading ? '⏳ Premýšľam...' : 'Odoslať'}
                     </button>
                   </div>
                 </div>

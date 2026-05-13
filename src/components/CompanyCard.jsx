@@ -107,7 +107,7 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
           <button style={css.scoreBtn} onClick={() => onScore(company)} disabled={scoring}
             onMouseOver={e => e.currentTarget.style.opacity = '0.75'}
             onMouseOut={e => e.currentTarget.style.opacity = '1'}>
-            {scoring ? '⏳' : '✦ BPS Skóre'}
+            {scoring ? '⏳ AI analyzuje...' : '✦ BPS Skóre'}
           </button>
         )}
       </div>

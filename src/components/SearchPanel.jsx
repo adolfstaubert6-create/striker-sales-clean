@@ -167,7 +167,7 @@ export default function SearchPanel({ searching, setSearching }) {
 
         <button style={{ ...css.searchBtn, opacity: searching ? 0.7 : 1 }}
           onClick={handleSearch} disabled={searching}>
-          {searching ? `🔍 Vyhľadáva ${CATEGORY_PLURAL[form.category] || 'firiem'} v ${form.city}...` : '🔍 Spustiť vyhľadávanie'}
+          {searching ? `⏳ Vyhľadávam ${CATEGORY_PLURAL[form.category] || 'firmy'}...` : '🔍 Spustiť vyhľadávanie'}
         </button>
 
         {globalError && <div style={css.errBox}>⚠ {globalError}</div>}
