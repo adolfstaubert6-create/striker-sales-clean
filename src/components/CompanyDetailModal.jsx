@@ -39,14 +39,46 @@ const SCORE_COLOR = s =>
   s == null ? '#4b5563' : s >= 80 ? '#00cc88' : s >= 50 ? '#ffaa00' : '#ff3333'
 
 function fmtTs(ts) {
+  // handles Firestore Timestamp, plain Date, or null/undefined
   if (!ts) return ''
-  const d = ts.toDate ? ts.toDate() : new Date(ts)
-  const dd = d.getDate().toString().padStart(2, '0')
-  const mm = (d.getMonth() + 1).toString().padStart(2, '0')
-  const yy = d.getFullYear()
-  const hh = d.getHours().toString().padStart(2, '0')
-  const mi = d.getMinutes().toString().padStart(2, '0')
-  return `${dd}.${mm}.${yy} ${hh}:${mi}`
+  try {
+    const d = ts.toDate ? ts.toDate() : new Date(ts)
+    if (isNaN(d.getTime())) return ''
+    const dd = d.getDate().toString().padStart(2, '0')
+    const mm = (d.getMonth() + 1).toString().padStart(2, '0')
+    const yy = d.getFullYear()
+    const hh = d.getHours().toString().padStart(2, '0')
+    const mi = d.getMinutes().toString().padStart(2, '0')
+    return `${dd}.${mm}.${yy} ${hh}:${mi}`
+  } catch { return '' }
+}
+
+// handles both old (timestamp) and new (createdAt) field names
+function evTs(ev) {
+  return ev.createdAt || ev.timestamp || null
+}
+
+const TYPE_FALLBACK_MSG = {
+  status_changed:   (ev) => ev.oldStatus && ev.newStatus
+    ? `Status zmenený: ${STATUS_LABELS[ev.oldStatus] || ev.oldStatus} → ${STATUS_LABELS[ev.newStatus] || ev.newStatus}`
+    : 'Status zmenený',
+  note_added:       () => 'Poznámka pridaná',
+  note_updated:     () => 'Poznámka upravená',
+  note_deleted:     () => 'Poznámka zmazaná',
+  task_created:     (ev) => ev.content ? `Úloha: ${ev.content}` : 'Úloha pridaná',
+  draft_created:    () => 'Email draft vytvorený',
+  draft_approved:   () => 'Email draft schválený',
+  email_generated:  () => 'Email draft vygenerovaný',
+  email_sent:       () => 'Email odoslaný',
+  company_saved:    () => 'Firma uložená',
+  ai_score_created: () => 'AI skóre vypočítané',
+  reply_received:   () => 'Odpoveď prijatá',
+}
+
+function evMessage(ev) {
+  if (ev.message) return ev.message
+  const fn = TYPE_FALLBACK_MSG[ev.type]
+  return fn ? fn(ev) : ev.type
 }
 
 function extractDomain(w) {
@@ -698,8 +730,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
               {interactions.slice(0, 20).map(ev => (
                 <div key={ev.id} style={css.tlRow}>
                   <span style={css.tlIcon}>{EVENT_ICONS[ev.type] || '·'}</span>
-                  <span style={css.tlTime}>{fmtTs(ev.createdAt)}</span>
-                  <span style={css.tlMsg}>{ev.message || ev.type}</span>
+                  <span style={css.tlTime}>{fmtTs(evTs(ev)) || '–'}</span>
+                  <span style={css.tlMsg}>{evMessage(ev)}</span>
                 </div>
               ))}
             </div>

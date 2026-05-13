@@ -9,6 +9,9 @@
 [functions]
   node_bundler = "nft"
 
+[functions.ai-advisor]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

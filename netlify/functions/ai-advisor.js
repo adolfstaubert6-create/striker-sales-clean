@@ -1,72 +1,41 @@
 const Anthropic = require('@anthropic-ai/sdk')
 
-const SYSTEM_PROMPT = `You are STRIKER AI Advisor - an elite B2B sales consultant and technical advisor for STRIKER hydrodynamic cavitation heating technology.
+const SYSTEM_PROMPT = `You are STRIKER AI Advisor - an elite B2B sales consultant for STRIKER hydrodynamic cavitation heating technology.
 
-STRIKER specs: 45 kW electrical input → 120-160 kW thermal output. Price: 8,000-10,000 EUR. Delivery: 6-8 weeks. Target clients: industrial laundries, hotels, spas, hospitals, restaurants with high hot water/heating demand. BAFA subsidy available in Germany.
+STRIKER: 45 kW electrical input → 120-160 kW thermal output. Price: 8,000-10,000 EUR. Delivery: 6-8 weeks. Clients: industrial laundries, hotels, spas, hospitals. BAFA subsidy available in Germany.
 
-═══════════════════════════════════════
-SAFETY RULES — STRICTLY ENFORCED
-═══════════════════════════════════════
+SAFETY RULES:
+YOU CAN: analyze, suggest next steps, prepare email draft text, warn about risks, recommend follow-up, summarize, suggest status changes.
+YOU CANNOT: send emails, directly change status, delete companies, mark deals closed, change contact details.
 
-YOU CAN:
-- Analyze company and assess potential
-- Suggest next steps and strategies
-- Prepare email draft text (text only, not send)
-- Warn about risks
-- Recommend follow-up timing
-- Summarize situation
-- Suggest status changes (with approval)
+If user asks restricted action: "Môžem pripraviť návrh, ale túto akciu musíš schváliť ty. [NÁVRH AKCIE: <description>]"
 
-YOU CANNOT:
-- Send emails (only humans can approve and send)
-- Directly change company status
-- Delete or archive companies
-- Mark deals as closed
-- Change contact details
+STATUS SUGGESTION: When a status change is clearly warranted, append at the very end of your response (nothing after it):
+<SUGGEST_STATUS:new> or <SUGGEST_STATUS:contacted> or <SUGGEST_STATUS:offer> or <SUGGEST_STATUS:closed> or <SUGGEST_STATUS:rejected>
+Only append if genuinely warranted.
 
-If the user asks you to perform a restricted action, respond:
-"Môžem pripraviť návrh, ale túto akciu musíš schváliť ty. [NÁVRH AKCIE: <description>]"
-
-═══════════════════════════════════════
-STATUS SUGGESTION FORMAT
-═══════════════════════════════════════
-
-When you believe a status change is clearly warranted, append ONE of these tags at the very end of your response (after all other text):
-
-<SUGGEST_STATUS:new> — Nový
-<SUGGEST_STATUS:contacted> — Kontaktovaný
-<SUGGEST_STATUS:offer> — Ponuka
-<SUGGEST_STATUS:closed> — Uzavreté
-<SUGGEST_STATUS:rejected> — Zamietnutý
-
-Only append this if genuinely warranted. Never append by default.
-
-═══════════════════════════════════════
-RESPONSE STRUCTURE
-═══════════════════════════════════════
-
-Always respond in Slovak. Always be structured, specific, and honest.
-Never give generic answers. If a company is low priority, say so clearly.
-
-Every full analysis must cover:
-1. 🏢 Hodnotenie firmy (2-3 vety)
-2. ✅ Prečo áno / ❌ Prečo nie
-3. 💰 Obchodný potenciál (ROI estimate)
-4. ⚠️ Riziká
-5. 🎯 Najlepší ďalší krok (concrete action)
-6. 💬 Odporúčaný prístup (email alebo telefonát + why)
-7. 🔥 Najsilnejší argument pre STRIKER
-
-Be concise but powerful. Max 300 words total.`
+RESPONSE: Always in Slovak. Structured, specific, honest. Max 250 words.
+Every full analysis: 1.🏢 Hodnotenie 2.✅/❌ Prečo áno/nie 3.💰 Potenciál 4.⚠️ Riziká 5.🎯 Ďalší krok 6.💬 Prístup 7.🔥 Hlavný argument`
 
 exports.handler = async (event) => {
+  // Log env var presence immediately
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  console.log('[ai-advisor] start | apiKey set:', !!apiKey, '| method:', event.httpMethod)
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
   }
 
+  if (!apiKey) {
+    console.error('[ai-advisor] ANTHROPIC_API_KEY is not set in environment')
+    return { statusCode: 500, body: JSON.stringify({ error: 'ANTHROPIC_API_KEY nie je nastavený v Netlify env vars' }) }
+  }
+
   let body
-  try { body = JSON.parse(event.body) } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }
+  try {
+    body = JSON.parse(event.body)
+  } catch {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) }
   }
 
   const { messages, companyContext } = body
@@ -74,32 +43,32 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'messages required' }) }
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' }) }
-  }
-
   const contextBlock = companyContext
-    ? `\n\nKONTEXT FIRMY:\n${JSON.stringify(companyContext, null, 2)}`
+    ? `\n\nFIRMA: ${companyContext.name} | ${companyContext.category} | ${companyContext.city} | BPS: ${companyContext.aiScore ?? '–'} | Status: ${companyContext.status}\nEmail: ${companyContext.email || '–'} | Tel: ${companyContext.phone || '–'} | Rating: ${companyContext.rating ?? '–'}\nAI dôvod: ${companyContext.aiReason || '–'}\nPosledné udalosti: ${(companyContext.recentEvents || []).join(' | ')}`
     : ''
 
   try {
+    console.log('[ai-advisor] calling Anthropic | company:', companyContext?.name, '| messages:', messages.length)
     const client = new Anthropic({ apiKey })
+
     const response = await client.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 1024,
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 800,
       system:     SYSTEM_PROMPT + contextBlock,
       messages,
     })
 
     const text = response.content[0]?.text || ''
-    console.log(`[ai-advisor] ${companyContext?.name} — ${text.slice(0, 80)}...`)
+    console.log('[ai-advisor] success | chars:', text.length)
     return {
       statusCode: 200,
       body: JSON.stringify({ text }),
     }
   } catch (err) {
-    console.error('[ai-advisor] Error:', err.message)
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) }
+    console.error('[ai-advisor] Anthropic error:', err.status, err.message, err.error)
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: err.message || 'Anthropic API error' }),
+    }
   }
 }
