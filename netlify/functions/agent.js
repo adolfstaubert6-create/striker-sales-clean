@@ -273,44 +273,97 @@ Vráť VÝLUČNE valid JSON bez markdown:
 }
 
 // ── STEP 4: Draft ─────────────────────────────────────────────────────────────
+
+// Segment-specific context for the email
+function segmentContext(category) {
+  const map = {
+    hotel:      { focus: 'vykurovanie hotelovej budovy a ohrev úžitkovej vody pre hostí', saving: 'na vykurovaní a ohreve vody' },
+    restaurant: { focus: 'ohrev vody v kuchyni a prevádzka gastro zariadení', saving: 'na energii v kuchyni' },
+    spa:        { focus: 'nepretržitý ohrev vody pre bazény, vírivky a ošetrenia', saving: 'na ohreve vody pre wellness prevádzku' },
+    laundry:    { focus: 'kontinuálny ohrev vody pre práčky a sušičky', saving: 'na ohrevu vody pri praní a sušení' },
+    hospital:   { focus: 'prevádzka budovy a tepelná pohoda pre pacientov', saving: 'na prevádzkových nákladoch budovy' },
+  }
+  return map[category] || map.hotel
+}
+
+// Rating-based salutation and tone
+function ratingTone(name, rating) {
+  if (!rating) return { salutation: `Vážený tím ${name}`, qualifier: 'Váš podnik' }
+  if (rating >= 4.5) return { salutation: `Vážený tím ${name}`, qualifier: `Váš prémiový ${name.toLowerCase().includes('hotel') ? 'hotel' : 'podnik'}` }
+  if (rating >= 4.0) return { salutation: `Vážený tím ${name}`, qualifier: `Váš ${name.toLowerCase().includes('hotel') ? 'hotel' : 'podnik'}` }
+  return { salutation: `Dobrý deň, tím ${name}`, qualifier: 'Váš podnik' }
+}
+
 async function step4Draft(company, strategy) {
   console.log(`[agent:4:draft] ${company.name}`)
 
-  // Generate Slovak draft
-  const skPrompt = `Napíš prvý kontaktný email v SLOVENČINE pre firmu ${company.name} (${company.category}) v ${company.city}.
-BPS: ${company.bps.score}/100. ${company.bps.reason}
-STRIKER: kavitačná kúriaca technológia. 45kW vstupu → 120-160kW tepla. Úspora 50-70%. Cena 8000-10000 EUR.
-Ďalší krok: ${strategy.nextStep}
+  const seg  = segmentContext(company.category)
+  const tone = ratingTone(company.name, company.rating)
+  const ratingStr = company.rating ? `hodnotenie ${company.rating}/5` : 'bez hodnotenia'
+  const uniqueSeed = `${company.name}-${company.city}-${Date.now().toString(36)}`  // forces uniqueness
 
-RESPOND ONLY IN SLOVAK. NO meta-text. Output ONLY:
-PREDMET: <predmet>
+  // ── Slovak draft ──────────────────────────────────────────────────────────
+  const skPrompt = `Napíš UNIKÁTNY prvý kontaktný email v SLOVENČINE.
 
-<telo emailu max 130 slov, B2B, jasný CTA>`
+FIRMA: ${company.name}
+LOKALITA: ${company.city}${company.address ? ', ' + company.address : ''}
+SEGMENT: ${company.category} (${ratingStr})
+BPS POTENCIÁL: ${company.bps.score}/100 — ${company.bps.reason}
+KONTAKT: ${company.email || 'neznámy'} | web: ${company.website || 'nie'}
 
-  const skRaw  = await claude(skPrompt, 500)
+ŠTRUKTÚRA EMAILU:
+1. Oslovenie: "${tone.salutation},"
+2. Úvod (1 veta): Predstav sa — Adolf Staubert, STRIKER Energy
+3. Hlavná správa (1-2 vety): Konkrétne pre ${seg.focus} — úspora 50-70% ${seg.saving}. Uveď čísla: 45kW vstupu → 120-160kW tepla.
+4. Relevancia (1 veta): Prečo práve ${tone.qualifier} v ${company.city} — napr. rating ${company.rating || '?'}, sezóna, lokalita
+5. Výzva na akciu (1 veta): Navrhni krátky telefonát alebo odpoveď na email
+6. Podpis: Adolf Staubert | STRIKER Energy | +49 171 4758126
+
+PRAVIDLÁ:
+- MAX 5 viet v tele emailu (bez oslovenia a podpisu)
+- Žiadne prázdne frázy ("som presvedčený", "radi by sme")
+- Konkrétne čísla: 50-70% úspora, 8 000-10 000 EUR investícia, návratnosť 18-36 mesiacov
+- Tón: ${company.rating >= 4.5 ? 'profesionálny prémiový B2B' : 'priamy profesionálny B2B'}
+- Seed pre unikátnosť: ${uniqueSeed}
+
+RESPOND ONLY IN SLOVAK. Output ONLY (no explanations):
+PREDMET: <predmet — konkrétny, nie generický, spomeň ${company.name}>
+
+<telo emailu>`
+
+  const skRaw   = await claude(skPrompt, 600)
   const skLines = skRaw.split('\n')
   const skSLine = skLines.find(l => /^PREDMET:/i.test(l.trim()))
-  const subjectSk = skSLine ? skSLine.replace(/^PREDMET:\s*/i, '').trim() : `STRIKER — ${company.name}`
+  const subjectSk = skSLine ? skSLine.replace(/^PREDMET:\s*/i, '').trim() : `STRIKER Energy – úspora pre ${company.name}`
   const bodySk    = skSLine
     ? skRaw.slice(skRaw.indexOf(skSLine) + skSLine.length).replace(/^\s*\n+/, '').trim()
     : skRaw.trim()
 
-  // Translate to German
-  const dePrompt = `Translate to professional German B2B email. Sie-form. Max 130 words. NO meta-text, NO markdown, NO [AKTION]. Only clean email text.
+  // ── German translation ────────────────────────────────────────────────────
+  const dePrompt = `Preložte tento slovenský B2B email do profesionálnej nemčiny.
+
+PRAVIDLÁ PREKLADU:
+- Sie-forma (formálne oslovenie)
+- Zachovaj všetky konkrétne čísla (50-70%, 45kW, 120-160kW, 8.000-10.000 EUR)
+- Zachovaj meno firmy: ${company.name}
+- Zachovaj štruktúru a dĺžku — max 5 viet v tele
+- NO meta-text, NO markdown, NO [AKTION], NO komentáre
+- Len čistý text emailu
+
 Output ONLY:
-BETREFF: <subject>
+BETREFF: <predmet v nemčine>
 
-<body>
+<telo emailu v nemčine>
 
---- Original Slovak ---
+--- SLOVENSKÝ ORIGINÁL ---
 ${subjectSk}
 
 ${bodySk}`
 
-  const deRaw  = await claude(dePrompt, 500)
+  const deRaw   = await claude(dePrompt, 600)
   const deLines = deRaw.split('\n')
   const deSLine = deLines.find(l => /^BETREFF:/i.test(l.trim()))
-  const subjectDe = deSLine ? deSLine.replace(/^BETREFF:\s*/i, '').trim() : subjectSk
+  const subjectDe = deSLine ? deSLine.replace(/^BETREFF:\s*/i, '').trim() : `STRIKER Energy – Energieeinsparung für ${company.name}`
   const bodyDe    = deSLine
     ? deRaw.slice(deRaw.indexOf(deSLine) + deSLine.length).replace(/^\s*\n+/, '').trim()
     : deRaw.trim()
