@@ -1163,39 +1163,11 @@ PRAVIDLÁ EMAILU:
   }
 
   async function handleToDraft(rawText) {
-    const tagMatch = rawText.match(/<STRIKER_EMAIL>([\s\S]*?)<\/STRIKER_EMAIL>/i)
-    let extracted
-    if (tagMatch) {
-      extracted = tagMatch[1].trim()
-    } else {
-      // Fallback: find "Predmet:" line and take everything from there
-      const predIdx = rawText.search(/^Predmet:/im)
-      if (predIdx === -1) {
-        showToast('⚠️ Táto správa neobsahuje email blok. Klikni Prvý email alebo Follow-up.', 'err')
-        return
-      }
-      extracted = rawText.slice(predIdx).trim()
-    }
-
-    // Parse SUBJECT: line
-    const lines     = extracted.split('\n')
-    const subjLine  = lines.find(l => /^SUBJECT:/i.test(l.trim()))
-    const subjectSk = subjLine
-      ? subjLine.replace(/^SUBJECT:\s*/i, '').trim()
-      : `STRIKER — ${live.name}`
-
-    // Parse BODY: section
-    const bodyMatch = extracted.match(/^BODY:\s*\n([\s\S]*)/im)
-    const bodyRaw   = bodyMatch
-      ? bodyMatch[1]
-      : subjLine
-      ? extracted.slice(extracted.indexOf(subjLine) + subjLine.length)
-      : extracted
-    const bodySk    = cleanDraftText(bodyRaw)
+    const bodySk  = cleanDraftText(rawText)
 
     const existing = emails.find(e => ['active_draft', 'translated', 'draft'].includes(e.status))
     const fields = {
-      subjectSk,
+      subjectSk:   `STRIKER — ${live.name}`,
       bodySk,
       subjectDe:   '',
       bodyDe:      '',
