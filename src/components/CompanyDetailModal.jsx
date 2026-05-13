@@ -10,6 +10,13 @@ import { generateEmailDraft } from '../services/emailService.js'
 
 const CURRENT_USER = 'Staubert'
 
+const PRIORITY_OPTIONS = [
+  { value: '',        label: 'Neurčená', color: '#4b5563' },
+  { value: 'vysoka',  label: 'Vysoká',   color: '#ef4444' },
+  { value: 'stredna', label: 'Stredná',  color: '#ffaa00' },
+  { value: 'nizka',   label: 'Nízka',    color: '#9ca3af' },
+]
+
 const STATUS_LABELS = {
   new: 'Nový', contacted: 'Kontaktovaný', offer: 'Ponuka',
   closed: 'Uzavreté', rejected: 'Zamietnutý',
@@ -644,6 +651,10 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [chatOpen,   setChatOpen]   = useState(false)
   const [chatZoomed, setChatZoomed]           = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [editingNextAction, setEditingNextAction] = useState(false)
+  const [nextActionInput,   setNextActionInput]   = useState('')
+  const [editingAssignee,   setEditingAssignee]   = useState(false)
+  const [assigneeInput,     setAssigneeInput]     = useState('')
   const [taskText, setTaskText]   = useState('')
   const [draftSubj, setDraftSubj] = useState('')
   const [draftBody, setDraftBody] = useState('')
@@ -845,6 +856,21 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
         { oldStatus, newStatus }
       )
     }, `✓ Status: ${STATUS_LABELS[newStatus] || newStatus}`)
+  }
+
+  async function handleSavePriority(value) {
+    await updateDoc(doc(db, 'companies', live.id), { priority: value, updatedAt: serverTimestamp() })
+  }
+
+  async function handleSaveNextAction(value) {
+    const v = value.trim()
+    await updateDoc(doc(db, 'companies', live.id), { nextAction: v, updatedAt: serverTimestamp() })
+    if (v) await logEvent('note_updated', `${CURRENT_USER} nastavil ďalší krok: ${v}`)
+  }
+
+  async function handleSaveAssignee(value) {
+    const v = value.trim() || 'Adolf Staubert'
+    await updateDoc(doc(db, 'companies', live.id), { assignee: v, updatedAt: serverTimestamp() })
   }
 
   async function handleAddNote() {
@@ -1347,6 +1373,15 @@ PRAVIDLÁ EMAILU:
 
   const CONF_COLORS  = { vysoká: '#00cc88', stredná: '#ffaa00', nízka: '#ef4444' }
   const activeDraft  = emails.find(e => ['active_draft', 'translated', 'draft'].includes(e.status)) || null
+
+  const manualPriority = PRIORITY_OPTIONS.find(o => o.value === (live.priority || '')) || PRIORITY_OPTIONS[0]
+
+  const lastContactDisplay = (() => {
+    const ev = [...interactions]
+      .filter(e => ['email_sent', 'status_changed', 'email_draft_approved'].includes(e.type))
+      .sort((a, b) => (evTs(b)?.toDate?.()?.getTime() || 0) - (evTs(a)?.toDate?.()?.getTime() || 0))[0]
+    return ev ? fmtTs(evTs(ev)) : (live.lastContact || '–')
+  })()
   const lastSentEmail = [...emails].filter(e => e.status === 'sent').sort((a, b) =>
     (b.sentAt?.toDate?.()?.getTime() || 0) - (a.sentAt?.toDate?.()?.getTime() || 0)
   )[0] || null
@@ -1484,11 +1519,57 @@ PRAVIDLÁ EMAILU:
             {fb.status === 'error' && <div style={css.fbErr}>✗ Chyba</div>}
 
             <InfoRow label="Priorita">
-              {pri ? <span style={{ color: pri.color, fontFamily: mono, fontSize: '0.68rem' }}>{pri.label}</span> : <Muted>–</Muted>}
+              <select
+                style={{ background: '#0d1117', border: '1px solid #21262d', color: manualPriority.color, fontFamily: mono, fontSize: '0.68rem', padding: '0.12rem 0.35rem', borderRadius: 2, outline: 'none', cursor: 'pointer' }}
+                value={live.priority || ''}
+                onChange={e => handleSavePriority(e.target.value)}>
+                {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </InfoRow>
-            <InfoRow label="Posl. kontakt"><Muted>{live.lastContact || '–'}</Muted></InfoRow>
-            <InfoRow label="Ďalší krok">  <Muted>{live.nextAction  || '–'}</Muted></InfoRow>
-            <InfoRow label="Zodpovedný">  <Muted>{live.assignee    || '–'}</Muted></InfoRow>
+
+            <InfoRow label="Posl. kontakt">
+              <Muted>{lastContactDisplay}</Muted>
+            </InfoRow>
+
+            <InfoRow label="Ďalší krok">
+              {editingNextAction ? (
+                <input
+                  style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #ff5c00', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', outline: 'none', width: '100%', padding: '0 0.1rem' }}
+                  value={nextActionInput}
+                  onChange={e => setNextActionInput(e.target.value)}
+                  onBlur={() => { handleSaveNextAction(nextActionInput); setEditingNextAction(false) }}
+                  onKeyDown={e => { if (e.key === 'Enter') { handleSaveNextAction(nextActionInput); setEditingNextAction(false) } if (e.key === 'Escape') setEditingNextAction(false) }}
+                  autoFocus
+                />
+              ) : (
+                <span
+                  style={{ fontFamily: mono, fontSize: '0.68rem', color: live.nextAction ? '#e8eaed' : '#4b5563', cursor: 'pointer' }}
+                  title="Klikni pre úpravu"
+                  onClick={() => { setNextActionInput(live.nextAction || ''); setEditingNextAction(true) }}>
+                  {live.nextAction || '✎ nastaviť'}
+                </span>
+              )}
+            </InfoRow>
+
+            <InfoRow label="Zodpovedný">
+              {editingAssignee ? (
+                <input
+                  style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #ff5c00', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', outline: 'none', width: '100%', padding: '0 0.1rem' }}
+                  value={assigneeInput}
+                  onChange={e => setAssigneeInput(e.target.value)}
+                  onBlur={() => { handleSaveAssignee(assigneeInput); setEditingAssignee(false) }}
+                  onKeyDown={e => { if (e.key === 'Enter') { handleSaveAssignee(assigneeInput); setEditingAssignee(false) } if (e.key === 'Escape') setEditingAssignee(false) }}
+                  autoFocus
+                />
+              ) : (
+                <span
+                  style={{ fontFamily: mono, fontSize: '0.68rem', color: '#e8eaed', cursor: 'pointer' }}
+                  title="Klikni pre úpravu"
+                  onClick={() => { setAssigneeInput(live.assignee || 'Adolf Staubert'); setEditingAssignee(true) }}>
+                  {live.assignee || 'Adolf Staubert'}
+                </span>
+              )}
+            </InfoRow>
 
             <div style={{ marginTop: '1.25rem' }}>
               <div style={css.factorTitle}>Úlohy ({tasks.length})</div>
