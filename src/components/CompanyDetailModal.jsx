@@ -544,7 +544,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [newNote, setNewNote]     = useState('')
   const [notesOpen, setNotesOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
-  const [chatOpen,  setChatOpen]  = useState(false)
+  const [chatOpen,   setChatOpen]   = useState(false)
+  const [chatZoomed, setChatZoomed] = useState(false)
   const [taskText, setTaskText]   = useState('')
   const [draftSubj, setDraftSubj] = useState('')
   const [draftBody, setDraftBody] = useState('')
@@ -1510,7 +1511,7 @@ PRAVIDLÁ EMAILU:
           <>
             <div style={{ position: 'fixed', inset: 0, zIndex: 599, background: 'rgba(0,0,0,0.72)' }} onClick={() => setChatOpen(false)} />
             <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none' }}>
-              <div style={{ width: '100%', maxWidth: 600, height: '100%', background: '#080c11', borderLeft: '3px solid #ff5c0044', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 40px rgba(255,92,0,0.12)', pointerEvents: 'auto' }}>
+              <div style={{ width: '100%', maxWidth: chatZoomed ? '90vw' : 600, height: '100%', background: '#080c11', borderLeft: '3px solid #ff5c0044', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 40px rgba(255,92,0,0.12)', pointerEvents: 'auto', transition: 'max-width 0.2s ease' }}>
 
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.4rem', borderBottom: '1px solid #ff5c0022', flexShrink: 0 }}>
@@ -1518,7 +1519,12 @@ PRAVIDLÁ EMAILU:
                     <div style={{ fontFamily: mono, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', color: '#ff5c00' }}>✦ STRIKER AI ADVISOR</div>
                     <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#4b5563', marginTop: '0.15rem' }}>{live.name}</div>
                   </div>
-                  <button style={{ background: 'transparent', border: '1px solid #ff5c0033', color: '#ff5c0099', width: 30, height: 30, borderRadius: 3, fontSize: '0.9rem', cursor: 'pointer' }} onClick={() => setChatOpen(false)}>✕</button>
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <button style={{ background: 'transparent', border: '1px solid #ff5c0033', color: '#ff5c0088', fontFamily: mono, fontSize: '0.58rem', padding: '0.2rem 0.5rem', borderRadius: 3, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => setChatZoomed(v => !v)}>
+                      {chatZoomed ? '⊖ Zoom' : '⊕ Zoom'}
+                    </button>
+                    <button style={{ background: 'transparent', border: '1px solid #ff5c0033', color: '#ff5c0099', width: 30, height: 30, borderRadius: 3, fontSize: '0.9rem', cursor: 'pointer' }} onClick={() => setChatOpen(false)}>✕</button>
+                  </div>
                 </div>
 
                 {/* Missing data warning */}
