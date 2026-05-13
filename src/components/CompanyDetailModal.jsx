@@ -28,28 +28,33 @@ const TYPE_LABEL = {
 }
 
 const EVENT_ICONS = {
-  company_saved:           '🏢',
-  ai_score_created:        '✦',
-  status_changed:          '🔄',
-  note_added:              '📝',
-  note_updated:            '✏️',
-  note_deleted:            '🗑️',
-  task_created:            '✅',
-  email_draft_created_sk:  '✉',
-  email_draft_edited_sk:   '✏️',
-  email_translated_de:     '🇩🇪',
-  email_draft_edited_de:   '✏️',
-  email_draft_approved:    '✅',
-  email_sent:              '📤',
-  email_deleted:           '🗑️',
-  email_copied:            '📋',
-  email_found:             '🔍',
-  reply_received:          '📥',
+  company_saved:            '🏢',
+  company_created:          '🏢',
+  ai_score_created:         '✦',
+  status_changed:           '🔄',
+  note_added:               '📋',
+  note_updated:             '✏️',
+  note_deleted:             '🗑️',
+  task_created:             '✅',
+  email_draft_created_sk:   '✏️',
+  email_draft_created:      '✏️',
+  email_draft_edited_sk:    '✏️',
+  email_translated_de:      '🌐',
+  email_draft_edited_de:    '✏️',
+  email_draft_approved:     '✅',
+  email_sent:               '📧',
+  email_deleted:            '🗑️',
+  email_copied:             '📋',
+  email_found:              '🔍',
+  email_draft_overwritten:  '✏️',
+  email_draft_back_to_sk:   '↩️',
+  reply_received:           '📥',
+  suggestion_approved:      '✦',
   // legacy
-  draft_created:    '✉',
+  draft_created:    '✏️',
   draft_approved:   '✅',
-  email_generated:  '✉',
-  email_translated: '🇩🇪',
+  email_generated:  '✏️',
+  email_translated: '🌐',
 }
 
 const SCORE_COLOR = s =>
@@ -70,26 +75,68 @@ function fmtTs(ts) {
   } catch { return '' }
 }
 
+function fmtTsSmart(ts) {
+  if (!ts) return ''
+  try {
+    const d   = ts.toDate ? ts.toDate() : new Date(ts)
+    if (isNaN(d.getTime())) return ''
+    const now   = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const yest  = new Date(today); yest.setDate(today.getDate() - 1)
+    const dDay  = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    const hh = d.getHours().toString().padStart(2, '0')
+    const mi = d.getMinutes().toString().padStart(2, '0')
+    if (dDay.getTime() === today.getTime()) return `Dnes ${hh}:${mi}`
+    if (dDay.getTime() === yest.getTime())  return `Včera ${hh}:${mi}`
+    const dd = d.getDate().toString().padStart(2, '0')
+    const mm = (d.getMonth() + 1).toString().padStart(2, '0')
+    return `${dd}.${mm}.${d.getFullYear()} ${hh}:${mi}`
+  } catch { return '' }
+}
+
+function isEventToday(ts) {
+  if (!ts) return false
+  try {
+    const d = ts.toDate ? ts.toDate() : new Date(ts)
+    const n = new Date()
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()
+  } catch { return false }
+}
+
 // handles both old (timestamp) and new (createdAt) field names
 function evTs(ev) {
   return ev.createdAt || ev.timestamp || null
 }
 
 const TYPE_FALLBACK_MSG = {
-  status_changed:   (ev) => ev.oldStatus && ev.newStatus
-    ? `Status zmenený: ${STATUS_LABELS[ev.oldStatus] || ev.oldStatus} → ${STATUS_LABELS[ev.newStatus] || ev.newStatus}`
+  status_changed:          (ev) => ev.oldStatus && ev.newStatus
+    ? `Status: ${STATUS_LABELS[ev.oldStatus] || ev.oldStatus} → ${STATUS_LABELS[ev.newStatus] || ev.newStatus}`
     : 'Status zmenený',
-  note_added:       () => 'Poznámka pridaná',
-  note_updated:     () => 'Poznámka upravená',
-  note_deleted:     () => 'Poznámka zmazaná',
-  task_created:     (ev) => ev.content ? `Úloha: ${ev.content}` : 'Úloha pridaná',
-  draft_created:    () => 'Email draft vytvorený',
-  draft_approved:   () => 'Email draft schválený',
-  email_generated:  () => 'Email draft vygenerovaný',
-  email_sent:       () => 'Email odoslaný',
-  company_saved:    () => 'Firma uložená',
-  ai_score_created: () => 'AI skóre vypočítané',
-  reply_received:   () => 'Odpoveď prijatá',
+  note_added:              () => 'Pridaná poznámka',
+  note_updated:            () => 'Poznámka upravená',
+  note_deleted:            () => 'Poznámka zmazaná',
+  task_created:            (ev) => ev.content ? `Nová úloha: ${ev.content}` : 'Úloha pridaná',
+  draft_created:           () => 'SK draft vytvorený',
+  email_draft_created_sk:  () => 'SK email draft vytvorený',
+  email_draft_created:     () => 'SK email draft vytvorený',
+  email_draft_edited_sk:   () => 'SK draft upravený',
+  email_translated_de:     () => 'Email preložený do nemčiny',
+  email_draft_edited_de:   () => 'DE draft upravený',
+  email_draft_approved:    () => 'Email draft schválený',
+  email_draft_overwritten: () => 'Draft prepísaný novým AI draftom',
+  email_draft_back_to_sk:  () => 'Draft vrátený na SK verziu',
+  draft_approved:          () => 'Email draft schválený',
+  email_generated:         () => 'AI email draft vygenerovaný',
+  email_sent:              () => 'Email odoslaný',
+  email_deleted:           () => 'Email draft zmazaný',
+  email_copied:            () => 'Email skopírovaný',
+  email_found:             () => 'Email adresa nájdená',
+  email_translated:        () => 'Email preložený do nemčiny',
+  company_saved:           () => 'Firma uložená',
+  company_created:         () => 'Firma vytvorená',
+  ai_score_created:        () => 'BPS skóre vypočítané',
+  reply_received:          () => 'Odpoveď prijatá',
+  suggestion_approved:     () => 'AI návrh schválený',
 }
 
 function evMessage(ev) {
@@ -452,13 +499,16 @@ function NoteCard({ note, onEdit, onDelete }) {
 }
 
 // ── Audit Row ────────────────────────────────────────────────────────────────
-function AuditRow({ ev, onDelete }) {
+function AuditRow({ ev, onDelete, isLatest }) {
   const [copied, setCopied] = useState(false)
 
-  const text = evMessage(ev)
+  const text    = evMessage(ev)
+  const ts      = evTs(ev)
+  const today   = isEventToday(ts)
+  const icon    = EVENT_ICONS[ev.type] || '·'
 
   function doCopy() {
-    navigator.clipboard.writeText(`${fmtTs(evTs(ev))} — ${text}`).then(() => {
+    navigator.clipboard.writeText(`${fmtTsSmart(ts)} — ${text}`).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }).catch(() => {})
@@ -468,12 +518,30 @@ function AuditRow({ ev, onDelete }) {
     if (window.confirm('Zmazať tento záznam?')) onDelete(ev.id)
   }
 
+  const rowStyle = {
+    display: 'flex', alignItems: 'flex-start', gap: '0.65rem',
+    padding: '0.6rem 0.5rem',
+    borderBottom: '1px solid #161b22',
+    borderLeft: isLatest ? '2px solid #ff5c00' : '2px solid transparent',
+    background: isLatest ? 'rgba(255,92,0,0.04)' : 'transparent',
+    borderRadius: isLatest ? '0 3px 3px 0' : 0,
+    animation: 'auditFadeIn 0.35s ease',
+    transition: 'background 0.2s',
+  }
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', padding: '0.5rem 0', borderBottom: '1px solid #161b22' }}>
-      <span style={{ fontSize: '0.72rem', flexShrink: 0, width: 18, marginTop: '0.05rem' }}>{EVENT_ICONS[ev.type] || '·'}</span>
+    <div style={rowStyle}>
+      <span style={{ fontSize: '0.85rem', flexShrink: 0, width: 22, textAlign: 'center', marginTop: '0.05rem', opacity: today ? 1 : 0.65 }}>
+        {icon}
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#4b5563', marginBottom: '0.15rem' }}>{fmtTs(evTs(ev)) || '–'}</div>
-        <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#9ca3af', lineHeight: 1.5 }}>{text}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.18rem' }}>
+          <span style={{ fontFamily: mono, fontSize: '0.58rem', color: today ? '#ff5c00' : '#4b5563', fontWeight: today ? 600 : 400 }}>
+            {fmtTsSmart(ts) || '–'}
+          </span>
+          {today && <span style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#ff5c0088', background: 'rgba(255,92,0,0.1)', padding: '0.04rem 0.3rem', borderRadius: 2 }}>dnes</span>}
+        </div>
+        <div style={{ fontFamily: mono, fontSize: '0.65rem', color: today ? '#c9d1d9' : '#9ca3af', lineHeight: 1.5 }}>{text}</div>
         <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem' }}>
           <button style={css.chatActionBtn} onClick={doCopy}>
             {copied ? '✓ Skopírované' : '📋 Kopírovať'}
@@ -1713,12 +1781,13 @@ PRAVIDLÁ EMAILU:
                 </div>
 
                 {/* Events list */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.25rem' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 1.25rem' }}>
+                  <style>{`@keyframes auditFadeIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: translateY(0) } }`}</style>
                   {interactions.length === 0 && (
                     <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#4b5563', textAlign: 'center', padding: '2rem 0' }}>Žiadne udalosti</div>
                   )}
-                  {interactions.map(ev => (
-                    <AuditRow key={ev.id} ev={ev} onDelete={handleDeleteInteraction} />
+                  {interactions.map((ev, i) => (
+                    <AuditRow key={ev.id} ev={ev} isLatest={i === 0} onDelete={handleDeleteInteraction} />
                   ))}
                 </div>
               </div>
