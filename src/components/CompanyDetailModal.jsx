@@ -470,12 +470,20 @@ function AuditRow({ ev, onDelete }) {
 }
 
 // ── AI Chat Message ──────────────────────────────────────────────────────────
-function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, onToDraft }) {
-  const [copied, setCopied]     = useState(false)
-  const [editing, setEditing]   = useState(false)
+function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, onToDraft, isLatest }) {
+  const [copied, setCopied]   = useState(false)
+  const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(displayText)
+  const [glowing, setGlowing] = useState(isLatest && role === 'assistant')
 
   const isAi = role === 'assistant'
+
+  // Fade glow after 3 s on mount (only fires once per component instance)
+  useEffect(() => {
+    if (!glowing) return
+    const t = setTimeout(() => setGlowing(false), 3000)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function doCopy() {
     navigator.clipboard.writeText(displayText).then(() => {
@@ -493,15 +501,24 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
     setEditing(false)
   }
 
+  function doDraft() {
+    if (window.confirm('Preniesť túto správu do SK draftu?'))
+      onToDraft(cleanDraftText(displayText))
+  }
+
   const bubbleStyle = isAi
-    ? { background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: '3px 3px 3px 0', padding: '0.7rem 0.9rem' }
+    ? {
+        background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00',
+        borderRadius: '3px 3px 3px 0', padding: '0.7rem 0.9rem',
+        boxShadow: glowing ? '0 0 16px rgba(255,92,0,0.45), 0 0 4px rgba(255,92,0,0.2)' : 'none',
+        transition: 'box-shadow 1.5s ease-out',
+      }
     : { background: '#161b22', border: '1px solid #21262d', borderRadius: '3px 3px 0 3px', padding: '0.55rem 0.75rem' }
 
   const textColor  = isAi ? '#c9d1d9' : '#e8eaed'
   const textFamily = isAi ? "'IBM Plex Sans',sans-serif" : mono
   const textSize   = isAi ? '0.8rem' : '0.68rem'
-
-  const maxW = isAi ? '92%' : '80%'
+  const maxW       = isAi ? '92%' : '80%'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isAi ? 'flex-start' : 'flex-end' }}>
@@ -520,8 +537,17 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
           <span style={{ fontFamily: textFamily, fontSize: textSize, color: textColor, lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
         )}
       </div>
-      {/* Action buttons — directly below the bubble */}
-      <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.2rem', flexWrap: 'wrap', maxWidth: maxW }}>
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem', flexWrap: 'wrap', maxWidth: maxW, alignItems: 'center' }}>
+        {/* Prominent → Draft on latest AI message */}
+        {isAi && isLatest && onToDraft && (
+          <button
+            style={{ fontFamily: mono, fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.8rem', border: 'none', background: '#ff5c00', color: '#fff', borderRadius: 2, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            onClick={doDraft}>
+            📋 → Draft
+          </button>
+        )}
         <button style={css.chatActionBtn} onClick={doCopy}>
           {copied ? '✓ Skopírované' : '📋 Kopírovať'}
         </button>
@@ -538,14 +564,12 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
           onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
           onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
           onClick={doDelete}>🗑 Zmazať</button>
-        {isAi && onToDraft && (
+        {/* Small → Draft on older AI messages */}
+        {isAi && !isLatest && onToDraft && (
           <button
             style={{ ...css.chatActionBtn, color: '#ff5c00', borderColor: '#ff5c0044', background: 'rgba(255,92,0,0.07)' }}
-            onClick={() => {
-              if (window.confirm('Preniesť túto správu do SK draftu?'))
-                onToDraft(cleanDraftText(displayText))
-            }}>
-            📋 → Draft
+            onClick={doDraft}>
+            → Draft
           </button>
         )}
       </div>
@@ -1620,10 +1644,11 @@ PRAVIDLÁ EMAILU:
                   {aiChats.length === 0 && !aiLoading && (
                     <div style={css.chatEmpty}>Vyber rýchlu otázku alebo napíš vlastnú — AI poradí konkrétne pre túto firmu.</div>
                   )}
-                  {aiChats.map((m, i) => {
+                  {aiChats.map((m, i, arr) => {
                     const parsed = m.role === 'assistant' ? parseAiResponse(m.message) : null
                     const displayText = parsed ? parsed.text : m.message
                     const suggestion  = parsed?.suggestion || null
+                    const lastAiIdx   = arr.reduce((acc, x, idx) => x.role === 'assistant' ? idx : acc, -1)
                     return (
                       <div key={m.id || i}>
                         <ChatMessage
@@ -1631,6 +1656,7 @@ PRAVIDLÁ EMAILU:
                           displayText={m.role === 'user' ? m.message : displayText}
                           role={m.role}
                           useMarkdown={m.role === 'assistant'}
+                          isLatest={m.role === 'assistant' && i === lastAiIdx}
                           onDelete={handleDeleteAiChat}
                           onEdit={handleEditAiChat}
                           onToDraft={handleToDraft}
