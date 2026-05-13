@@ -422,6 +422,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [notes, setNotes]         = useState([])
   const [tasks, setTasks]         = useState([])
   const [newNote, setNewNote]     = useState('')
+  const [notesOpen, setNotesOpen] = useState(false)
   const [taskText, setTaskText]   = useState('')
   const [draftSubj, setDraftSubj] = useState('')
   const [draftBody, setDraftBody] = useState('')
@@ -1261,25 +1262,58 @@ PRAVIDLÁ EMAILU:
 
         <div style={css.divider} />
 
-        {/* ══ NOTES (subcollection) ══ */}
+        {/* ══ NOTES — trigger button ══ */}
         <div style={css.section}>
-          <ColTitle>Poznámky ({notes.length})</ColTitle>
-
-          {notes.map(n => (
-            <NoteCard key={n.id} note={n} onEdit={handleEditNote} onDelete={handleDeleteNote} />
-          ))}
-
-          <textarea style={css.newNoteArea}
-            placeholder="Nová poznámka..."
-            value={newNote}
-            onChange={e => setNewNote(e.target.value)} />
           <button
-            style={{ ...css.btnPrimary, opacity: fb.addNote === 'saving' ? 0.6 : 1 }}
-            onClick={handleAddNote}
-            disabled={fb.addNote === 'saving'}>
-            {fb.addNote === 'saving' ? '⏳ Ukladám...' : fb.addNote === 'saved' ? '✓ Pridané' : '+ Pridať poznámku'}
+            style={{ fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.35rem 0.85rem', border: '1px solid #21262d', background: 'transparent', color: notes.length > 0 ? '#e8eaed' : '#6b7280', borderRadius: 2, cursor: 'pointer' }}
+            onClick={() => setNotesOpen(true)}>
+            📋 Poznámky {notes.length > 0 ? `(${notes.length})` : ''}
           </button>
         </div>
+
+        {/* ══ NOTES DRAWER ══ */}
+        {notesOpen && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end' }}
+               onClick={e => e.target === e.currentTarget && setNotesOpen(false)}>
+            <div style={{ width: '100%', maxWidth: 460, height: '100%', background: '#0d1117', borderLeft: '1px solid #21262d', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.6)' }}>
+
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid #1e2530', flexShrink: 0 }}>
+                <span style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#6b7280' }}>
+                  📋 Poznámky · {notes.length}
+                </span>
+                <button style={{ background: 'transparent', border: '1px solid #21262d', color: '#6b7280', width: 28, height: 28, borderRadius: 3, fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setNotesOpen(false)}>✕</button>
+              </div>
+
+              {/* Notes list */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '0.85rem 1.25rem' }}>
+                {notes.length === 0 && (
+                  <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#4b5563', textAlign: 'center', padding: '2rem 0' }}>Žiadne poznámky</div>
+                )}
+                {notes.map(n => (
+                  <NoteCard key={n.id} note={n} onEdit={handleEditNote} onDelete={handleDeleteNote} />
+                ))}
+              </div>
+
+              {/* Add note */}
+              <div style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid #1e2530', flexShrink: 0 }}>
+                <textarea
+                  style={css.newNoteArea}
+                  placeholder="Nová poznámka..."
+                  value={newNote}
+                  onChange={e => setNewNote(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && e.ctrlKey && handleAddNote()}
+                />
+                <button
+                  style={{ ...css.btnPrimary, opacity: fb.addNote === 'saving' ? 0.6 : 1, width: '100%' }}
+                  onClick={handleAddNote}
+                  disabled={fb.addNote === 'saving'}>
+                  {fb.addNote === 'saving' ? '⏳ Ukladám...' : fb.addNote === 'saved' ? '✓ Pridané' : '+ Pridať poznámku'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={css.divider} />
 
