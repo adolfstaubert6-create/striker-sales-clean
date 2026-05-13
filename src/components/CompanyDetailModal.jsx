@@ -620,8 +620,48 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       const kbSnap = await getDocs(collection(db, 'knowledge_base'))
       const knowledgeBase = kbSnap.docs.map(d => d.data())
 
-      const reasoning3 = (live.aiReasoning || []).slice(0, 3).join(', ')
-      const prompt = `Vytvor prvý kontaktný email pre firmu ${live.name} (${live.category}) v ${live.city || '–'}. BPS: ${live.aiScore ?? '–'}/100. ${live.aiReason || ''}. ${reasoning3 ? 'Faktory: ' + reasoning3 : ''} Použi STRIKER knowledge base.`
+      const typeMap  = { hotel: 'hotel', laundry: 'priemyselná práčovňa', spa: 'wellness / SPA centrum', hospital: 'nemocnica / klinika', restaurant: 'reštaurácia' }
+      const typeName = typeMap[live.category] || live.category
+
+      const auditLines = interactions.slice(0, 5)
+        .map(ev => `  - ${evMessage(ev)}${evTs(ev) ? ' (' + fmtTs(evTs(ev)) + ')' : ''}`)
+        .join('\n') || '  - žiadna história'
+      const noteLines = notes.slice(0, 5).map(n => `  - ${n.text}`).join('\n') || '  - žiadne poznámky'
+
+      const prompt = `Napíš prvý kontaktný email po SLOVENSKY pre nasledujúcu firmu.
+
+FIRMA:
+- Názov: ${live.name}
+- Typ: ${typeName}
+- Mesto: ${live.city || '–'}${live.address ? ', ' + live.address : ''}
+- Web: ${live.website || 'neznámy'}
+- Rating: ${live.rating ? live.rating + ' / 5' : 'neznámy'}
+- BPS skóre: ${live.aiScore ?? '–'} / 100 (istota: ${live.aiConfidence || '–'})
+- BPS hodnotenie: ${live.aiReason || '–'}
+- BPS faktory: ${(live.aiReasoning || []).join(' | ') || '–'}
+- Pozitívne signály: ${(live.aiPositive || []).join(', ') || '–'}
+- Riziká: ${(live.aiRisks || []).join(', ') || '–'}
+- CRM status: ${live.status || 'new'}
+
+POZNÁMKY K FIRME:
+${noteLines}
+
+HISTÓRIA KONTAKTU:
+${auditLines}
+
+STRIKER KONTEXT:
+- Kavitačná kúriaca technológia: 45 kW el. vstupu → 120-160 kW tepla (COP 2.7-3.5)
+- Úspora 50-70 % na nákladoch za kúrenie a teplú vodu
+- Cena 8 000-10 000 EUR, montáž 1-2 dni, BAFA dotácia možná v Nemecku
+- Ideálny pre: hotely, práčovne, SPA, penzie s vysokou spotrebou teplej vody
+- Odosielateľ: Adolf Staubert, STRIKER Energy
+
+PRAVIDLÁ EMAILU:
+- Nepredávaj agresívne, nebuď príliš technický
+- 3-4 krátke odseky, prirodzený B2B tón
+- Personalizuj podľa typu firmy (${typeName})
+- CTA = krátky videohovor alebo osobné stretnutie
+- Žiadny meta-text ani komentáre — iba čistý email`
 
       const res = await fetch('/.netlify/functions/ai-advisor', {
         method:  'POST',
