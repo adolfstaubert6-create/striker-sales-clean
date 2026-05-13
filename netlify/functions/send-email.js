@@ -10,7 +10,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Invalid JSON' }) }
   }
 
-  const { to, subject, body, subjectDe, bodyDe, companyId, companyName } = parsed
+  const { to, subject, body, subjectDe, bodyDe, companyId, companyName, attachments = [] } = parsed
   const finalSubject = subjectDe || subject
   const finalBody    = bodyDe    || body
 
@@ -35,6 +35,7 @@ exports.handler = async (event) => {
         to:      [to],
         subject: finalSubject,
         text:    finalBody,
+        ...(attachments.length > 0 && { attachments: attachments.map(a => ({ filename: a.filename, content: a.content })) }),
       }),
     })
 
