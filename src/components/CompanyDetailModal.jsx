@@ -170,6 +170,11 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
   const [editing, setEditing]         = useState(false)
   const [copied, setCopied]           = useState(false)
   const [zoomed, setZoomed]           = useState(false)
+  const [savingSk, setSavingSk]       = useState(false)
+  const [savingDe, setSavingDe]       = useState(false)
+  const [flash, setFlash]             = useState(null)
+
+  function showFlash(msg) { setFlash(msg); setTimeout(() => setFlash(null), 2000) }
 
   useEffect(() => {
     setSubjDe(email.subjectDe || '')
@@ -178,7 +183,8 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
 
   async function doTranslate() {
     setTranslating(true)
-    try { await onTranslate(email, subjSk, bodySk) } finally { setTranslating(false) }
+    try { await onTranslate(email, subjSk, bodySk); showFlash('✓ Preložené') }
+    finally { setTranslating(false) }
   }
 
   function doDelete() {
@@ -225,7 +231,10 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
           <input style={inp} value={subjSk} onChange={e => setSubjSk(e.target.value)} placeholder="Predmet SK..." autoFocus />
           <textarea style={area} value={bodySk} onChange={e => setBodySk(e.target.value)} />
           <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
-            <button style={css.btnSave} onClick={() => { onSaveSk(email.id, subjSk, bodySk); setEditing(false) }}>💾 Uložiť</button>
+            <button style={{ ...css.btnSave, opacity: savingSk ? 0.6 : 1 }} disabled={savingSk}
+              onClick={async () => { setSavingSk(true); await onSaveSk(email.id, subjSk, bodySk); setSavingSk(false); setEditing(false); showFlash('✓ Uložené') }}>
+              {savingSk ? '⏳ Ukladám...' : '💾 Uložiť'}
+            </button>
             <button style={css.btnCancel} onClick={() => setEditing(false)}>Zrušiť</button>
           </div>
         </>
@@ -238,8 +247,9 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
 
       {/* Translate */}
       <button style={{ ...css.btnTranslate, opacity: translating ? 0.5 : 1, width: '100%', justifyContent: 'center' }} onClick={doTranslate} disabled={translating}>
-        {translating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do nemčiny'}
+        {translating ? '⏳ Prekladám do nemčiny...' : '🇩🇪 Preložiť do nemčiny'}
       </button>
+      {flash && <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#00cc88', marginTop: '0.4rem', textAlign: 'center' }}>{flash}</div>}
     </div>
   )
 
@@ -272,7 +282,10 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
           <input style={inp} value={subjDe} onChange={e => setSubjDe(e.target.value)} placeholder="Betreff..." autoFocus />
           <textarea style={area} value={bodyDe} onChange={e => setBodyDe(e.target.value)} />
           <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
-            <button style={css.btnSave} onClick={() => { onSaveDe(email.id, subjDe, bodyDe); setEditing(false) }}>💾 Uložiť</button>
+            <button style={{ ...css.btnSave, opacity: savingDe ? 0.6 : 1 }} disabled={savingDe}
+              onClick={async () => { setSavingDe(true); await onSaveDe(email.id, subjDe, bodyDe); setSavingDe(false); setEditing(false); showFlash('✓ Uložené') }}>
+              {savingDe ? '⏳ Ukladám...' : '💾 Uložiť'}
+            </button>
             <button style={css.btnCancel} onClick={() => setEditing(false)}>Zrušiť</button>
           </div>
         </>
@@ -286,10 +299,11 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
       {/* Send */}
       {companyEmail
         ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1, width: '100%', justifyContent: 'center' }} onClick={() => onSend(email, subjDe, bodyDe)} disabled={sending}>
-            {sending ? '⏳ Odosiela...' : `📤 Odoslať na ${companyEmail}`}
+            {sending ? '⏳ Odosielam...' : `📤 Odoslať na ${companyEmail}`}
           </button>
         : <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00' }}>⚠ Pridaj email firmy v Kontaktných údajoch</span>
       }
+      {flash && <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#00cc88', marginTop: '0.4rem', textAlign: 'center' }}>{flash}</div>}
     </div>
   )
 
@@ -635,13 +649,13 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
     setTimeout(() => setToast(null), 2500)
   }
 
-  async function withFb(key, fn) {
+  async function withFb(key, fn, successMsg = 'Uložené ✓') {
     setFbKey(key, 'saving')
     try {
       await fn()
       setFbKey(key, 'saved')
       setTimeout(() => setFbKey(key, null), 2000)
-      showToast('Uložené ✓')
+      showToast(successMsg)
     } catch (e) {
       setFbKey(key, 'error')
       setTimeout(() => setFbKey(key, null), 3000)
@@ -874,7 +888,7 @@ PRAVIDLÁ EMAILU:
         })
         await logEvent('email_draft_created', `${CURRENT_USER} vytvoril AI draft pre ${live.name}`)
       }
-    })
+    }, '✓ Draft vytvorený')
   }
 
   async function handleSaveSkDraft(emailId, subjectSk, bodySk) {
@@ -1371,7 +1385,7 @@ PRAVIDLÁ EMAILU:
 
           {/* Create / overwrite button */}
           <button style={css.btnPrimary} onClick={() => handleCreateDraft()} disabled={fb.createDraft === 'saving'}>
-            {fb.createDraft === 'saving' ? '⏳ AI generuje...' : '✦ Vytvoriť nový draft'}
+            {fb.createDraft === 'saving' ? '⏳ AI generuje draft...' : '✦ Vytvoriť nový draft'}
           </button>
         </div>
 
