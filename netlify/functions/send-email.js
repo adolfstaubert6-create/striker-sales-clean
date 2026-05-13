@@ -1,5 +1,14 @@
 const FROM = 'adolf.staubert@striker-energy.de'
 
+function cleanEmailText(text) {
+  if (!text) return ''
+  return text
+    .replace(/<\/?STRIKER_EMAIL>/gi, '')
+    .replace(/^SUBJECT:\s*/im, '')
+    .replace(/^BODY:\s*/im, '')
+    .trim()
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ success: false, error: 'Method not allowed' }) }
@@ -11,8 +20,9 @@ exports.handler = async (event) => {
   }
 
   const { to, subject, body, subjectDe, bodyDe, companyId, companyName, attachments = [] } = parsed
-  const finalSubject = subjectDe || subject
-  const finalBody    = bodyDe    || body
+
+  const finalSubject = cleanEmailText(subjectDe || subject)
+  const finalBody    = cleanEmailText(bodyDe    || body)
 
   if (!to || !finalSubject || !finalBody) {
     return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Missing to, subject, or body' }) }
@@ -23,6 +33,23 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'RESEND_API_KEY not configured' }) }
   }
 
+  console.log(`[send-email] to=${to} | subject="${finalSubject}" | attachments=${attachments.length}`)
+
+  const resendPayload = {
+    from:    FROM,
+    to:      [to],
+    subject: finalSubject,
+    text:    finalBody,
+  }
+
+  if (attachments.length > 0) {
+    resendPayload.attachments = attachments.map(a => ({
+      filename: a.filename,
+      content:  a.content,
+    }))
+    console.log(`[send-email] attachment names: ${attachments.map(a => a.filename).join(', ')}`)
+  }
+
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method:  'POST',
@@ -30,13 +57,7 @@ exports.handler = async (event) => {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type':  'application/json',
       },
-      body: JSON.stringify({
-        from:    FROM,
-        to:      [to],
-        subject: finalSubject,
-        text:    finalBody,
-        ...(attachments.length > 0 && { attachments: attachments.map(a => ({ filename: a.filename, content: a.content })) }),
-      }),
+      body: JSON.stringify(resendPayload),
     })
 
     const data = await res.json()
@@ -47,7 +68,7 @@ exports.handler = async (event) => {
       return { statusCode: res.status, body: JSON.stringify({ success: false, error: msg }) }
     }
 
-    console.log(`[send-email] Sent to ${to} (company: ${companyName || companyId}), messageId: ${data.id}`)
+    console.log(`[send-email] OK | to=${to} | messageId=${data.id} | attachments=${attachments.length}`)
     return { statusCode: 200, body: JSON.stringify({ success: true, messageId: data.id }) }
 
   } catch (err) {
