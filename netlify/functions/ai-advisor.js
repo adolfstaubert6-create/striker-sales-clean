@@ -11,8 +11,8 @@ const TRANSLATE_RE    = /prelož|preložiť|translate/i
 
 const DRAFT_BLOCK = `
 
-EMAIL DRAFT: Vytvor email draft v SLOVENČINE. Email bude neskôr preložený do nemčiny. Použi STRIKER knowledge base. Personalizuj podľa typu firmy a BPS reasoning. Max 150 slov, profesionálny B2B štýl, jasný ďalší krok.
-FORMAT — odpoveď musí začínať PRESNE TAKTO (nič pred tým):
+KRITICKÁ INŠTRUKCIA: Email draft MUSÍ BYŤ NAPÍSANÝ VÝLUČNE V SLOVENSKOM JAZYKU. ŽIADNA NEMČINA. Celý text emailu vrátane predmetu musí byť po slovensky. Bude preložený do nemčiny neskôr.
+FORMAT — odpoveď musí začínať PRESNE TAKTO:
 PREDMET: <predmet emailu v slovenčine>
 
 <telo emailu v slovenčine>`
