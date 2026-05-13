@@ -604,6 +604,34 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
   )
 }
 
+// ── Confirm Delete Modal ─────────────────────────────────────────────────────
+function ConfirmDeleteModal({ companyName, onConfirm, onCancel }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 650, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div style={{ background: '#0d1117', border: '1px solid #30363d', borderTop: '3px solid #ef4444', borderRadius: 6, padding: '2rem 2.25rem', maxWidth: 420, width: '100%', textAlign: 'center' }}>
+        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
+        <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '1.1rem', fontWeight: 700, color: '#f0f6fc', marginBottom: '0.4rem' }}>Zmazať firmu?</div>
+        <div style={{ fontFamily: mono, fontSize: '0.7rem', color: '#ffaa00', marginBottom: '0.75rem' }}>{companyName}</div>
+        <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.82rem', color: '#9ca3af', lineHeight: 1.65, marginBottom: '1.75rem' }}>
+          Všetky dáta budú nenávratne vymazané.<br/>Táto akcia sa nedá vrátiť.
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+          <button
+            style={{ fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.48rem 1.25rem', border: 'none', background: '#ef4444', color: '#fff', borderRadius: 3, fontWeight: 700, cursor: 'pointer' }}
+            onClick={onConfirm}>
+            🗑 Zmazať
+          </button>
+          <button
+            style={{ fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.48rem 1.1rem', border: '1px solid #30363d', background: 'transparent', color: '#9ca3af', borderRadius: 3, cursor: 'pointer' }}
+            onClick={onCancel}>
+            Zrušiť
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main modal ───────────────────────────────────────────────────────────────
 export default function CompanyDetailModal({ company: initialCompany, onClose }) {
   const [live, setLive]           = useState(initialCompany)
@@ -614,7 +642,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [notesOpen, setNotesOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
   const [chatOpen,   setChatOpen]   = useState(false)
-  const [chatZoomed, setChatZoomed] = useState(false)
+  const [chatZoomed, setChatZoomed]           = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [taskText, setTaskText]   = useState('')
   const [draftSubj, setDraftSubj] = useState('')
   const [draftBody, setDraftBody] = useState('')
@@ -1156,6 +1185,24 @@ PRAVIDLÁ EMAILU:
     }
   }
 
+  async function handleDeleteCompany() {
+    try {
+      const id = live.id
+      const del = (snap) => Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+      await del(await getDocs(collection(db, 'companies', id, 'notes')))
+      await del(await getDocs(query(collection(db, 'interactions'),   where('companyId', '==', id))))
+      await del(await getDocs(query(collection(db, 'tasks'),          where('companyId', '==', id))))
+      await del(await getDocs(query(collection(db, 'emails'),         where('companyId', '==', id))))
+      await del(await getDocs(query(collection(db, 'ai_chats'),       where('companyId', '==', id))))
+      await del(await getDocs(query(collection(db, 'ai_suggestions'), where('companyId', '==', id))))
+      await deleteDoc(doc(db, 'companies', id))
+      showToast('✓ Firma vymazaná')
+      setTimeout(onClose, 400)
+    } catch (e) {
+      showToast('Chyba: ' + e.message, 'err')
+    }
+  }
+
   async function handleDeleteInteraction(id) {
     try {
       await deleteDoc(doc(db, 'interactions', id))
@@ -1173,7 +1220,7 @@ PRAVIDLÁ EMAILU:
       bodyDe:      '',
       status:      'active_draft',
       generatedBy: CURRENT_USER,
-      aiModel:     'claude-haiku-4-5',
+      aiModel:     'claude-sonnet-4-6',
       updatedAt:   serverTimestamp(),
       edited:      false,
     }
@@ -1336,6 +1383,12 @@ PRAVIDLÁ EMAILU:
             <div style={{ ...css.statusBadge, background: st.bg, color: st.color, borderColor: st.color + '55' }}>
               {st.label}
             </div>
+            <button
+              style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.65rem', border: '1px solid #ef444455', background: 'rgba(239,68,68,0.07)', color: '#ef4444', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
+              onClick={() => setDeleteConfirmOpen(true)}
+              title="Zmazať firmu">
+              🗑 Zmazať
+            </button>
             <button style={css.closeBtn} onClick={onClose} title="Esc">✕</button>
           </div>
         </div>
@@ -1746,6 +1799,14 @@ PRAVIDLÁ EMAILU:
 
         <Toast msg={toast?.msg} type={toast?.type} />
       </div>
+
+      {deleteConfirmOpen && (
+        <ConfirmDeleteModal
+          companyName={live.name}
+          onConfirm={() => { setDeleteConfirmOpen(false); handleDeleteCompany() }}
+          onCancel={() => setDeleteConfirmOpen(false)}
+        />
+      )}
     </div>
   )
 }
