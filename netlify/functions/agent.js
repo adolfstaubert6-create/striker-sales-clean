@@ -95,21 +95,22 @@ const EMAIL_SKIP = [/noreply/i, /no-reply/i, /example/i, /@sentry/i, /@google/i,
 
 async function scrapeEmail(website) {
   if (!website) return null
-  const base     = website.startsWith('http') ? website.replace(/\/$/, '') : `https://${website.replace(/\/$/, '')}`
-  const urls     = [`${base}/impressum`, `${base}/kontakt`, `${base}/contact`, base]
-  const deadline = Date.now() + 8000
+  const base = website.startsWith('http') ? website.replace(/\/$/, '') : `https://${website.replace(/\/$/, '')}`
+  // Only try 2 fastest URLs to stay within timeout budget
+  const urls     = [`${base}/impressum`, base]
+  const deadline = Date.now() + 5000
 
   for (const url of urls) {
     if (Date.now() >= deadline) break
     const ctrl = new AbortController()
-    const t    = setTimeout(() => ctrl.abort(), Math.min(deadline - Date.now(), 4000))
+    const t    = setTimeout(() => ctrl.abort(), Math.min(deadline - Date.now(), 2500))
     try {
       const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } })
       clearTimeout(t)
       if (!res.ok) continue
       const html   = await res.text()
       const emails = [...(html.match(EMAIL_RE) || [])].filter(e => !EMAIL_SKIP.some(p => p.test(e)))
-      if (emails.length) { console.log(`[agent] email scraped: ${emails[0]} from ${url}`); return emails[0] }
+      if (emails.length) { console.log(`[agent] email: ${emails[0]} from ${url}`); return emails[0] }
     } catch { clearTimeout(t) }
   }
   return null
@@ -375,71 +376,71 @@ exports.handler = async (event) => {
   if (!locality) return { statusCode: 400, body: JSON.stringify({ error: 'locality is required' }) }
   if (!CATEGORY_QUERIES[segment]) return { statusCode: 400, body: JSON.stringify({ error: `Unknown segment: ${segment}` }) }
 
-  console.log(`[agent] ═══ START | segment=${segment} locality=${locality} count=${count} ═══`)
-  const t0     = Date.now()
-  const report = []
+  // Cap at 5 to stay within 26s Netlify timeout
+  const safeCount = Math.min(Number(count) || 3, 5)
 
+  console.log(`[agent] ═══ START | segment=${segment} locality=${locality} count=${safeCount} ═══`)
+  const t0 = Date.now()
+
+  // Outer try-catch guarantees JSON is always returned — never HTML
   try {
     // ─ Step 1: Search ──────────────────────────────────────────────────────
-    const places = await step1Search(segment, locality, count)
+    const places = await step1Search(segment, locality, safeCount)
     if (!places.length) {
       return { statusCode: 200, body: JSON.stringify({ ok: true, count: 0, report: [], message: 'No results from Google Places' }) }
     }
 
-    // ─ Steps 2–5: Process each company sequentially ────────────────────────
-    for (const place of places) {
+    // ─ Steps 2–5: Process ALL companies in PARALLEL ────────────────────────
+    const results = await Promise.allSettled(places.map(async (place) => {
+      console.log(`[agent] ── Processing: ${place.name} ──`)
       const entry = { name: place.name, status: 'processing' }
-      console.log(`\n[agent] ── Processing: ${place.name} ──`)
 
-      try {
-        // Step 2: Enrich
-        const enriched = await step2Enrich(place)
-        entry.docId      = enriched.docId
-        entry.duplicate  = enriched.isDuplicate
-        entry.bps        = enriched.bps.score
-        entry.email      = enriched.email || null
-        entry.confidence = enriched.bps.confidence
+      const enriched    = await step2Enrich(place)
+      entry.docId       = enriched.docId
+      entry.duplicate   = enriched.isDuplicate
+      entry.bps         = enriched.bps.score
+      entry.email       = enriched.email || null
+      entry.confidence  = enriched.bps.confidence
 
-        // Step 3: Strategize
-        const strategy   = await step3Strategize(enriched)
-        entry.priority   = strategy.priority
-        entry.nextStep   = strategy.nextStep
-        entry.emailType  = strategy.emailType
+      const strategy    = await step3Strategize(enriched)
+      entry.priority    = strategy.priority
+      entry.nextStep    = strategy.nextStep
+      entry.emailType   = strategy.emailType
 
-        // Step 4: Draft
-        const draft      = await step4Draft(enriched, strategy)
-        entry.draftSk    = draft.sk.subject
-        entry.draftDe    = draft.de.subject
+      const draft       = await step4Draft(enriched, strategy)
+      entry.draftSk     = draft.sk.subject
+      entry.draftDe     = draft.de.subject
 
-        // Step 5: Save
-        await step5Save(enriched.docId, strategy, draft)
-        entry.status = 'done'
+      await step5Save(enriched.docId, strategy, draft)
+      entry.status = 'done'
+      console.log(`[agent] ✓ ${place.name}`)
+      return entry
+    }))
 
-      } catch (err) {
-        console.error(`[agent] Failed for ${place.name}:`, err.message)
-        entry.status = 'error'
-        entry.error  = err.message
-      }
-
-      report.push(entry)
-      console.log(`[agent] ${place.name} → ${entry.status}`)
-    }
+    const report = results.map((r, i) => {
+      if (r.status === 'fulfilled') return r.value
+      console.error(`[agent] ✗ ${places[i].name}:`, r.reason?.message)
+      return { name: places[i].name, status: 'error', error: r.reason?.message || 'unknown' }
+    })
 
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1)
     const done    = report.filter(r => r.status === 'done').length
     const errors  = report.filter(r => r.status === 'error').length
-    console.log(`\n[agent] ═══ DONE | ${done} ok, ${errors} errors | ${elapsed}s ═══`)
+    console.log(`[agent] ═══ DONE | ${done} ok, ${errors} errors | ${elapsed}s ═══`)
 
     return {
       statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ok: true, segment, locality, total: report.length, done, errors, elapsed: `${elapsed}s`, report }),
     }
 
   } catch (err) {
+    // This catch ensures we ALWAYS return JSON, never HTML
     console.error('[agent] Fatal error:', err.message)
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message, partial: report }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: false, error: err.message, stack: err.stack?.split('\n')[0] }),
     }
   }
 }

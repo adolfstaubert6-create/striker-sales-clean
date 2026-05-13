@@ -12,6 +12,9 @@
 [functions.ai-advisor]
   timeout = 26
 
+[functions.agent]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
