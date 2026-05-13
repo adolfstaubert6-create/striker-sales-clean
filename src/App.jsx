@@ -16,7 +16,7 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Header view={view} setView={setView} />
-      <main style={{ flex: 1, padding: '1.25rem', maxWidth: 1100, margin: '0 auto', width: '100%' }}>
+      <main className="app-main" style={{ flex: 1, padding: '1.25rem', maxWidth: 1100, margin: '0 auto', width: '100%' }}>
         {view === 'search' ? (
           <SearchPanel
             onResults={setSearchResults}

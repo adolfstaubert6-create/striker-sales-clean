@@ -47,7 +47,7 @@ export default function Header({ view, setView }) {
         <div style={s.logo}>STRIKER <span style={s.logoSpan}>AI</span></div>
         <div style={s.sub}>Sales Intelligence Platform</div>
       </div>
-      <nav style={s.nav}>
+      <nav className="header-nav" style={s.nav}>
         <button
           style={{ ...s.btn, ...(view === 'dashboard' ? { borderColor: '#ff5c00', color: '#ff5c00' } : {}) }}
           onClick={() => setView('dashboard')}

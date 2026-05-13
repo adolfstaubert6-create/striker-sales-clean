@@ -37,6 +37,7 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
 
   return (
     <div
+      className="company-card"
       style={{
         ...css.card,
         borderLeftColor: st.color,

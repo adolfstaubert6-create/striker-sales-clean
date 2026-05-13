@@ -24,3 +24,109 @@ body {
 button { cursor: pointer; font-family: inherit; }
 input, textarea, select { font-family: inherit; }
 a { color: var(--accent); text-decoration: none; }
+
+/* ── Tablet ─────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Main content */
+  .app-main {
+    padding: 0.75rem !important;
+    max-width: 100% !important;
+  }
+
+  /* Header */
+  header {
+    padding: 0.65rem 0.85rem !important;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .header-nav {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .header-nav button {
+    min-height: 38px;
+    padding: 0.3rem 0.6rem !important;
+    font-size: 0.6rem !important;
+  }
+
+  /* Dashboard toolbar */
+  .dashboard-toolbar {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .dashboard-toolbar button,
+  .dashboard-toolbar input {
+    min-height: 38px;
+  }
+
+  /* Company cards */
+  .company-card {
+    padding: 0.75rem 0.85rem !important;
+  }
+
+  /* Modal — full screen */
+  .cdm-overlay {
+    padding: 0 !important;
+    align-items: flex-start !important;
+  }
+  .cdm-modal {
+    border-radius: 0 !important;
+    padding: 1rem !important;
+    max-width: 100% !important;
+    min-height: 100dvh;
+  }
+
+  /* Three-column grid → single column */
+  .cdm-cols {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+
+  /* Drawers — full width */
+  .cdm-drawer {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Touch targets */
+  button {
+    min-height: 36px;
+  }
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .app-main {
+    padding: 0.5rem !important;
+  }
+
+  header {
+    padding: 0.6rem 0.65rem !important;
+  }
+
+  .cdm-modal {
+    padding: 0.75rem !important;
+  }
+
+  /* Larger touch targets on small phones */
+  button {
+    min-height: 44px;
+  }
+
+  /* Full-width action buttons in modal */
+  .cdm-modal .cdm-cols button,
+  .cdm-modal button[style*="btnPrimary"],
+  .cdm-modal .section button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Prevent horizontal scroll */
+  body {
+    overflow-x: hidden;
+  }
+  .cdm-modal * {
+    max-width: 100%;
+    word-break: break-word;
+  }
+}

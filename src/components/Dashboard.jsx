@@ -167,7 +167,7 @@ export default function Dashboard() {
     <div>
       <AiSummaryPanel companies={companies} />
 
-      <div style={css.toolbar}>
+      <div className="dashboard-toolbar" style={css.toolbar}>
         <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať kontakt</button>
         {FILTERS.map(f => (
           <button key={f.key}

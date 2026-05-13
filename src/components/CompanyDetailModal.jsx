@@ -1455,10 +1455,10 @@ PRAVIDLÁ EMAILU:
   )[0] || null
 
   return (
-    <div style={css.overlay} onKeyDown={e => e.key === 'Escape' && onClose()} tabIndex={-1}>
+    <div className="cdm-overlay" style={css.overlay} onKeyDown={e => e.key === 'Escape' && onClose()} tabIndex={-1}>
       <style>{`@keyframes priPulse{0%,100%{opacity:1}50%{opacity:.85}}`}</style>
 
-      <div style={css.modal}>
+      <div className="cdm-modal" style={css.modal}>
 
         {/* ══ HEADER ══ */}
         <div style={css.header}>
@@ -1496,7 +1496,7 @@ PRAVIDLÁ EMAILU:
         </div>
 
         {/* ══ THREE COLUMNS ══ */}
-        <div style={css.cols}>
+        <div className="cdm-cols" style={css.cols}>
 
           {/* LEFT */}
           <div style={css.col}>
@@ -1713,7 +1713,7 @@ PRAVIDLÁ EMAILU:
           <>
             <div style={{ position: 'fixed', inset: 0, zIndex: 599, background: 'rgba(0,0,0,0.55)' }} onClick={() => setNotesOpen(false)} />
             <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none' }}>
-            <div style={{ width: '100%', maxWidth: 460, height: '100%', background: '#0d1117', borderLeft: '1px solid #21262d', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.7)', pointerEvents: 'auto' }}>
+            <div className="cdm-drawer" style={{ width: '100%', maxWidth: 460, height: '100%', background: '#0d1117', borderLeft: '1px solid #21262d', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.7)', pointerEvents: 'auto' }}>
 
               {/* Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid #1e2530', flexShrink: 0 }}>
@@ -1770,7 +1770,7 @@ PRAVIDLÁ EMAILU:
           <>
             <div style={{ position: 'fixed', inset: 0, zIndex: 599, background: 'rgba(0,0,0,0.55)' }} onClick={() => setAuditOpen(false)} />
             <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none' }}>
-              <div style={{ width: '100%', maxWidth: 520, height: '100%', background: '#0d1117', borderLeft: '1px solid #21262d', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.7)', pointerEvents: 'auto' }}>
+              <div className="cdm-drawer" style={{ width: '100%', maxWidth: 520, height: '100%', background: '#0d1117', borderLeft: '1px solid #21262d', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.7)', pointerEvents: 'auto' }}>
 
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid #1e2530', flexShrink: 0 }}>
@@ -1811,7 +1811,7 @@ PRAVIDLÁ EMAILU:
           <>
             <div style={{ position: 'fixed', inset: 0, zIndex: 599, background: 'rgba(0,0,0,0.72)' }} onClick={() => setChatOpen(false)} />
             <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none' }}>
-              <div style={{ width: '100%', maxWidth: chatZoomed ? '90vw' : 600, height: '100%', background: '#080c11', borderLeft: '3px solid #ff5c0044', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 40px rgba(255,92,0,0.12)', pointerEvents: 'auto', transition: 'max-width 0.2s ease' }}>
+              <div className="cdm-drawer cdm-drawer--ai" style={{ width: '100%', maxWidth: chatZoomed ? '90vw' : 600, height: '100%', background: '#080c11', borderLeft: '3px solid #ff5c0044', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 40px rgba(255,92,0,0.12)', pointerEvents: 'auto', transition: 'max-width 0.2s ease' }}>
 
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.4rem', borderBottom: '1px solid #ff5c0022', flexShrink: 0 }}>
