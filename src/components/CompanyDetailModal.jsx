@@ -155,11 +155,11 @@ function stripAiNoise(text) {
 
 function parseEmailBlock(text) {
   if (!text) return { preText: '', emailContent: null, postText: '' }
-  // Try explicit markers first
-  const markerM = text.match(/([\s\S]*?)\[EMAIL_START\]([\s\S]*?)\[EMAIL_END\]([\s\S]*)/i)
-  if (markerM) return { preText: markerM[1].trim(), emailContent: markerM[2].trim(), postText: markerM[3].trim() }
-  // Auto-detect: everything from "Predmet:" onwards is the email
-  const predIdx = text.search(/^Predmet:/im)
+  // Try <STRIKER_EMAIL>...</STRIKER_EMAIL> tags
+  const tagM = text.match(/([\s\S]*?)<STRIKER_EMAIL>([\s\S]*?)<\/STRIKER_EMAIL>([\s\S]*)/i)
+  if (tagM) return { preText: tagM[1].trim(), emailContent: tagM[2].trim(), postText: tagM[3].trim() }
+  // Auto-detect: everything from "Predmet:" or "SUBJECT:" onwards
+  const predIdx = text.search(/^(Predmet:|SUBJECT:)/im)
   if (predIdx !== -1) return { preText: text.slice(0, predIdx).trim(), emailContent: text.slice(predIdx).trim(), postText: '' }
   return { preText: text, emailContent: null, postText: '' }
 }
@@ -1168,26 +1168,31 @@ PRAVIDLÁ EMAILU:
   }
 
   async function handleToDraft(rawText) {
-    // 1. Try [EMAIL_START]...[EMAIL_END] markers
+    // 1. Try <STRIKER_EMAIL>...</STRIKER_EMAIL> tags
     let extracted
-    const markerMatch = rawText.match(/\[EMAIL_START\]([\s\S]*?)\[EMAIL_END\]/i)
-    if (markerMatch) {
-      extracted = markerMatch[1].trim()
+    const tagMatch = rawText.match(/<STRIKER_EMAIL>([\s\S]*?)<\/STRIKER_EMAIL>/i)
+    if (tagMatch) {
+      extracted = tagMatch[1].trim()
     } else {
-      // 2. Fallback: find first "Predmet:" line and take everything from there
-      const predMatch = rawText.match(/^predmet:\s*.+$/im)
+      // 2. Fallback: from first "SUBJECT:", "Predmet:" or "BODY:" line
+      const predMatch = rawText.match(/^(SUBJECT:|Predmet:|BODY:)/im)
       extracted = predMatch
         ? rawText.slice(rawText.indexOf(predMatch[0])).trim()
         : rawText
     }
 
-    // Parse "Predmet:" line for subject
+    // Parse SUBJECT: / Predmet: line for subject
     const lines     = extracted.split('\n')
-    const subjLine  = lines.find(l => /^predmet:/i.test(l.trim()))
+    const subjLine  = lines.find(l => /^(SUBJECT:|Predmet:)/i.test(l.trim()))
     const subjectSk = subjLine
-      ? subjLine.replace(/^predmet:\s*/i, '').trim()
+      ? subjLine.replace(/^(SUBJECT:|Predmet:)\s*/i, '').trim()
       : `STRIKER — ${live.name}`
-    const bodyRaw   = subjLine
+
+    // Parse BODY: section or fall back to everything after subject line
+    const bodyMatch = extracted.match(/^BODY:\s*\n([\s\S]*)/im)
+    const bodyRaw   = bodyMatch
+      ? bodyMatch[1]
+      : subjLine
       ? extracted.slice(extracted.indexOf(subjLine) + subjLine.length)
       : extracted
     const bodySk    = cleanDraftText(bodyRaw)

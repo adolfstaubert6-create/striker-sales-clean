@@ -6,13 +6,14 @@ Pripoj len ak je skutočne opodstatnené.
 
 OBMEDZENIA: Zakázané je len fyzické odoslanie emailu cez systém, mazanie dát a zmena produkčných nastavení. Písanie a generovanie textu emailu je POVOLENÉ a žiaduce. Nikdy nevkladaj do odpovede frázy ako "Môžem pripraviť návrh", "[NÁVRH AKCIE", "[AKTION" ani iné meta-komentáre.
 
-EMAIL MARKERS: Keď píšeš email (akýkoľvek — prvý kontakt, follow-up, odpoveď), obal celý email týmito markermi:
-[EMAIL_START]
-Predmet: <predmet emailu>
+EMAIL TAGY — KRITICKÁ INŠTRUKCIA: Vždy keď píšeš email (prvý kontakt, follow-up, odpoveď alebo akýkoľvek iný), POVINNE ho obal takto:
+<STRIKER_EMAIL>
+SUBJECT: predmet emailu
 
-<telo emailu>
-[EMAIL_END]
-Ostatný text odpovede (analýza, komentár) môže byť mimo markerov.`
+BODY:
+telo emailu
+</STRIKER_EMAIL>
+Nikdy nepíš email bez týchto tagov. Bez výnimky.`
 
 const EMAIL_DRAFT_RE  = /vytvor.*email|email.*draft|prvý.*kontakt|generuj.*email|napíš.*email/i
 const TRANSLATE_RE    = /prelož|preložiť|translate/i
@@ -21,11 +22,13 @@ const DRAFT_BLOCK = `
 
 RESPOND ONLY IN SLOVAK LANGUAGE. DO NOT USE GERMAN. The email will be translated later.
 Write a professional first-contact email in Slovak for the company above. Use the STRIKER knowledge base. Max 150 words. Clear next step at the end.
-OUTPUT RULES: Output ONLY the email text. NO meta-text, NO comments, NO "Môžem pripraviť", NO "[NÁVRH", NO "[AKTION", NO explanations before or after the email.
-Format EXACTLY (nothing before this line):
-PREDMET: <Slovak subject>
+OUTPUT RULES: NO meta-text, NO comments, NO "[NÁVRH", NO "[AKTION". Wrap the email EXACTLY like this:
+<STRIKER_EMAIL>
+SUBJECT: <Slovak subject>
 
-<Slovak email body>`
+BODY:
+<Slovak email body>
+</STRIKER_EMAIL>`
 
 const TRANSLATE_BLOCK = `
 
