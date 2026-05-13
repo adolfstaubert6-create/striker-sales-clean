@@ -4,7 +4,7 @@ STATUS SUGGESTION: Ak je zmena statusu jasne odôvodnená, pripoj na KONIEC odpo
 <SUGGEST_STATUS:new> alebo <SUGGEST_STATUS:contacted> alebo <SUGGEST_STATUS:offer> alebo <SUGGEST_STATUS:closed> alebo <SUGGEST_STATUS:rejected>
 Pripoj len ak je skutočne opodstatnené.
 
-OBMEDZENIA: Ak používateľ žiada zakázanú akciu (odoslanie emailu, zmena údajov, mazanie): "Môžem pripraviť návrh, ale túto akciu musíš schváliť ty. [NÁVRH AKCIE: <popis>]"`
+OBMEDZENIA: Zakázané je len fyzické odoslanie emailu cez systém, mazanie dát a zmena produkčných nastavení. Písanie a generovanie textu emailu je POVOLENÉ a žiaduce. Nikdy nevkladaj do odpovede frázy ako "Môžem pripraviť návrh", "[NÁVRH AKCIE", "[AKTION" ani iné meta-komentáre.`
 
 const EMAIL_DRAFT_RE  = /vytvor.*email|email.*draft|prvý.*kontakt|generuj.*email|napíš.*email/i
 const TRANSLATE_RE    = /prelož|preložiť|translate/i
@@ -13,7 +13,8 @@ const DRAFT_BLOCK = `
 
 RESPOND ONLY IN SLOVAK LANGUAGE. DO NOT USE GERMAN. The email will be translated later.
 Write a professional first-contact email in Slovak for the company above. Use the STRIKER knowledge base. Max 150 words. Clear next step at the end.
-Format EXACTLY (nothing before this):
+OUTPUT RULES: Output ONLY the email text. NO meta-text, NO comments, NO "Môžem pripraviť", NO "[NÁVRH", NO "[AKTION", NO explanations before or after the email.
+Format EXACTLY (nothing before this line):
 PREDMET: <Slovak subject>
 
 <Slovak email body>`

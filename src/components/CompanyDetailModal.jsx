@@ -102,6 +102,9 @@ function stripAiNoise(text) {
     .filter(line => {
       const t = line.trim()
       if (/\[AKTION|\*\*\[|Hinweis:|Note:|Bestätigst/i.test(t)) return false
+      if (/\[NÁVRH|NÁVRH AKCIE|\[NAVRH/i.test(t)) return false
+      if (/Môžem pripraviť|Mozem pripravit|túto akciu musíš|tuto akciu musis/i.test(t)) return false
+      if (/^Poznámka:|^Poznamka:|^Komentár:|^Komentar:/i.test(t)) return false
       if (/^\*\s+\S/.test(t)) return false
       return true
     })
