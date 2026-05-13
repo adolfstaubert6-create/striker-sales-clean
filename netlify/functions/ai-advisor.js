@@ -35,10 +35,13 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) }
   }
 
-  const { messages, companyContext } = body
-  if (!messages?.length) {
+  const { messages: rawMessages, companyContext } = body
+  if (!rawMessages?.length) {
     return { statusCode: 400, body: JSON.stringify({ error: 'messages required' }) }
   }
+
+  // Strip any extra fields — Anthropic only accepts role + content
+  const messages = rawMessages.map(({ role, content }) => ({ role, content }))
 
   const contextBlock = companyContext
     ? `\n\nFIRMA: ${companyContext.name} | ${companyContext.category} | ${companyContext.city} | BPS: ${companyContext.aiScore ?? '–'} | Status: ${companyContext.status}\nEmail: ${companyContext.email || '–'} | Tel: ${companyContext.phone || '–'} | Rating: ${companyContext.rating ?? '–'}\nAI dôvod: ${companyContext.aiReason || '–'}\nPosledné udalosti: ${(companyContext.recentEvents || []).join(' | ')}`
