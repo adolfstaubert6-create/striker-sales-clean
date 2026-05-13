@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db } from '../firebase.js'
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { subscribeCompanies, updateCompanyScore, saveDraft } from '../services/firebaseService.js'
 import { scoreCompany } from '../services/aiScoringService.js'
 import { generateEmailDraft } from '../services/emailService.js'
@@ -103,6 +103,32 @@ export default function Dashboard() {
     }
   }
 
+  const [seeded, setSeeded] = useState(false)
+
+  async function handleSeedTestCompany() {
+    setSeeded('saving')
+    try {
+      await addDoc(collection(db, 'companies'), {
+        name: 'TEST - Adolf Staubert',
+        email: 'adolfstaubert6@gmail.com',
+        phone: '+49 171 4758126',
+        website: 'striker-energy.de',
+        city: 'Biblis',
+        address: 'Heinrich-Hertz-Straße 4, 68647 Biblis',
+        category: 'hotel',
+        status: 'new',
+        rating: 5,
+        aiScore: 90,
+        aiReason: 'Testovací kontakt pre overenie email workflow',
+        createdAt: serverTimestamp(),
+      })
+      setSeeded('done')
+    } catch (e) {
+      alert('Seed error: ' + e.message)
+      setSeeded(false)
+    }
+  }
+
   function handleGenerateEmail(company) {
     const { subject, body } = generateEmailDraft(company)
     setDraft({ company, subject, body })
@@ -122,6 +148,15 @@ export default function Dashboard() {
         ))}
         <input style={css.search} placeholder="Hľadať firmu alebo mesto..."
           value={search} onChange={e => setSearch(e.target.value)} />
+        {seeded !== 'done' && (
+          <button
+            style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.55rem', letterSpacing: '1px', padding: '0.25rem 0.5rem', border: '1px solid #1e2530', background: 'transparent', color: '#2d3748', borderRadius: 2, cursor: 'pointer', opacity: 0.4 }}
+            onClick={handleSeedTestCompany}
+            disabled={seeded === 'saving'}
+            title="Seed test company">
+            {seeded === 'saving' ? '⏳' : '⊕ test'}
+          </button>
+        )}
       </div>
 
       {filtered.length > 0 && (
