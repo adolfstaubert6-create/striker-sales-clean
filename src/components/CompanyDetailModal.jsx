@@ -124,7 +124,7 @@ function parseAiResponse(text) {
 }
 
 // ── Email Workflow Card ───────────────────────────────────────────────────────
-function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslate, onSend, onDelete, onCopy, sending }) {
+function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslate, onSend, onDelete, onCopy, onBackToSk, sending }) {
   const isSk = email.status === 'active_draft' || email.status === 'draft'
   const isDe = email.status === 'translated'
 
@@ -133,6 +133,8 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
   const [subjDe, setSubjDe]           = useState(email.subjectDe || '')
   const [bodyDe, setBodyDe]           = useState(email.bodyDe    || '')
   const [translating, setTranslating] = useState(false)
+  const [editing, setEditing]         = useState(false)
+  const [copied, setCopied]           = useState(false)
 
   useEffect(() => {
     setSubjDe(email.subjectDe || '')
@@ -144,53 +146,109 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
     try { await onTranslate(email, subjSk, bodySk) } finally { setTranslating(false) }
   }
 
-  const inp  = { width: '100%', background: '#0d1117', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.55rem', borderRadius: 2, outline: 'none', marginBottom: '0.35rem', boxSizing: 'border-box' }
-  const area = { ...inp, resize: 'vertical', minHeight: 90, lineHeight: 1.6, fontSize: '0.63rem', marginBottom: '0.4rem' }
+  function doDelete() {
+    if (window.confirm('Naozaj chceš zmazať celý draft?')) onDelete(email.id)
+  }
 
-  const headerBtn = (label, onClick, extra = {}) => (
-    <button style={{ ...css.btnIcon, ...extra }} onClick={onClick}>{label}</button>
-  )
+  function doCopy() {
+    const text = isDe ? `${subjDe}\n\n${bodyDe}` : `${subjSk}\n\n${bodySk}`
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+      onCopy(email)
+    }).catch(() => {})
+  }
+
+  const inp    = { width: '100%', background: '#0d1117', border: '1px solid #30363d', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.55rem', borderRadius: 2, outline: 'none', marginBottom: '0.35rem', boxSizing: 'border-box' }
+  const area   = { ...inp, resize: 'vertical', minHeight: 100, lineHeight: 1.65, fontSize: '0.63rem', marginBottom: '0.4rem' }
+  const roSubj = { fontFamily: mono, fontSize: '0.7rem', fontWeight: 600, color: '#e8eaed', marginBottom: '0.5rem', paddingBottom: '0.4rem', borderBottom: '1px solid #1e2530' }
+  const roBody = { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: '0.5rem' }
 
   if (isSk) return (
     <div style={{ border: '1px solid #ffaa0044', borderLeft: '3px solid #ffaa00', borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.7rem', background: '#0d1117' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
         <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#ffaa00' }}>🇸🇰 SK Draft</span>
-        <div style={{ display: 'flex', gap: '0.3rem' }}>
-          {headerBtn('📋', () => onCopy(email))}
-          {headerBtn('🗑', () => onDelete(email.id), { color: '#ef444466', onMouseOver: e => e.currentTarget.style.color='#ef4444', onMouseOut: e => e.currentTarget.style.color='#ef444466' })}
+        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          <button style={css.cardBtn} onClick={() => setEditing(v => !v)}>
+            {editing ? '✕ Zavrieť' : '✏ Upraviť'}
+          </button>
+          <button style={{ ...css.cardBtn, color: copied ? '#00cc88' : '#9ca3af', borderColor: copied ? '#00cc8855' : '#21262d' }} onClick={doCopy}>
+            {copied ? '✓ Skopírované' : '📋 Kopírovať'}
+          </button>
+          <button style={css.cardBtnDanger} onClick={doDelete}>🗑 Zmazať</button>
         </div>
       </div>
-      <input style={inp} value={subjSk} onChange={e => setSubjSk(e.target.value)} placeholder="Predmet SK..." />
-      <textarea style={area} value={bodySk} onChange={e => setBodySk(e.target.value)} />
-      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-        <button style={css.btnSave} onClick={() => onSaveSk(email.id, subjSk, bodySk)}>💾 Uložiť</button>
-        <button style={{ ...css.btnTranslate, opacity: translating ? 0.5 : 1 }} onClick={doTranslate} disabled={translating}>
-          {translating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do nemčiny'}
-        </button>
-      </div>
+
+      {/* Body — read-only or edit */}
+      {editing ? (
+        <>
+          <input style={inp} value={subjSk} onChange={e => setSubjSk(e.target.value)} placeholder="Predmet SK..." autoFocus />
+          <textarea style={area} value={bodySk} onChange={e => setBodySk(e.target.value)} />
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
+            <button style={css.btnSave} onClick={() => { onSaveSk(email.id, subjSk, bodySk); setEditing(false) }}>💾 Uložiť</button>
+            <button style={css.btnCancel} onClick={() => setEditing(false)}>Zrušiť</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={roSubj}>{subjSk || <span style={{ color: '#4b5563' }}>–</span>}</div>
+          <div style={roBody}>{bodySk || <span style={{ color: '#4b5563' }}>–</span>}</div>
+        </>
+      )}
+
+      {/* Translate */}
+      <button style={{ ...css.btnTranslate, opacity: translating ? 0.5 : 1, width: '100%', justifyContent: 'center' }} onClick={doTranslate} disabled={translating}>
+        {translating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do nemčiny'}
+      </button>
     </div>
   )
 
   if (isDe) return (
     <div style={{ border: '1px solid #3b82f644', borderLeft: '3px solid #3b82f6', borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.7rem', background: '#0d1117' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-        <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#3b82f6' }}>🇩🇪 DE Preložené</span>
-        <div style={{ display: 'flex', gap: '0.3rem' }}>
-          {headerBtn('📋', () => onCopy(email))}
-          {headerBtn('🗑', () => onDelete(email.id), { color: '#ef444466' })}
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#3b82f6' }}>🇩🇪 DE Preložené</span>
+          <button style={{ ...css.cardBtn, color: '#6b7280' }} onClick={() => onBackToSk(email.id)}>← Späť na SK</button>
+        </div>
+        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          <button style={css.cardBtn} onClick={() => setEditing(v => !v)}>
+            {editing ? '✕ Zavrieť' : '✏ Upraviť'}
+          </button>
+          <button style={{ ...css.cardBtn, color: copied ? '#00cc88' : '#9ca3af', borderColor: copied ? '#00cc8855' : '#21262d' }} onClick={doCopy}>
+            {copied ? '✓ Skopírované' : '📋 Kopírovať'}
+          </button>
+          <button style={css.cardBtnDanger} onClick={doDelete}>🗑 Zmazať</button>
         </div>
       </div>
-      <input style={inp} value={subjDe} onChange={e => setSubjDe(e.target.value)} placeholder="Betreff..." />
-      <textarea style={area} value={bodyDe} onChange={e => setBodyDe(e.target.value)} />
-      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <button style={css.btnSave} onClick={() => onSaveDe(email.id, subjDe, bodyDe)}>💾 Uložiť</button>
-        {companyEmail
-          ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1 }} onClick={() => onSend(email, subjDe, bodyDe)} disabled={sending}>
-              {sending ? '⏳ Odosiela...' : `📤 Odoslať na ${companyEmail}`}
-            </button>
-          : <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00' }}>⚠ Pridaj email firmy</span>
-        }
-      </div>
+
+      {/* Body — read-only or edit */}
+      {editing ? (
+        <>
+          <input style={inp} value={subjDe} onChange={e => setSubjDe(e.target.value)} placeholder="Betreff..." autoFocus />
+          <textarea style={area} value={bodyDe} onChange={e => setBodyDe(e.target.value)} />
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
+            <button style={css.btnSave} onClick={() => { onSaveDe(email.id, subjDe, bodyDe); setEditing(false) }}>💾 Uložiť</button>
+            <button style={css.btnCancel} onClick={() => setEditing(false)}>Zrušiť</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={roSubj}>{subjDe || <span style={{ color: '#4b5563' }}>–</span>}</div>
+          <div style={roBody}>{bodyDe || <span style={{ color: '#4b5563' }}>–</span>}</div>
+        </>
+      )}
+
+      {/* Send */}
+      {companyEmail
+        ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1, width: '100%', justifyContent: 'center' }} onClick={() => onSend(email, subjDe, bodyDe)} disabled={sending}>
+            {sending ? '⏳ Odosiela...' : `📤 Odoslať na ${companyEmail}`}
+          </button>
+        : <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00' }}>⚠ Pridaj email firmy v Kontaktných údajoch</span>
+      }
     </div>
   )
 
@@ -669,13 +727,21 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   }
 
   async function handleDeleteEmail(emailId) {
-    if (!window.confirm('Zmazať email draft?')) return
     try {
       await updateDoc(doc(db, 'emails', emailId), {
         status: 'deleted', deletedAt: serverTimestamp(), updatedAt: serverTimestamp(),
       })
       await logEvent('email_deleted', `${CURRENT_USER} zmazal email draft`)
       showToast('Draft zmazaný')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  async function handleBackToSk(emailId) {
+    try {
+      await updateDoc(doc(db, 'emails', emailId), {
+        status: 'active_draft', updatedAt: serverTimestamp(),
+      })
+      await logEvent('email_draft_back_to_sk', `${CURRENT_USER} vrátil draft na SK verziu`)
     } catch (e) { showToast('Chyba: ' + e.message, 'err') }
   }
 
@@ -1062,6 +1128,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
               onSend={handleSendEmail}
               onDelete={handleDeleteEmail}
               onCopy={handleCopyEmail}
+              onBackToSk={handleBackToSk}
               sending={sendingEmail} />
           )}
 
@@ -1370,9 +1437,12 @@ const css = {
   suggTask:         { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.2rem 0.5rem', border: '1px solid #ffaa0055', background: 'transparent', color: '#ffaa00', borderRadius: 2, cursor: 'pointer' },
   suggReject:       { fontFamily: mono, fontSize: '0.58rem', padding: '0.2rem 0.45rem', border: '1px solid #21262d', background: 'transparent', color: '#4b5563', borderRadius: 2, cursor: 'pointer' },
   // Email card buttons
-  btnSave:      { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: 'none', background: '#21262d', color: '#e8eaed', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
-  btnTranslate: { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.65rem', border: '1px solid #3b82f655', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
-  btnApprove:   { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
-  btnSend:      { fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.85rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer', marginTop: '0.25rem' },
-  btnIcon:      { background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem', padding: '0 0.15rem', lineHeight: 1, color: '#6b7280' },
+  btnSave:       { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: 'none', background: '#21262d', color: '#e8eaed', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  btnCancel:     { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.55rem', border: '1px solid #21262d', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' },
+  btnTranslate:  { fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.85rem', border: '1px solid #3b82f655', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', borderRadius: 2, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' },
+  btnApprove:    { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  btnSend:       { fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.35rem 0.85rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' },
+  btnIcon:       { background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem', padding: '0 0.15rem', lineHeight: 1, color: '#6b7280' },
+  cardBtn:       { fontFamily: mono, fontSize: '0.57rem', letterSpacing: '0.5px', padding: '0.18rem 0.5rem', border: '1px solid #21262d', background: 'transparent', color: '#9ca3af', borderRadius: 2, cursor: 'pointer', whiteSpace: 'nowrap' },
+  cardBtnDanger: { fontFamily: mono, fontSize: '0.57rem', letterSpacing: '0.5px', padding: '0.18rem 0.5rem', border: '1px solid #ef444444', background: 'rgba(239,68,68,0.08)', color: '#ef4444', borderRadius: 2, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 },
 }
