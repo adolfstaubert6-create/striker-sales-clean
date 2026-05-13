@@ -4,7 +4,15 @@ STATUS SUGGESTION: Ak je zmena statusu jasne odôvodnená, pripoj na KONIEC odpo
 <SUGGEST_STATUS:new> alebo <SUGGEST_STATUS:contacted> alebo <SUGGEST_STATUS:offer> alebo <SUGGEST_STATUS:closed> alebo <SUGGEST_STATUS:rejected>
 Pripoj len ak je skutočne opodstatnené.
 
-OBMEDZENIA: Zakázané je len fyzické odoslanie emailu cez systém, mazanie dát a zmena produkčných nastavení. Písanie a generovanie textu emailu je POVOLENÉ a žiaduce. Nikdy nevkladaj do odpovede frázy ako "Môžem pripraviť návrh", "[NÁVRH AKCIE", "[AKTION" ani iné meta-komentáre.`
+OBMEDZENIA: Zakázané je len fyzické odoslanie emailu cez systém, mazanie dát a zmena produkčných nastavení. Písanie a generovanie textu emailu je POVOLENÉ a žiaduce. Nikdy nevkladaj do odpovede frázy ako "Môžem pripraviť návrh", "[NÁVRH AKCIE", "[AKTION" ani iné meta-komentáre.
+
+EMAIL MARKERS: Keď píšeš email (akýkoľvek — prvý kontakt, follow-up, odpoveď), obal celý email týmito markermi:
+[EMAIL_START]
+Predmet: <predmet emailu>
+
+<telo emailu>
+[EMAIL_END]
+Ostatný text odpovede (analýza, komentár) môže byť mimo markerov.`
 
 const EMAIL_DRAFT_RE  = /vytvor.*email|email.*draft|prvý.*kontakt|generuj.*email|napíš.*email/i
 const TRANSLATE_RE    = /prelož|preložiť|translate/i

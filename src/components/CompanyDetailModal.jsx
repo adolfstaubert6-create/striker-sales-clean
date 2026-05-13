@@ -1135,11 +1135,26 @@ PRAVIDLÁ EMAILU:
     } catch (e) { showToast('Chyba: ' + e.message, 'err') }
   }
 
-  async function handleToDraft(text) {
+  async function handleToDraft(rawText) {
+    // Extract content between [EMAIL_START] … [EMAIL_END] if present
+    const markerMatch = rawText.match(/\[EMAIL_START\]([\s\S]*?)\[EMAIL_END\]/i)
+    const extracted   = markerMatch ? markerMatch[1].trim() : rawText
+
+    // Parse optional "Predmet:" line for subject
+    const lines      = extracted.split('\n')
+    const subjLine   = lines.find(l => /^predmet:/i.test(l.trim()))
+    const subjectSk  = subjLine
+      ? subjLine.replace(/^predmet:\s*/i, '').trim()
+      : `STRIKER — ${live.name}`
+    const bodyRaw    = subjLine
+      ? extracted.slice(extracted.indexOf(subjLine) + subjLine.length)
+      : extracted
+    const bodySk     = cleanDraftText(bodyRaw)
+
     const existing = emails.find(e => ['active_draft', 'translated', 'draft'].includes(e.status))
     const fields = {
-      subjectSk:   `STRIKER — ${live.name}`,
-      bodySk:      text,
+      subjectSk,
+      bodySk,
       subjectDe:   '',
       bodyDe:      '',
       status:      'active_draft',
