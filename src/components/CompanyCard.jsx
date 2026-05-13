@@ -31,6 +31,8 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
   const reason     = company.aiReason     || ''
   const reasoning  = company.aiReasoning  || []
   const confidence = company.aiConfidence || null
+  const keyFactors = company.aiKeyFactors || []
+  const aiInsight  = company.aiInsight    || ''
 
   return (
     <div style={{ ...css.card, borderLeftColor: st.color }}>
@@ -91,17 +93,30 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
         )}
       </div>
 
-      {/* ── Row 4: AI reason + next step + reasoning tags ── */}
-      {reason   && <div style={css.reason}>✦ {reason}</div>}
-      {nextStep && <div style={css.nextStep}>→ {nextStep}</div>}
-      {reasoning.slice(0, 3).length > 0 && (
+      {/* ── Row 4: potential label + key factors + AI insight ── */}
+      {reason && <div style={css.reason}>✦ {reason}</div>}
+
+      {keyFactors.length > 0 && (
         <div style={css.reasoningRow}>
-          {reasoning.slice(0, 3).map((r, i) => (
-            <span key={i} style={{ ...css.reasoningTag, color: r.startsWith('-') ? '#ef4444' : '#00cc88', background: r.startsWith('-') ? 'rgba(239,68,68,0.07)' : 'rgba(0,204,136,0.07)', borderColor: r.startsWith('-') ? '#ef444430' : '#00cc8830' }}>
-              {r}
-            </span>
-          ))}
+          {keyFactors.map((f, i) => {
+            const neg = f.startsWith('-')
+            const label = neg ? f.slice(1) : f
+            return (
+              <span key={i} style={{
+                ...css.reasoningTag,
+                color:       neg ? '#ef4444' : '#00cc88',
+                background:  neg ? 'rgba(239,68,68,0.07)' : 'rgba(0,204,136,0.07)',
+                borderColor: neg ? '#ef444430' : '#00cc8830',
+              }}>
+                {neg ? '▼ ' : '▲ '}{label}
+              </span>
+            )
+          })}
         </div>
+      )}
+
+      {aiInsight && (
+        <div style={css.aiInsightRow}>💡 {aiInsight}</div>
       )}
 
       {/* ── Row 5: expand toggle ── */}
@@ -184,8 +199,9 @@ const css = {
 
   reason:           { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', fontStyle: 'italic', marginBottom: '0.25rem', lineHeight: 1.5 },
   nextStep:         { fontFamily: mono, fontSize: '0.6rem', color: '#00cc88', marginBottom: '0.3rem' },
-  reasoningRow:     { display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.35rem' },
+  reasoningRow:     { display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.3rem' },
   reasoningTag:     { fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.3px', padding: '0.08rem 0.38rem', border: '1px solid', borderRadius: 2 },
+  aiInsightRow:     { fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', color: '#6b7280', fontStyle: 'italic', lineHeight: 1.55, marginBottom: '0.3rem' },
 
   expandBtn:        { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.15rem 0', marginTop: '0.1rem' },
 

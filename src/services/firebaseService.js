@@ -91,6 +91,8 @@ export async function updateCompanyScore(id, score, reason, factors) {
     aiNextStep:   factors?.nextStep   || '',
     aiReasoning:  factors?.reasoning  || [],
     aiConfidence: factors?.confidence || 'nízka',
+    aiKeyFactors: factors?.keyFactors || [],
+    aiInsight:    factors?.aiInsight  || '',
     updatedAt:    serverTimestamp(),
   })
 }
