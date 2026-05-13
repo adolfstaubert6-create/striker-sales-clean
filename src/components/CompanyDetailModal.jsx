@@ -1384,10 +1384,9 @@ PRAVIDLÁ EMAILU:
               {st.label}
             </div>
             <button
-              style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.65rem', border: '1px solid #ef444455', background: 'rgba(239,68,68,0.07)', color: '#ef4444', borderRadius: 3, cursor: 'pointer', flexShrink: 0 }}
-              onClick={() => setDeleteConfirmOpen(true)}
-              title="Zmazať firmu">
-              🗑 Zmazať
+              style={{ fontFamily: mono, fontSize: '0.63rem', letterSpacing: '0.5px', padding: '0.35rem 0.85rem', border: '1px solid #ef444466', background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderRadius: 3, cursor: 'pointer', flexShrink: 0, fontWeight: 600 }}
+              onClick={() => setDeleteConfirmOpen(true)}>
+              🗑 Zmazať firmu
             </button>
             <button style={css.closeBtn} onClick={onClose} title="Esc">✕</button>
           </div>
