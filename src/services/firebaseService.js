@@ -1,6 +1,6 @@
 import { db } from '../firebase.js'
 import {
-  collection, addDoc, getDocs, query, where,
+  collection, addDoc, getDocs, query, where, limit,
   serverTimestamp, orderBy, onSnapshot, doc, updateDoc
 } from 'firebase/firestore'
 import { normalizeCompanyData } from '../utils/normalizeCompanyData.js'
@@ -101,4 +101,48 @@ export async function saveDraft(companyId, companyName, subject, body) {
     createdAt: serverTimestamp(),
     sentAt: null,
   })
+}
+
+export async function seedKnowledgeBase() {
+  const ref  = collection(db, 'knowledge_base')
+  const snap = await getDocs(query(ref, limit(1)))
+  if (!snap.empty) return // already seeded
+
+  const entries = [
+    {
+      title:    'Was ist STRIKER',
+      category: 'technology',
+      content:  'Hydrodynamische Kavitations-Heiztechnologie. Elektrischer Input: 45 kW → Thermischer Output: 120-160 kW. COP 2.6-3.5. Einsparung bis 70% gegenüber konventionellen Systemen. Preis: 8.000-10.000 EUR. Lieferzeit 6-8 Wochen.',
+      language: 'de', active: true,
+    },
+    {
+      title:    'Zielgruppen',
+      category: 'targets',
+      content:  'Hotels (4+ Sterne, hoher Warmwasserbedarf), industrielle Wäschereien, Wellness/Spa-Zentren, Krankenhäuser und Kliniken, Restaurants mit Großküchen. Priorität: Betriebe mit >50.000 EUR jährlichen Heizkosten.',
+      language: 'de', active: true,
+    },
+    {
+      title:    'ROI Argumente',
+      category: 'sales',
+      content:  'Einsparung bis 70% gegenüber konventionellen Heizsystemen. Amortisation in 2-4 Jahren. BAFA-Förderung bis 30% möglich. Preis 8.000-10.000 EUR inkl. Installation. Wartungsarm, langlebig, keine Emissionen.',
+      language: 'de', active: true,
+    },
+    {
+      title:    'Email Regeln',
+      category: 'communication',
+      content:  'Professionell und knapp (max 150 Wörter). Kein aggressiver Verkauf. Konkreter nächster Schritt immer am Ende. B2B-Stil: Sehr geehrte Damen und Herren. Fokus auf Kosteneinsparung, nicht Technologie. Einen einzigen klaren Call-to-Action.',
+      language: 'de', active: true,
+    },
+    {
+      title:    'Einwände und Antworten',
+      category: 'objections',
+      content:  '"Zu teuer": ROI in 2-4 Jahren, BAFA-Förderung möglich. "Kein Interesse": Einsparpotenzial kurz nennen, Rückruf anbieten. "Haben bereits ein System": Ergänzung oder Modernisierung möglich. "Brauchen Zeit": Informationsmaterial zusenden, Termin in 2 Wochen vorschlagen.',
+      language: 'de', active: true,
+    },
+  ]
+
+  for (const entry of entries) {
+    await addDoc(ref, { ...entry, createdAt: serverTimestamp() })
+  }
+  console.log('[knowledgeBase] seeded 5 entries')
 }

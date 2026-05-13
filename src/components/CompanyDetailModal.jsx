@@ -253,10 +253,11 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [toast, setToast]         = useState(null)
   const [emails, setEmails]           = useState([])
   const [sendingEmail, setSendingEmail] = useState(false)
-  const [aiMessages, setAiMessages] = useState([])
-  const [aiInput, setAiInput]       = useState('')
-  const [aiLoading, setAiLoading]   = useState(false)
-  const chatEndRef                   = useRef(null)
+  const [aiChats, setAiChats]         = useState([])
+  const [aiSuggestions, setAiSuggestions] = useState([])
+  const [aiInput, setAiInput]         = useState('')
+  const [aiLoading, setAiLoading]     = useState(false)
+  const chatEndRef                     = useRef(null)
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -318,7 +319,27 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       }
     )
 
-    return () => { unsubDoc(); unsubInter(); unsubNotes(); unsubTasks(); unsubEmails() }
+    // ai_chats — last 20, oldest first for chat display
+    const unsubChats = onSnapshot(
+      query(collection(db, 'ai_chats'), where('companyId', '==', id)),
+      snap => {
+        const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        rows.sort((a, b) => {
+          const ta = a.createdAt?.toDate?.() || new Date(0)
+          const tb = b.createdAt?.toDate?.() || new Date(0)
+          return ta - tb
+        })
+        setAiChats(rows.slice(-20))
+      }
+    )
+
+    // ai_suggestions — pending only
+    const unsubAiSugg = onSnapshot(
+      query(collection(db, 'ai_suggestions'), where('companyId', '==', id), where('status', '==', 'pending')),
+      snap => setAiSuggestions(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    )
+
+    return () => { unsubDoc(); unsubInter(); unsubNotes(); unsubTasks(); unsubEmails(); unsubChats(); unsubAiSugg() }
   }, [initialCompany.id])
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -482,48 +503,79 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   // ── AI Advisor ─────────────────────────────────────────────────────────────
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [aiMessages, aiLoading])
+  }, [aiChats, aiLoading])
 
   function buildCompanyContext() {
+    const missingData = []
+    if (!live.email)         missingData.push('email')
+    if (!live.phone)         missingData.push('telefón')
+    if (!live.website)       missingData.push('web')
+    if (!live.contactPerson) missingData.push('kontaktná osoba')
+    if (live.aiScore == null) missingData.push('BPS skóre')
+
     return {
-      name:        live.name,
-      category:    live.category,
-      city:        live.city,
-      website:     live.website,
-      phone:       live.phone,
-      email:       live.email,
-      rating:      live.rating,
-      aiScore:     live.aiScore,
-      aiReason:    live.aiReason,
-      aiPositive:  live.aiPositive || [],
-      aiRisks:     live.aiRisks    || [],
-      aiNextStep:  live.aiNextStep  || '',
-      status:      live.status,
-      recentNotes: notes.slice(0, 3).map(n => n.text),
-      recentEvents: interactions.slice(0, 5).map(e => e.message).filter(Boolean),
+      name:           live.name,
+      category:       live.category,
+      city:           live.city,
+      address:        live.address,
+      website:        live.website,
+      phone:          live.phone,
+      email:          live.email,
+      rating:         live.rating,
+      placeId:        live.googlePlaceId,
+      aiScore:        live.aiScore,
+      aiReason:       live.aiReason,
+      aiPositive:     live.aiPositive || [],
+      aiRisks:        live.aiRisks    || [],
+      aiNextStep:     live.aiNextStep  || '',
+      status:         live.status,
+      notes:          notes.slice(0, 3).map(n => n.text),
+      tasks:          tasks.filter(t => !t.done).map(t => t.text),
+      recentTimeline: interactions.slice(0, 10).map(e => evMessage(e)).filter(Boolean),
+      emailDrafts:    emails.map(e => ({ subject: e.subject, status: e.status })),
+      aiSuggestions:  aiSuggestions.map(s => ({ title: s.title, type: s.type, priority: s.priority })),
+      missingData,
     }
   }
 
   async function sendAiMessage(text) {
     const msg = (text || aiInput).trim()
     if (!msg || aiLoading) return
-    const userMsg   = { role: 'user', content: msg }
-    const newMsgs   = [...aiMessages, userMsg]
-    setAiMessages(newMsgs)
     setAiInput('')
     setAiLoading(true)
+
+    // Build API messages from persisted history + new message
+    const apiMessages = [
+      ...aiChats.map(c => ({ role: c.role, content: c.message })),
+      { role: 'user', content: msg },
+    ]
+
+    // Persist user message to Firestore
+    await addDoc(collection(db, 'ai_chats'), {
+      companyId: live.id, role: 'user', message: msg,
+      createdAt: serverTimestamp(), createdBy: CURRENT_USER,
+    }).catch(console.error)
+
     try {
       const res = await fetch('/.netlify/functions/ai-advisor', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ messages: newMsgs, companyContext: buildCompanyContext() }),
+        body:    JSON.stringify({ messages: apiMessages, companyContext: buildCompanyContext() }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      const parsed = parseAiResponse(data.text)
-      setAiMessages(m => [...m, { role: 'assistant', content: parsed.text, suggestion: parsed.suggestion }])
+
+      // Persist AI response (with suggestion tag intact for parsing on render)
+      await addDoc(collection(db, 'ai_chats'), {
+        companyId: live.id, role: 'assistant', message: data.text,
+        createdAt: serverTimestamp(), createdBy: 'AI',
+      }).catch(console.error)
+
     } catch (e) {
-      setAiMessages(m => [...m, { role: 'assistant', content: `⚠ Chyba: ${e.message}` }])
+      await addDoc(collection(db, 'ai_chats'), {
+        companyId: live.id, role: 'assistant', message: `⚠ Chyba: ${e.message}`,
+        createdAt: serverTimestamp(), createdBy: 'AI',
+      }).catch(console.error)
     } finally {
       setAiLoading(false)
     }
@@ -755,25 +807,29 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
             ))}
           </div>
 
-          {/* Chat history */}
+          {/* Chat history — loaded from ai_chats Firestore collection */}
           <div style={css.chatBox}>
-            {aiMessages.length === 0 && (
+            {aiChats.length === 0 && !aiLoading && (
               <div style={css.chatEmpty}>
                 Vyber rýchlu otázku alebo napíš vlastnú — AI poradí konkrétne pre túto firmu.
               </div>
             )}
-            {aiMessages.map((m, i) => (
-              <div key={i}>
+            {aiChats.map((m, i) => {
+              const parsed = m.role === 'assistant' ? parseAiResponse(m.message) : null
+              const displayText = parsed ? parsed.text : m.message
+              const suggestion  = parsed?.suggestion || null
+              return (
+              <div key={m.id || i}>
                 <div style={m.role === 'user' ? css.msgUserWrap : css.msgAiWrap}>
                   <div style={m.role === 'user' ? css.msgUser : css.msgAi}>
                     {m.role === 'user'
-                      ? <span style={css.msgUserText}>{m.content}</span>
-                      : <span style={css.msgAiText}>{m.content}</span>}
+                      ? <span style={css.msgUserText}>{m.message}</span>
+                      : <span style={css.msgAiText}>{displayText}</span>}
                   </div>
                 </div>
                 {/* Status change suggestion card */}
-                {m.role === 'assistant' && m.suggestion?.type === 'status' && (() => {
-                  const sKey = m.suggestion.value
+                {m.role === 'assistant' && suggestion?.type === 'status' && (() => {
+                  const sKey = suggestion.value
                   const sObj = COMPANY_STATUSES[sKey]
                   if (!sObj) return null
                   return (
@@ -797,7 +853,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
                   )
                 })()}
               </div>
-            ))}
+            )})}
+
             {aiLoading && (
               <div style={css.msgAiWrap}>
                 <div style={css.msgAi}>
