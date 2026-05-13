@@ -157,6 +157,8 @@ function cleanDraftText(text) {
   return (text || '')
     .replace(/^#{1,3}\s+/gm, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
+    // Strip analysis sections that may follow the email
+    .replace(/\n+(ČO ROBIŤ TERAZ|NAJLEPŠÍ ĎALŠÍ KROK|ODPORÚČANÁ AKCIA|ĎALŠÍ KROK|VERDIKT|VERDIKT:|Záver:|Analýza:|Odporúčam|Odporúčanie:)[\s\S]*/i, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
@@ -361,7 +363,7 @@ function Toast({ msg, type }) {
   if (!msg) return null
   const col = type === 'err' ? '#ef4444' : '#00cc88'
   return (
-    <div style={{ position: 'sticky', bottom: 0, background: '#0d1117', borderTop: `1px solid ${col}44`, padding: '0.5rem 1rem', fontFamily: mono, fontSize: '0.65rem', color: col, textAlign: 'center' }}>
+    <div style={{ position: 'fixed', bottom: '1.25rem', left: '50%', transform: 'translateX(-50%)', zIndex: 701, background: '#0d1117', border: `1px solid ${col}44`, borderBottom: `2px solid ${col}`, padding: '0.45rem 1.25rem', borderRadius: 4, fontFamily: mono, fontSize: '0.65rem', color: col, textAlign: 'center', whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(0,0,0,0.5)' }}>
       {msg}
     </div>
   )
@@ -779,7 +781,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   // ── Handlers ───────────────────────────────────────────────────────────────
   async function handleStatusChange(newStatus) {
     const oldStatus = live.status
-    if (oldStatus === newStatus) return
+    if (oldStatus === newStatus) { showToast(`Status je už: ${STATUS_LABELS[newStatus] || newStatus}`); return }
     await withFb('status', async () => {
       await updateDoc(doc(db, 'companies', live.id), {
         status: newStatus, statusChangedAt: serverTimestamp(), updatedAt: serverTimestamp(),
@@ -788,7 +790,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
         `${CURRENT_USER} zmenil status: ${STATUS_LABELS[oldStatus] || oldStatus} → ${STATUS_LABELS[newStatus] || newStatus}`,
         { oldStatus, newStatus }
       )
-    })
+    }, `✓ Status: ${STATUS_LABELS[newStatus] || newStatus}`)
   }
 
   async function handleAddNote() {
@@ -1136,20 +1138,29 @@ PRAVIDLÁ EMAILU:
   }
 
   async function handleToDraft(rawText) {
-    // Extract content between [EMAIL_START] … [EMAIL_END] if present
+    // 1. Try [EMAIL_START]...[EMAIL_END] markers
+    let extracted
     const markerMatch = rawText.match(/\[EMAIL_START\]([\s\S]*?)\[EMAIL_END\]/i)
-    const extracted   = markerMatch ? markerMatch[1].trim() : rawText
+    if (markerMatch) {
+      extracted = markerMatch[1].trim()
+    } else {
+      // 2. Fallback: find first "Predmet:" line and take everything from there
+      const predMatch = rawText.match(/^predmet:\s*.+$/im)
+      extracted = predMatch
+        ? rawText.slice(rawText.indexOf(predMatch[0])).trim()
+        : rawText
+    }
 
-    // Parse optional "Predmet:" line for subject
-    const lines      = extracted.split('\n')
-    const subjLine   = lines.find(l => /^predmet:/i.test(l.trim()))
-    const subjectSk  = subjLine
+    // Parse "Predmet:" line for subject
+    const lines     = extracted.split('\n')
+    const subjLine  = lines.find(l => /^predmet:/i.test(l.trim()))
+    const subjectSk = subjLine
       ? subjLine.replace(/^predmet:\s*/i, '').trim()
       : `STRIKER — ${live.name}`
-    const bodyRaw    = subjLine
+    const bodyRaw   = subjLine
       ? extracted.slice(extracted.indexOf(subjLine) + subjLine.length)
       : extracted
-    const bodySk     = cleanDraftText(bodyRaw)
+    const bodySk    = cleanDraftText(bodyRaw)
 
     const existing = emails.find(e => ['active_draft', 'translated', 'draft'].includes(e.status))
     const fields = {
