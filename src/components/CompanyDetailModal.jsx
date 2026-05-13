@@ -392,9 +392,9 @@ function ChatMessage({ msg, displayText, role, onDelete, onEdit }) {
             <span style={{ fontFamily: textFamily, fontSize: textSize, color: textColor, lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.2rem', justifyContent: isAi ? 'flex-start' : 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.25rem', justifyContent: isAi ? 'flex-start' : 'flex-end', flexWrap: 'wrap' }}>
           <button style={css.chatActionBtn} onClick={doCopy}>
-            {copied ? '✓ Skopírované' : '📋'}
+            {copied ? '✓ Skopírované' : '📋 Kopírovať'}
           </button>
           {editing ? (
             <>
@@ -402,13 +402,13 @@ function ChatMessage({ msg, displayText, role, onDelete, onEdit }) {
               <button style={css.chatActionBtn} onClick={() => { setEditing(false); setEditText(displayText) }}>Zrušiť</button>
             </>
           ) : (
-            <button style={css.chatActionBtn} onClick={() => setEditing(true)}>✏</button>
+            <button style={css.chatActionBtn} onClick={() => setEditing(true)}>✏️ Upraviť</button>
           )}
           <button
             style={css.chatActionBtn}
             onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
             onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
-            onClick={doDelete}>✕</button>
+            onClick={doDelete}>🗑 Zmazať</button>
         </div>
       </div>
     </div>
@@ -1566,5 +1566,5 @@ const css = {
   btnIcon:       { background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem', padding: '0 0.15rem', lineHeight: 1, color: '#6b7280' },
   cardBtn:       { fontFamily: mono, fontSize: '0.57rem', letterSpacing: '0.5px', padding: '0.18rem 0.5rem', border: '1px solid #21262d', background: 'transparent', color: '#9ca3af', borderRadius: 2, cursor: 'pointer', whiteSpace: 'nowrap' },
   cardBtnDanger: { fontFamily: mono, fontSize: '0.57rem', letterSpacing: '0.5px', padding: '0.18rem 0.5rem', border: '1px solid #ef444444', background: 'rgba(239,68,68,0.08)', color: '#ef4444', borderRadius: 2, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 },
-  chatActionBtn: { fontFamily: mono, fontSize: '0.56rem', letterSpacing: '0.3px', padding: '0.1rem 0.38rem', border: '1px solid #1e2530', background: 'transparent', color: '#4b5563', borderRadius: 2, cursor: 'pointer', lineHeight: 1.5 },
+  chatActionBtn: { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '0.3px', padding: '0.15rem 0.45rem', border: '1px solid #1e2530', background: 'transparent', color: '#4b5563', borderRadius: 2, cursor: 'pointer', lineHeight: 1.5, whiteSpace: 'nowrap' },
 }
