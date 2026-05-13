@@ -346,10 +346,12 @@ function NoteCard({ note, onEdit, onDelete }) {
 }
 
 // ── AI Chat Message ──────────────────────────────────────────────────────────
-function AiChatMessage({ msg, displayText, onDelete, onEdit }) {
+function ChatMessage({ msg, displayText, role, onDelete, onEdit }) {
   const [copied, setCopied]     = useState(false)
   const [editing, setEditing]   = useState(false)
   const [editText, setEditText] = useState(displayText)
+
+  const isAi = role === 'assistant'
 
   function doCopy() {
     navigator.clipboard.writeText(displayText).then(() => {
@@ -367,22 +369,30 @@ function AiChatMessage({ msg, displayText, onDelete, onEdit }) {
     setEditing(false)
   }
 
+  const bubbleStyle = isAi
+    ? { background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: '3px 3px 3px 0', padding: '0.7rem 0.9rem' }
+    : { background: '#161b22', border: '1px solid #21262d', borderRadius: '3px 3px 0 3px', padding: '0.55rem 0.75rem' }
+
+  const textColor  = isAi ? '#c9d1d9' : '#e8eaed'
+  const textFamily = isAi ? "'IBM Plex Sans',sans-serif" : mono
+  const textSize   = isAi ? '0.8rem' : '0.68rem'
+
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-      <div style={{ maxWidth: '92%' }}>
-        <div style={{ background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: '3px 3px 3px 0', padding: '0.7rem 0.9rem' }}>
+    <div style={{ display: 'flex', justifyContent: isAi ? 'flex-start' : 'flex-end' }}>
+      <div style={{ maxWidth: isAi ? '92%' : '80%' }}>
+        <div style={bubbleStyle}>
           {editing ? (
             <textarea
-              style={{ width: '100%', background: 'transparent', border: 'none', color: '#c9d1d9', fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', lineHeight: 1.75, resize: 'vertical', outline: 'none', minHeight: 80, display: 'block' }}
+              style={{ width: '100%', background: 'transparent', border: 'none', color: textColor, fontFamily: textFamily, fontSize: textSize, lineHeight: 1.75, resize: 'vertical', outline: 'none', minHeight: 60, display: 'block' }}
               value={editText}
               onChange={e => setEditText(e.target.value)}
               autoFocus
             />
           ) : (
-            <span style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', color: '#c9d1d9', lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
+            <span style={{ fontFamily: textFamily, fontSize: textSize, color: textColor, lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.2rem', marginLeft: '0.05rem' }}>
+        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.2rem', justifyContent: isAi ? 'flex-start' : 'flex-end' }}>
           <button style={css.chatActionBtn} onClick={doCopy}>
             {copied ? '✓ Skopírované' : '📋'}
           </button>
@@ -1365,20 +1375,13 @@ PRAVIDLÁ EMAILU:
               const suggestion  = parsed?.suggestion || null
               return (
               <div key={m.id || i}>
-                {m.role === 'user' ? (
-                  <div style={css.msgUserWrap}>
-                    <div style={css.msgUser}>
-                      <span style={css.msgUserText}>{m.message}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <AiChatMessage
-                    msg={m}
-                    displayText={displayText}
-                    onDelete={handleDeleteAiChat}
-                    onEdit={handleEditAiChat}
-                  />
-                )}
+                <ChatMessage
+                  msg={m}
+                  displayText={m.role === 'user' ? m.message : displayText}
+                  role={m.role}
+                  onDelete={handleDeleteAiChat}
+                  onEdit={handleEditAiChat}
+                />
                 {/* Confidence badge */}
                 {m.role === 'assistant' && (() => {
                   const conf = extractConfidence(displayText)
