@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { db, storage } from '../firebase.js'
-import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage'
+import { ref as storageRef, uploadBytesResumable, getBlob, deleteObject } from 'firebase/storage'
 import {
   doc, collection, onSnapshot, updateDoc, addDoc, getDocs, deleteDoc,
   query, where, serverTimestamp,
@@ -1222,19 +1222,18 @@ PRAVIDLÁ EMAILU:
       console.log('[send] attachment docs in Firestore:', attSnap.size)
       const attachments = await Promise.all(attSnap.docs.map(async d => {
         const att = d.data()
-        console.log('[send] fetching attachment:', att.fileName, att.storagePath)
-        const url = await getDownloadURL(storageRef(storage, att.storagePath))
-        const resp = await fetch(url)
-        if (!resp.ok) throw new Error(`Failed to download ${att.fileName}: HTTP ${resp.status}`)
-        const buf = await resp.arrayBuffer()
+        console.log('[send] downloading via SDK:', att.fileName)
+        // Use getBlob — avoids CORS entirely, uses Firebase SDK auth internally
+        const blob = await getBlob(storageRef(storage, att.storagePath))
+        const buf  = await blob.arrayBuffer()
         let binary = ''
         const bytes = new Uint8Array(buf)
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
         const content = btoa(binary)
-        console.log('[send] encoded attachment:', att.fileName, 'size:', buf.byteLength, 'b64 chars:', content.length)
+        console.log('[send] encoded:', att.fileName, buf.byteLength, 'bytes →', content.length, 'b64 chars')
         return { filename: att.fileName, content }
       }))
-      console.log('[send] total attachments ready:', attachments.length)
+      console.log('[send] attachments ready:', attachments.length)
 
       const res = await fetch('/.netlify/functions/send-email', {
         method:  'POST',
