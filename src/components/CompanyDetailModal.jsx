@@ -33,6 +33,7 @@ const EVENT_ICONS = {
   email_generated:  '✉',
   email_sent:       '📤',
   reply_received:   '📥',
+  email_found:      '🔍',
 }
 
 const SCORE_COLOR = s =>
@@ -263,6 +264,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [toast, setToast]         = useState(null)
   const [emails, setEmails]           = useState([])
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailSearch, setEmailSearch] = useState({ state: null, email: null })
   const [aiChats, setAiChats]             = useState([])
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [chatsLoaded, setChatsLoaded]     = useState(false)
@@ -543,6 +545,34 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
     } catch (e) { showToast('Chyba: ' + e.message, 'err') }
   }
 
+  async function handleFindEmail() {
+    if (!live.website) return
+    setEmailSearch({ state: 'searching', email: null })
+    try {
+      const res = await fetch('/.netlify/functions/find-email', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ website: live.website }),
+      })
+      const data = await res.json()
+      setEmailSearch(data.email
+        ? { state: 'found',    email: data.email }
+        : { state: 'notfound', email: null })
+    } catch {
+      setEmailSearch({ state: 'notfound', email: null })
+    }
+  }
+
+  async function handleSaveFoundEmail() {
+    const email = emailSearch.email
+    if (!email) return
+    await withFb('saveEmail', async () => {
+      await updateDoc(doc(db, 'companies', live.id), { email, updatedAt: serverTimestamp() })
+      await logEvent('email_found', `${CURRENT_USER} našiel email cez web scraper: ${email}`)
+      setEmailSearch({ state: null, email: null })
+    })
+  }
+
   async function handleSendEmail(email) {
     if (!email.to) { showToast('Chýba emailová adresa príjemcu', 'err'); return }
     setSendingEmail(true)
@@ -728,7 +758,30 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
             <InfoRow label="Email">
               {live.email
                 ? <span style={{ color: '#00cc88', fontFamily: mono, fontSize: '0.72rem' }}>{live.email}</span>
-                : <span style={{ color: '#ffaa00', fontFamily: mono, fontSize: '0.68rem' }}>⚠ Chýba</span>}
+                : emailSearch.state === 'searching'
+                ? <span style={{ color: '#9ca3af', fontFamily: mono, fontSize: '0.68rem' }}>🔍 Hľadám email...</span>
+                : emailSearch.state === 'found'
+                ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                    <span style={{ color: '#00cc88', fontFamily: mono, fontSize: '0.68rem' }}>✓ Email nájdený: {emailSearch.email}</span>
+                    <button
+                      style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.18rem 0.55rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer', opacity: fb.saveEmail === 'saving' ? 0.6 : 1 }}
+                      onClick={handleSaveFoundEmail}
+                      disabled={fb.saveEmail === 'saving'}>
+                      {fb.saveEmail === 'saving' ? '⏳' : 'Uložiť'}
+                    </button>
+                  </div>
+                : emailSearch.state === 'notfound'
+                ? <span style={{ color: '#6b7280', fontFamily: mono, fontSize: '0.68rem' }}>Email sa nenašiel na webe</span>
+                : <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span style={{ color: '#ffaa00', fontFamily: mono, fontSize: '0.68rem' }}>⚠ Email chýba</span>
+                    {live.website && (
+                      <button
+                        style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.15rem 0.5rem', border: '1px solid #ffaa0055', background: 'rgba(255,170,0,0.08)', color: '#ffaa00', borderRadius: 2, cursor: 'pointer' }}
+                        onClick={handleFindEmail}>
+                        🔍 Hľadať email
+                      </button>
+                    )}
+                  </div>}
             </InfoRow>
             <InfoRow label="Telefón">
               {live.phone ? <a href={`tel:${live.phone}`} style={css.link}>{live.phone}</a> : <Muted>–</Muted>}
