@@ -1164,12 +1164,18 @@ PRAVIDLÁ EMAILU:
 
   async function handleToDraft(rawText) {
     const tagMatch = rawText.match(/<STRIKER_EMAIL>([\s\S]*?)<\/STRIKER_EMAIL>/i)
-    if (!tagMatch) {
-      showToast('⚠️ Táto správa neobsahuje email blok. Klikni Prvý email alebo Follow-up.', 'err')
-      return
+    let extracted
+    if (tagMatch) {
+      extracted = tagMatch[1].trim()
+    } else {
+      // Fallback: find "Predmet:" line and take everything from there
+      const predIdx = rawText.search(/^Predmet:/im)
+      if (predIdx === -1) {
+        showToast('⚠️ Táto správa neobsahuje email blok. Klikni Prvý email alebo Follow-up.', 'err')
+        return
+      }
+      extracted = rawText.slice(predIdx).trim()
     }
-
-    const extracted = tagMatch[1].trim()
 
     // Parse SUBJECT: line
     const lines     = extracted.split('\n')
