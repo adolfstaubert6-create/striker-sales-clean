@@ -153,6 +153,14 @@ function stripAiNoise(text) {
     .trim()
 }
 
+function cleanDraftText(text) {
+  return (text || '')
+    .replace(/^#{1,3}\s+/gm, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 // ── AI response parser ───────────────────────────────────────────────────────
 function parseAiResponse(text) {
   const match = text.match(/<SUGGEST_STATUS:([a-z]+)>/)
@@ -462,7 +470,7 @@ function AuditRow({ ev, onDelete }) {
 }
 
 // ── AI Chat Message ──────────────────────────────────────────────────────────
-function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit }) {
+function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, onToDraft }) {
   const [copied, setCopied]     = useState(false)
   const [editing, setEditing]   = useState(false)
   const [editText, setEditText] = useState(displayText)
@@ -530,6 +538,16 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit }) 
           onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
           onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
           onClick={doDelete}>🗑 Zmazať</button>
+        {isAi && onToDraft && (
+          <button
+            style={{ ...css.chatActionBtn, color: '#ff5c00', borderColor: '#ff5c0044', background: 'rgba(255,92,0,0.07)' }}
+            onClick={() => {
+              if (window.confirm('Preniesť túto správu do SK draftu?'))
+                onToDraft(cleanDraftText(displayText))
+            }}>
+            📋 → Draft
+          </button>
+        )}
       </div>
     </div>
   )
@@ -1093,6 +1111,33 @@ PRAVIDLÁ EMAILU:
     } catch (e) { showToast('Chyba: ' + e.message, 'err') }
   }
 
+  async function handleToDraft(text) {
+    const existing = emails.find(e => ['active_draft', 'translated', 'draft'].includes(e.status))
+    const fields = {
+      subjectSk:   `STRIKER — ${live.name}`,
+      bodySk:      text,
+      subjectDe:   '',
+      bodyDe:      '',
+      status:      'active_draft',
+      generatedBy: CURRENT_USER,
+      aiModel:     'claude-haiku-4-5',
+      updatedAt:   serverTimestamp(),
+      edited:      false,
+    }
+    try {
+      if (existing) {
+        await updateDoc(doc(db, 'emails', existing.id), fields)
+      } else {
+        await addDoc(collection(db, 'emails'), {
+          companyId: live.id, type: 'first_contact',
+          createdAt: serverTimestamp(), ...fields,
+        })
+      }
+      await logEvent('email_draft_created', `${CURRENT_USER} preniesol AI správu do SK draftu`)
+      showToast('✓ Prenesené do draftu')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
   async function handleDeleteAiChat(id) {
     try { await deleteDoc(doc(db, 'ai_chats', id)) }
     catch (e) { showToast('Chyba: ' + e.message, 'err') }
@@ -1588,6 +1633,7 @@ PRAVIDLÁ EMAILU:
                           useMarkdown={m.role === 'assistant'}
                           onDelete={handleDeleteAiChat}
                           onEdit={handleEditAiChat}
+                          onToDraft={handleToDraft}
                         />
                         {m.role === 'assistant' && (() => {
                           const conf = extractConfidence(displayText)
