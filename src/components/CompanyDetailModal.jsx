@@ -300,9 +300,10 @@ function Toast({ msg, type }) {
 
 // ── NoteCard ─────────────────────────────────────────────────────────────────
 function NoteCard({ note, onEdit, onDelete }) {
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing]   = useState(false)
   const [editText, setEditText] = useState(note.text || '')
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]     = useState(false)
+  const [copied, setCopied]     = useState(false)
 
   async function saveEdit() {
     if (!editText.trim() || editText === note.text) { setEditing(false); return }
@@ -312,6 +313,17 @@ function NoteCard({ note, onEdit, onDelete }) {
     setEditing(false)
   }
 
+  function doCopy() {
+    navigator.clipboard.writeText(note.text || '').then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {})
+  }
+
+  function doDelete() {
+    if (window.confirm('Zmazať túto poznámku?')) onDelete(note.id)
+  }
+
   return (
     <div style={css.noteCard}>
       <div style={css.noteMeta}>
@@ -319,28 +331,33 @@ function NoteCard({ note, onEdit, onDelete }) {
         <span style={css.noteDot}>·</span>
         <span style={css.noteTime}>{fmtTs(note.createdAt)}</span>
         {note.edited && <span style={css.editedBadge}>upravené</span>}
-        <div style={{ flex: 1 }} />
-        <button style={css.noteIconBtn} onClick={() => { setEditing(e => !e); setEditText(note.text || '') }} title="Upraviť">✎</button>
-        <button style={{ ...css.noteIconBtn, color: '#ef444488' }} onMouseOver={e => e.target.style.color = '#ef4444'} onMouseOut={e => e.target.style.color = '#ef444488'} onClick={() => onDelete(note.id)} title="Zmazať">✕</button>
       </div>
+
       {editing ? (
-        <div>
-          <textarea
-            style={css.noteEditArea}
-            value={editText}
-            onChange={e => setEditText(e.target.value)}
-            autoFocus
-          />
+        <>
+          <textarea style={css.noteEditArea} value={editText} onChange={e => setEditText(e.target.value)} autoFocus />
           <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.3rem' }}>
-            <button style={css.noteEditSave} onClick={saveEdit} disabled={saving}>
-              {saving ? '⏳' : '✓ Uložiť'}
-            </button>
+            <button style={css.noteEditSave} onClick={saveEdit} disabled={saving}>{saving ? '⏳' : '✓ Uložiť'}</button>
             <button style={css.noteEditCancel} onClick={() => setEditing(false)}>Zrušiť</button>
           </div>
-        </div>
+        </>
       ) : (
         <div style={css.noteText}>{note.text}</div>
       )}
+
+      <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.45rem', flexWrap: 'wrap' }}>
+        <button style={css.chatActionBtn} onClick={doCopy}>
+          {copied ? '✓ Skopírované' : '📋 Kopírovať'}
+        </button>
+        {editing ? null : (
+          <button style={css.chatActionBtn} onClick={() => { setEditing(true); setEditText(note.text || '') }}>✏️ Upraviť</button>
+        )}
+        <button
+          style={css.chatActionBtn}
+          onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
+          onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
+          onClick={doDelete}>🗑 Zmazať</button>
+      </div>
     </div>
   )
 }
@@ -647,7 +664,6 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   }
 
   async function handleDeleteNote(noteId) {
-    if (!window.confirm('Zmazať poznámku?')) return
     await updateDoc(doc(db, 'companies', live.id, 'notes', noteId), {
       deleted: true, updatedAt: serverTimestamp(),
     })
@@ -1273,9 +1289,10 @@ PRAVIDLÁ EMAILU:
 
         {/* ══ NOTES DRAWER ══ */}
         {notesOpen && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end' }}
-               onClick={e => e.target === e.currentTarget && setNotesOpen(false)}>
-            <div style={{ width: '100%', maxWidth: 460, height: '100%', background: '#0d1117', borderLeft: '1px solid #21262d', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.6)' }}>
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 599, background: 'rgba(0,0,0,0.55)' }} onClick={() => setNotesOpen(false)} />
+            <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none' }}>
+            <div style={{ width: '100%', maxWidth: 460, height: '100%', background: '#0d1117', borderLeft: '1px solid #21262d', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.7)', pointerEvents: 'auto' }}>
 
               {/* Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid #1e2530', flexShrink: 0 }}>
@@ -1312,7 +1329,8 @@ PRAVIDLÁ EMAILU:
                 </button>
               </div>
             </div>
-          </div>
+            </div>
+          </>
         )}
 
         <div style={css.divider} />
