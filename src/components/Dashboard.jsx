@@ -8,6 +8,7 @@ import { STATUS_LIST } from '../constants/companyStatuses.js'
 import CompanyCard from './CompanyCard.jsx'
 import AiSummaryPanel from './AiSummaryPanel.jsx'
 import CompanyDetailModal from './CompanyDetailModal.jsx'
+import AgentPanel from './AgentPanel.jsx'
 
 const FILTERS = [{ key: 'all', label: 'Všetky' }, ...STATUS_LIST.map(s => ({ key: s.key, label: s.label }))]
 
@@ -166,6 +167,7 @@ export default function Dashboard() {
   return (
     <div>
       <AiSummaryPanel companies={companies} />
+      <AgentPanel onDone={() => {}} />
 
       <div className="dashboard-toolbar" style={css.toolbar}>
         <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať kontakt</button>
