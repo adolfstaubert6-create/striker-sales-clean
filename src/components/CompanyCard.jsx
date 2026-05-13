@@ -11,6 +11,7 @@ const TYPE_LABEL = {
 export default function CompanyCard({ company, scoring, onDraft, onScore }) {
   const [open, setOpen]       = useState(false)
   const [copied, setCopied]   = useState(false)
+  const [hovered, setHovered] = useState(false)
 
   const st  = COMPANY_STATUSES[company.status] || COMPANY_STATUSES.new
   const pri = calculatePriorityLabel(company.aiScore)
@@ -35,7 +36,18 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
   const aiInsight  = company.aiInsight    || ''
 
   return (
-    <div style={{ ...css.card, borderLeftColor: st.color }}>
+    <div
+      style={{
+        ...css.card,
+        borderLeftColor: st.color,
+        borderColor: hovered ? '#2d3748' : '#1e2530',
+        boxShadow: hovered ? '0 0 12px rgba(255,92,0,0.15)' : 'none',
+        transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
 
       {/* ── Row 1: name + BPS score ── */}
       <div style={css.topRow}>
@@ -71,11 +83,15 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
         </div>
         <div style={css.emailActions}>
           {hasEmail && (
-            <button style={css.copyBtn} onClick={copyEmail}>
+            <button style={css.copyBtn} onClick={copyEmail}
+              onMouseOver={e => e.currentTarget.style.opacity = '0.75'}
+              onMouseOut={e => e.currentTarget.style.opacity = '1'}>
               {copied ? '✓ Skopírované' : '⎘ Kopírovať'}
             </button>
           )}
-          <button style={css.draftBtn} onClick={() => onDraft(company)}>
+          <button style={css.draftBtn} onClick={() => onDraft(company)}
+            onMouseOver={e => e.currentTarget.style.filter = 'brightness(1.12)'}
+            onMouseOut={e => e.currentTarget.style.filter = ''}>
             ✉ Draft email
           </button>
         </div>
@@ -87,7 +103,9 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
         {company.category && <Tag color="#6b7280" bg="transparent">{TYPE_LABEL[company.category] || company.category}</Tag>}
         {company.rating   && <Tag color="#ffaa00" bg="rgba(255,170,0,0.08)">⭐ {company.rating}</Tag>}
         {(company.aiScore === null || company.aiScore === undefined) && (
-          <button style={css.scoreBtn} onClick={() => onScore(company)} disabled={scoring}>
+          <button style={css.scoreBtn} onClick={() => onScore(company)} disabled={scoring}
+            onMouseOver={e => e.currentTarget.style.opacity = '0.75'}
+            onMouseOut={e => e.currentTarget.style.opacity = '1'}>
             {scoring ? '⏳' : '✦ BPS Skóre'}
           </button>
         )}
@@ -190,12 +208,12 @@ const css = {
   emailBadgeMissing:{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#ffaa00', background: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2, whiteSpace: 'nowrap' },
   emailAddr:        { fontFamily: mono, fontSize: '0.68rem', color: '#e8eaed' },
   emailActions:     { display: 'flex', gap: '0.4rem', flexShrink: 0 },
-  copyBtn:          { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.6rem', border: '1px solid rgba(0,204,136,0.4)', background: 'transparent', color: '#00cc88', borderRadius: 2, cursor: 'pointer' },
-  draftBtn:         { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.65rem', border: 'none', background: '#00cc88', color: '#0a0c0f', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  copyBtn:          { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.6rem', border: '1px solid rgba(0,204,136,0.4)', background: 'transparent', color: '#00cc88', borderRadius: 2, cursor: 'pointer', transition: 'opacity 0.15s ease, border-color 0.15s ease' },
+  draftBtn:         { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.65rem', border: 'none', background: '#00cc88', color: '#0a0c0f', borderRadius: 2, fontWeight: 700, cursor: 'pointer', transition: 'filter 0.15s ease' },
 
   tags:             { display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.45rem', alignItems: 'center' },
   tag:              { fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.38rem', borderRadius: 2, border: '1px solid transparent' },
-  scoreBtn:         { fontFamily: mono, fontSize: '0.56rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.45rem', border: '1px solid rgba(255,170,0,0.5)', background: 'transparent', color: '#ffaa00', borderRadius: 2, cursor: 'pointer' },
+  scoreBtn:         { fontFamily: mono, fontSize: '0.56rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.45rem', border: '1px solid rgba(255,170,0,0.5)', background: 'transparent', color: '#ffaa00', borderRadius: 2, cursor: 'pointer', transition: 'opacity 0.15s ease' },
 
   reason:           { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', fontStyle: 'italic', marginBottom: '0.25rem', lineHeight: 1.5 },
   nextStep:         { fontFamily: mono, fontSize: '0.6rem', color: '#00cc88', marginBottom: '0.3rem' },
@@ -203,7 +221,7 @@ const css = {
   reasoningTag:     { fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.3px', padding: '0.08rem 0.38rem', border: '1px solid', borderRadius: 2 },
   aiInsightRow:     { fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', color: '#6b7280', fontStyle: 'italic', lineHeight: 1.55, marginBottom: '0.3rem' },
 
-  expandBtn:        { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.15rem 0', marginTop: '0.1rem' },
+  expandBtn:        { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.15rem 0', marginTop: '0.1rem', transition: 'color 0.15s ease' },
 
   detail:           { marginTop: '0.65rem', paddingTop: '0.65rem', borderTop: '1px solid #1e2530' },
   detailRow:        { display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', alignItems: 'baseline' },
