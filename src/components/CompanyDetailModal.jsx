@@ -1168,27 +1168,22 @@ PRAVIDLÁ EMAILU:
   }
 
   async function handleToDraft(rawText) {
-    // 1. Try <STRIKER_EMAIL>...</STRIKER_EMAIL> tags
-    let extracted
     const tagMatch = rawText.match(/<STRIKER_EMAIL>([\s\S]*?)<\/STRIKER_EMAIL>/i)
-    if (tagMatch) {
-      extracted = tagMatch[1].trim()
-    } else {
-      // 2. Fallback: from first "SUBJECT:", "Predmet:" or "BODY:" line
-      const predMatch = rawText.match(/^(SUBJECT:|Predmet:|BODY:)/im)
-      extracted = predMatch
-        ? rawText.slice(rawText.indexOf(predMatch[0])).trim()
-        : rawText
+    if (!tagMatch) {
+      showToast('⚠️ Táto správa neobsahuje email blok. Klikni Prvý email alebo Follow-up.', 'err')
+      return
     }
 
-    // Parse SUBJECT: / Predmet: line for subject
+    const extracted = tagMatch[1].trim()
+
+    // Parse SUBJECT: line
     const lines     = extracted.split('\n')
-    const subjLine  = lines.find(l => /^(SUBJECT:|Predmet:)/i.test(l.trim()))
+    const subjLine  = lines.find(l => /^SUBJECT:/i.test(l.trim()))
     const subjectSk = subjLine
-      ? subjLine.replace(/^(SUBJECT:|Predmet:)\s*/i, '').trim()
+      ? subjLine.replace(/^SUBJECT:\s*/i, '').trim()
       : `STRIKER — ${live.name}`
 
-    // Parse BODY: section or fall back to everything after subject line
+    // Parse BODY: section
     const bodyMatch = extracted.match(/^BODY:\s*\n([\s\S]*)/im)
     const bodyRaw   = bodyMatch
       ? bodyMatch[1]
