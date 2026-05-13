@@ -10,9 +10,11 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Invalid JSON' }) }
   }
 
-  const { to, subject, body, companyId, companyName } = parsed
+  const { to, subject, body, subjectDe, bodyDe, companyId, companyName } = parsed
+  const finalSubject = subjectDe || subject
+  const finalBody    = bodyDe    || body
 
-  if (!to || !subject || !body) {
+  if (!to || !finalSubject || !finalBody) {
     return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Missing to, subject, or body' }) }
   }
 
@@ -31,8 +33,8 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         from:    FROM,
         to:      [to],
-        subject,
-        text:    body,
+        subject: finalSubject,
+        text:    finalBody,
       }),
     })
 

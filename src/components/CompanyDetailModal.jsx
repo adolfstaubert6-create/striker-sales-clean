@@ -21,19 +21,27 @@ const TYPE_LABEL = {
 }
 
 const EVENT_ICONS = {
-  company_saved:    '🏢',
-  ai_score_created: '✦',
-  status_changed:   '🔄',
-  note_added:       '📝',
-  note_updated:     '✏️',
-  note_deleted:     '🗑️',
-  task_created:     '✅',
+  company_saved:           '🏢',
+  ai_score_created:        '✦',
+  status_changed:          '🔄',
+  note_added:              '📝',
+  note_updated:            '✏️',
+  note_deleted:            '🗑️',
+  task_created:            '✅',
+  email_draft_created_sk:  '✉',
+  email_draft_edited_sk:   '✏️',
+  email_translated_de:     '🇩🇪',
+  email_draft_edited_de:   '✏️',
+  email_draft_approved:    '✅',
+  email_sent:              '📤',
+  email_deleted:           '🗑️',
+  email_copied:            '📋',
+  email_found:             '🔍',
+  reply_received:          '📥',
+  // legacy
   draft_created:    '✉',
   draft_approved:   '✅',
   email_generated:  '✉',
-  email_sent:       '📤',
-  reply_received:   '📥',
-  email_found:      '🔍',
   email_translated: '🇩🇪',
 }
 
@@ -88,6 +96,20 @@ function extractDomain(w) {
   return w.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
 }
 
+function stripAiNoise(text) {
+  return text
+    .split('\n')
+    .filter(line => {
+      const t = line.trim()
+      if (/\[AKTION|\*\*\[|Hinweis:|Note:|Bestätigst/i.test(t)) return false
+      if (/^\*\s+\S/.test(t)) return false
+      return true
+    })
+    .join('\n')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .trim()
+}
+
 // ── AI response parser ───────────────────────────────────────────────────────
 function parseAiResponse(text) {
   const match = text.match(/<SUGGEST_STATUS:([a-z]+)>/)
@@ -99,106 +121,95 @@ function parseAiResponse(text) {
 }
 
 // ── Email Workflow Card ───────────────────────────────────────────────────────
-function EmailWorkflowCard({ email, onApprove, onSend, onTranslate, sending }) {
-  const [body, setBody]           = useState(email.body || '')
-  const [subj, setSubj]           = useState(email.subject || '')
+function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslate, onApprove, onSend, onDelete, onCopy, sending }) {
+  const [subjSk, setSubjSk]           = useState(email.subjectSk || '')
+  const [bodySk, setBodySk]           = useState(email.bodySk    || '')
+  const [subjDe, setSubjDe]           = useState(email.subjectDe || '')
+  const [bodyDe, setBodyDe]           = useState(email.bodyDe    || '')
   const [translating, setTranslating] = useState(false)
 
-  const isDraft      = email.status === 'draft'
-  const isApproved   = email.status === 'approved'
-  const isSent       = email.status === 'sent'
-  const isTranslated = email.translated === true
-
-  // Sync local edit state when Firestore updates the body after translation
+  // Sync DE fields when Firestore delivers a fresh translation
   useEffect(() => {
-    if (email.translated) {
-      setSubj(email.subject || '')
-      setBody(email.body || '')
-    }
-  }, [email.translated, email.subject, email.body])
+    setSubjDe(email.subjectDe || '')
+    setBodyDe(email.bodyDe    || '')
+  }, [email.subjectDe, email.bodyDe])
 
   async function doTranslate() {
     setTranslating(true)
-    try { await onTranslate(email) } finally { setTranslating(false) }
+    try { await onTranslate(email, subjSk, bodySk) } finally { setTranslating(false) }
   }
 
-  const borderColor = isSent ? '#00cc88' : isTranslated ? '#3b82f6' : isApproved ? '#3b82f6' : '#ffaa00'
-  const statusLabel = isSent
-    ? '✓ Odoslaný'
-    : isTranslated
-    ? '● Preložené — pripravené na odoslanie'
-    : isApproved
-    ? '● Schválený'
-    : '○ Draft v slovenčine'
-  const statusColor = isSent ? '#00cc88' : (isTranslated || isApproved) ? '#3b82f6' : '#ffaa00'
+  const st        = email.status
+  const hasDE     = !!(email.subjectDe && email.bodyDe)
+  const canSend   = st === 'approved' && !!companyEmail
+
+  const borderColor = st === 'sent' || st === 'approved' ? '#00cc88' : st === 'translated' ? '#3b82f6' : '#ffaa00'
+  const statusLabel = st === 'sent' ? '✓ Odoslaný' : st === 'approved' ? '✓ Schválené' : st === 'translated' ? '● SK + DE' : '○ SK Draft'
+  const statusColor = borderColor
+
+  const inp  = { width: '100%', background: '#0d1117', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.55rem', borderRadius: 2, outline: 'none', marginBottom: '0.35rem', boxSizing: 'border-box' }
+  const area = { ...inp, resize: 'vertical', minHeight: 90, lineHeight: 1.6, fontSize: '0.63rem', marginBottom: '0.4rem' }
 
   return (
-    <div style={{ border: `1px solid ${borderColor}44`, borderLeft: `3px solid ${borderColor}`, borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.6rem', background: '#0d1117' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <span style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', color: statusColor }}>{statusLabel}</span>
-        {isSent && email.sentAt && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#4b5563' }}>{fmtTs(email.sentAt)}</span>}
-      </div>
-      <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#6b7280', marginBottom: '0.4rem' }}>
-        Predmet: {email.subject}
-      </div>
+    <div style={{ border: `1px solid ${borderColor}44`, borderLeft: `3px solid ${borderColor}`, borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.7rem', background: '#0d1117' }}>
 
-      {(isDraft || isApproved) && (
-        <>
-          {/* Slovak note — only when not yet translated */}
-          {!isTranslated && (
-            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#ffaa00', background: 'rgba(255,170,0,0.07)', border: '1px solid rgba(255,170,0,0.2)', padding: '0.25rem 0.55rem', borderRadius: 2, marginBottom: '0.5rem' }}>
-              📝 Draft v slovenčine — pred odoslaním bude preložený do nemčiny
-            </div>
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: statusColor }}>{statusLabel}</span>
+        <div style={{ display: 'flex', gap: '0.3rem' }}>
+          <button style={css.btnIcon} onClick={() => onCopy(email)} title="Kopírovať">📋</button>
+          {st !== 'sent' && (
+            <button style={{ ...css.btnIcon, color: '#ef444466' }}
+              onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
+              onMouseOut={e => e.currentTarget.style.color = '#ef444466'}
+              onClick={() => onDelete(email.id)} title="Zmazať">🗑</button>
           )}
+        </div>
+      </div>
 
-          {/* Body: editable for untranslated draft, read-only otherwise */}
-          {isDraft && !isTranslated ? (
-            <>
-              <input
-                style={{ width: '100%', background: '#161b22', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.5rem', borderRadius: 2, outline: 'none', marginBottom: '0.4rem' }}
-                value={subj} onChange={e => setSubj(e.target.value)} placeholder="Predmet..." />
-              <textarea
-                style={{ width: '100%', background: '#161b22', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.62rem', padding: '0.4rem 0.5rem', borderRadius: 2, outline: 'none', resize: 'vertical', minHeight: 100, lineHeight: 1.6, marginBottom: '0.5rem' }}
-                value={body} onChange={e => setBody(e.target.value)} />
-            </>
-          ) : (
-            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', background: '#161b22', padding: '0.5rem', borderRadius: 2, marginBottom: '0.5rem', whiteSpace: 'pre-wrap', maxHeight: 80, overflowY: 'auto' }}>
-              {email.body}
-            </div>
+      {/* SK section */}
+      <div style={{ marginBottom: '0.6rem' }}>
+        <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#4b5563', marginBottom: '0.4rem' }}>🇸🇰 Slovenčina</div>
+        <input style={inp} value={subjSk} onChange={e => setSubjSk(e.target.value)} placeholder="Predmet SK..." />
+        <textarea style={area} value={bodySk} onChange={e => setBodySk(e.target.value)} />
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          <button style={css.btnSave} onClick={() => onSaveSk(email.id, subjSk, bodySk)}>💾 Uložiť SK</button>
+          {bodySk && st !== 'sent' && (
+            <button style={{ ...css.btnTranslate, opacity: translating ? 0.5 : 1 }} onClick={doTranslate} disabled={translating}>
+              {translating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do nemčiny'}
+            </button>
           )}
+        </div>
+      </div>
 
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {isDraft && !isTranslated && (
-              <button
-                style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: 'none', background: '#3b82f6', color: '#fff', borderRadius: 2, fontWeight: 700, cursor: 'pointer' }}
-                onClick={() => onApprove(email.id, subj, body)}>
-                ✓ Schváliť draft
-              </button>
-            )}
-            {!isTranslated && (
-              <button
-                style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: '1px solid #6b728055', background: 'transparent', color: '#e8eaed', borderRadius: 2, fontWeight: 700, cursor: 'pointer', opacity: translating ? 0.6 : 1 }}
-                onClick={doTranslate}
-                disabled={translating}>
-                {translating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do nemčiny'}
-              </button>
-            )}
-            {isTranslated && (
-              <button
-                style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer', opacity: sending ? 0.6 : 1 }}
-                onClick={() => onSend(email)}
-                disabled={sending}>
-                {sending ? '⏳ Odosiela...' : '📤 Odoslať email'}
-              </button>
+      {/* DE section — shown once translation exists */}
+      {hasDE && (
+        <div style={{ borderTop: '1px solid #1e2530', paddingTop: '0.6rem', marginBottom: '0.5rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#4b5563', marginBottom: '0.4rem' }}>🇩🇪 Nemčina</div>
+          <input style={inp} value={subjDe} onChange={e => setSubjDe(e.target.value)} placeholder="Betreff..." />
+          <textarea style={area} value={bodyDe} onChange={e => setBodyDe(e.target.value)} />
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            <button style={css.btnSave} onClick={() => onSaveDe(email.id, subjDe, bodyDe)}>💾 Uložiť DE</button>
+            {st !== 'approved' && st !== 'sent' && (
+              <button style={css.btnApprove} onClick={() => onApprove(email.id)}>✓ Schváliť</button>
             )}
           </div>
-        </>
+        </div>
       )}
 
-      {isSent && (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#4b5563' }}>
-          Email bol odoslaný na {email.to || '–'}
+      {/* Send button */}
+      {st === 'approved' && (
+        canSend
+          ? <button style={{ ...css.btnSend, opacity: sending ? 0.6 : 1 }} onClick={() => onSend(email)} disabled={sending}>
+              {sending ? '⏳ Odosiela...' : `📤 Odoslať na ${companyEmail}`}
+            </button>
+          : <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00', marginTop: '0.4rem' }}>⚠ Pridaj email firmy v Kontaktných údajoch</div>
+      )}
+
+      {/* Sent confirmation */}
+      {st === 'sent' && (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#00cc88', marginTop: '0.25rem' }}>
+          ✓ Odoslaný na {companyEmail || '–'}{email.sentAt ? ` · ${fmtTs(email.sentAt)}` : ''}
         </div>
       )}
     </div>
@@ -562,67 +573,69 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   }
 
   // ── Email workflow handlers ────────────────────────────────────────────────
-  async function handleCreateDraft(subject, body) {
+  async function handleCreateDraft() {
     await withFb('createDraft', async () => {
-      let finalSubj = subject
-      let finalBody = body
+      const kbSnap = await getDocs(collection(db, 'knowledge_base'))
+      const knowledgeBase = kbSnap.docs.map(d => d.data())
 
-      if (!finalSubj || !finalBody) {
-        // AI-powered generation
-        const kbSnap = await getDocs(collection(db, 'knowledge_base'))
-        const knowledgeBase = kbSnap.docs.map(d => d.data())
+      const reasoning3 = (live.aiReasoning || []).slice(0, 3).join(', ')
+      const prompt = `Vytvor prvý kontaktný email pre firmu ${live.name} (${live.category}) v ${live.city || '–'}. BPS: ${live.aiScore ?? '–'}/100. ${live.aiReason || ''}. ${reasoning3 ? 'Faktory: ' + reasoning3 : ''} Použi STRIKER knowledge base.`
 
-        const reasoning3 = (live.aiReasoning || []).slice(0, 3).join(', ')
-        const prompt = `Vytvor profesionálny prvý kontaktný email v nemčine pre firmu ${live.name} (${live.category}) v ${live.city || '–'}. BPS score: ${live.aiScore ?? '–'}/100. Dôvod: ${live.aiReason || '–'}. ${reasoning3 ? 'BPS faktory: ' + reasoning3 + '.' : ''} Typ emailu: prvý kontakt. Použi STRIKER knowledge base.`
+      const res = await fetch('/.netlify/functions/ai-advisor', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          messages:       [{ role: 'user', content: prompt }],
+          companyContext: buildCompanyContext(),
+          knowledgeBase,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'AI chyba')
 
-        const res = await fetch('/.netlify/functions/ai-advisor', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            messages:        [{ role: 'user', content: prompt }],
-            companyContext:  buildCompanyContext(),
-            knowledgeBase,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || 'AI chyba pri generovaní draftu')
-
-        const text  = data.text || ''
-        const lines = text.split('\n')
-        const sLine = lines.find(l => /^predmet:/i.test(l.trim()))
-        finalSubj   = sLine ? sLine.replace(/^predmet:\s*/i, '').trim() : `STRIKER — ${live.name}`
-        const after = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
-        finalBody   = after.replace(/^\s*\n+/, '').trim()
-      }
+      const text  = stripAiNoise(data.text || '')
+      const lines = text.split('\n')
+      const sLine = lines.find(l => /^predmet:/i.test(l.trim()))
+      const subjectSk = sLine ? sLine.replace(/^predmet:\s*/i, '').trim() : `STRIKER — ${live.name}`
+      const after     = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
+      const bodySk    = after.replace(/^\s*\n+/, '').trim()
 
       await addDoc(collection(db, 'emails'), {
         companyId:   live.id,
-        companyName: live.name,
-        to:          live.email || '',
-        subject:     finalSubj,
-        body:        finalBody,
+        type:        'first_contact',
+        subjectSk,   bodySk,
+        subjectDe:   '',  bodyDe: '',
         status:      'draft',
+        generatedBy: CURRENT_USER,
+        aiModel:     'claude-haiku-4-5',
         createdAt:   serverTimestamp(),
-        createdBy:   CURRENT_USER,
-        sentAt:      null,
+        updatedAt:   serverTimestamp(),
+        edited:      false,
       })
-      await logEvent('draft_created', `${CURRENT_USER} vytvoril AI email draft pre ${live.name}`)
+      await logEvent('email_draft_created_sk', `${CURRENT_USER} vytvoril AI SK draft pre ${live.name}`)
     })
   }
 
-  async function handleApproveDraft(emailId, subject, body) {
+  async function handleSaveSkDraft(emailId, subjectSk, bodySk) {
     try {
-      await updateDoc(doc(db, 'emails', emailId), {
-        status: 'approved', subject, body,
-        approvedAt: serverTimestamp(), approvedBy: CURRENT_USER,
-      })
-      await logEvent('draft_approved', `${CURRENT_USER} schválil email draft`)
-      showToast('Draft schválený ✓')
+      await updateDoc(doc(db, 'emails', emailId), { subjectSk, bodySk, updatedAt: serverTimestamp(), edited: true })
+      await logEvent('email_draft_edited_sk', `${CURRENT_USER} upravil SK draft`)
+      showToast('SK draft uložený ✓')
     } catch (e) { showToast('Chyba: ' + e.message, 'err') }
   }
 
-  async function handleTranslateDraft(email) {
-    const prompt = `Prelož tento email do profesionálnej nemčiny, B2B štýl, Sie-forma, zachovaj štruktúru:\n\nPredmet: ${email.subject}\n\n${email.body}`
+  async function handleSaveDeDraft(emailId, subjectDe, bodyDe) {
+    try {
+      await updateDoc(doc(db, 'emails', emailId), { subjectDe, bodyDe, updatedAt: serverTimestamp(), edited: true })
+      await logEvent('email_draft_edited_de', `${CURRENT_USER} upravil DE draft`)
+      showToast('DE draft uložený ✓')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  async function handleTranslateDraft(email, subjSk, bodySk) {
+    const skSubj = subjSk || email.subjectSk || ''
+    const skBody = bodySk || email.bodySk    || ''
+    const prompt = `Prelož tento email do profesionálnej nemčiny, B2B štýl, Sie-forma, zachovaj štruktúru:\n\nPredmet: ${skSubj}\n\n${skBody}`
     try {
       const res = await fetch('/.netlify/functions/ai-advisor', {
         method:  'POST',
@@ -635,25 +648,53 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Chyba prekladu')
 
-      const text   = data.text || ''
-      const lines  = text.split('\n')
-      const sLine  = lines.find(l => /^betreff:/i.test(l.trim()))
-      const deSubj = sLine ? sLine.replace(/^betreff:\s*/i, '').trim() : email.subject
-      const after  = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
-      const deBody = after.replace(/^\s*\n+/, '').trim()
+      const text  = stripAiNoise(data.text || '')
+      const lines = text.split('\n')
+      const sLine = lines.find(l => /^betreff:/i.test(l.trim()))
+      const subjectDe = sLine ? sLine.replace(/^betreff:\s*/i, '').trim() : skSubj
+      const after     = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
+      const bodyDe    = after.replace(/^\s*\n+/, '').trim()
 
       await updateDoc(doc(db, 'emails', email.id), {
-        subject:      deSubj,
-        body:         deBody,
-        translated:   true,
+        subjectDe, bodyDe,
+        status:       'translated',
+        updatedAt:    serverTimestamp(),
         translatedAt: serverTimestamp(),
       })
-      await logEvent('email_translated', `${CURRENT_USER} preložil email do nemčiny`)
+      await logEvent('email_translated_de', `${CURRENT_USER} preložil draft do nemčiny`)
       showToast('✓ Preložené do nemčiny')
-    } catch (e) {
-      showToast('Chyba prekladu: ' + e.message, 'err')
-      throw e
-    }
+    } catch (e) { showToast('Chyba prekladu: ' + e.message, 'err'); throw e }
+  }
+
+  async function handleApproveEmail(emailId) {
+    try {
+      await updateDoc(doc(db, 'emails', emailId), {
+        status: 'approved', approvedBy: CURRENT_USER,
+        approvedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      })
+      await logEvent('email_draft_approved', `${CURRENT_USER} schválil email draft`)
+      showToast('Email schválený ✓')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  async function handleDeleteEmail(emailId) {
+    if (!window.confirm('Zmazať email draft?')) return
+    try {
+      await updateDoc(doc(db, 'emails', emailId), {
+        status: 'deleted', deletedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      })
+      await logEvent('email_deleted', `${CURRENT_USER} zmazal email draft`)
+      showToast('Draft zmazaný')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  function handleCopyEmail(email) {
+    const text = (email.subjectDe && email.bodyDe)
+      ? `${email.subjectDe}\n\n${email.bodyDe}`
+      : `${email.subjectSk}\n\n${email.bodySk}`
+    navigator.clipboard.writeText(text)
+      .then(() => { showToast('📋 Skopírované'); logEvent('email_copied', `${CURRENT_USER} skopíroval email draft`) })
+      .catch(() => showToast('Kopírovanie zlyhalo', 'err'))
   }
 
   async function handleFindEmail() {
@@ -685,20 +726,27 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   }
 
   async function handleSendEmail(email) {
-    if (!email.to) { showToast('Chýba emailová adresa príjemcu', 'err'); return }
+    if (!live.email) { showToast('Firma nemá email', 'err'); return }
     setSendingEmail(true)
     try {
       const res = await fetch('/.netlify/functions/send-email', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ to: email.to, subject: email.subject, body: email.body, companyId: live.id, companyName: live.name }),
+        body:    JSON.stringify({
+          to:          live.email,
+          subjectDe:   email.subjectDe,
+          bodyDe:      email.bodyDe,
+          companyId:   live.id,
+          companyName: live.name,
+        }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Odoslanie zlyhalo')
       await updateDoc(doc(db, 'emails', email.id), {
-        status: 'sent', sentAt: serverTimestamp(),
+        status: 'sent', sentBy: CURRENT_USER,
+        sentAt: serverTimestamp(), updatedAt: serverTimestamp(),
       })
-      await logEvent('email_sent', `${CURRENT_USER} odoslal email`)
+      await logEvent('email_sent', `${CURRENT_USER} odoslal email na ${live.email}`)
       showToast('Email odoslaný ✓')
     } catch (e) {
       showToast('Chyba odoslania: ' + e.message, 'err')
@@ -1006,20 +1054,25 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
               {live.email ? `✓ ${live.email}` : '⚠ Email chýba'}
             </span>
             <button style={css.btnPrimary} onClick={() => handleCreateDraft()}>
-              {fb.createDraft === 'saving' ? '⏳' : '+ Vytvoriť draft'}
+              {fb.createDraft === 'saving' ? '⏳ AI generuje...' : '+ Vytvoriť AI draft'}
             </button>
           </div>
 
-          {emails.length === 0 && (
+          {emails.filter(e => e.status !== 'deleted').length === 0 && (
             <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#4b5563', padding: '0.5rem 0' }}>
-              Žiadne emaily — klikni "Vytvoriť draft" pre začatie.
+              Žiadne drafty — klikni "+ Vytvoriť AI draft" pre začatie.
             </div>
           )}
-          {emails.map(email => (
+          {emails.filter(e => e.status !== 'deleted').map(email => (
             <EmailWorkflowCard key={email.id} email={email}
-              onApprove={handleApproveDraft}
-              onSend={handleSendEmail}
+              companyEmail={live.email}
+              onSaveSk={handleSaveSkDraft}
+              onSaveDe={handleSaveDeDraft}
               onTranslate={handleTranslateDraft}
+              onApprove={handleApproveEmail}
+              onSend={handleSendEmail}
+              onDelete={handleDeleteEmail}
+              onCopy={handleCopyEmail}
               sending={sendingEmail} />
           ))}
         </div>
@@ -1322,4 +1375,10 @@ const css = {
   suggApprove:      { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.2rem 0.55rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
   suggTask:         { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.2rem 0.5rem', border: '1px solid #ffaa0055', background: 'transparent', color: '#ffaa00', borderRadius: 2, cursor: 'pointer' },
   suggReject:       { fontFamily: mono, fontSize: '0.58rem', padding: '0.2rem 0.45rem', border: '1px solid #21262d', background: 'transparent', color: '#4b5563', borderRadius: 2, cursor: 'pointer' },
+  // Email card buttons
+  btnSave:      { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: 'none', background: '#21262d', color: '#e8eaed', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  btnTranslate: { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.65rem', border: '1px solid #3b82f655', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  btnApprove:   { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  btnSend:      { fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.85rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer', marginTop: '0.25rem' },
+  btnIcon:      { background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem', padding: '0 0.15rem', lineHeight: 1, color: '#6b7280' },
 }

@@ -11,19 +11,20 @@ const TRANSLATE_RE    = /prelož|preložiť|translate/i
 
 const DRAFT_BLOCK = `
 
-KRITICKÁ INŠTRUKCIA: Email draft MUSÍ BYŤ NAPÍSANÝ VÝLUČNE V SLOVENSKOM JAZYKU. ŽIADNA NEMČINA. Celý text emailu vrátane predmetu musí byť po slovensky. Bude preložený do nemčiny neskôr.
-FORMAT — odpoveď musí začínať PRESNE TAKTO:
-PREDMET: <predmet emailu v slovenčine>
+RESPOND ONLY IN SLOVAK LANGUAGE. DO NOT USE GERMAN. The email will be translated later.
+Write a professional first-contact email in Slovak for the company above. Use the STRIKER knowledge base. Max 150 words. Clear next step at the end.
+Format EXACTLY (nothing before this):
+PREDMET: <Slovak subject>
 
-<telo emailu v slovenčine>`
+<Slovak email body>`
 
 const TRANSLATE_BLOCK = `
 
-PREKLAD: Prelož email do profesionálnej nemčiny. B2B štýl, Sie-forma, max 150 slov, zachovaj štruktúru originálu. Žiadne agresívne predajné frázy.
-FORMAT — odpoveď musí začínať PRESNE TAKTO (nič pred tým):
-BETREFF: <predmet v nemčine>
+Translate to professional German B2B email. Sie-form. Max 150 words. NO meta-text, NO [AKTION], NO markdown bold (**), NO internal notes, NO questions to user. Only clean email text.
+Format EXACTLY (nothing before this):
+BETREFF: <German subject>
 
-<telo emailu v nemčine>`
+<German email body>`
 
 exports.handler = async (event) => {
   const apiKey = process.env.ANTHROPIC_API_KEY
