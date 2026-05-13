@@ -155,9 +155,13 @@ function stripAiNoise(text) {
 
 function parseEmailBlock(text) {
   if (!text) return { preText: '', emailContent: null, postText: '' }
-  const m = text.match(/([\s\S]*?)\[EMAIL_START\]([\s\S]*?)\[EMAIL_END\]([\s\S]*)/i)
-  if (!m) return { preText: text, emailContent: null, postText: '' }
-  return { preText: m[1].trim(), emailContent: m[2].trim(), postText: m[3].trim() }
+  // Try explicit markers first
+  const markerM = text.match(/([\s\S]*?)\[EMAIL_START\]([\s\S]*?)\[EMAIL_END\]([\s\S]*)/i)
+  if (markerM) return { preText: markerM[1].trim(), emailContent: markerM[2].trim(), postText: markerM[3].trim() }
+  // Auto-detect: everything from "Predmet:" onwards is the email
+  const predIdx = text.search(/^Predmet:/im)
+  if (predIdx !== -1) return { preText: text.slice(0, predIdx).trim(), emailContent: text.slice(predIdx).trim(), postText: '' }
+  return { preText: text, emailContent: null, postText: '' }
 }
 
 function cleanDraftText(text) {
@@ -577,8 +581,13 @@ function ChatMessage({ msg, displayText, role, useMarkdown, onDelete, onEdit, on
         )}
       </div>
 
-      {/* Action buttons — no → Draft here */}
+      {/* Action buttons */}
       <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem', flexWrap: 'wrap', maxWidth: maxW, alignItems: 'center' }}>
+        {isAi && onToDraft && (
+          <button style={{ ...css.chatActionBtn, color: '#ff5c00', borderColor: '#ff5c0044', background: 'rgba(255,92,0,0.07)' }} onClick={doDraft}>
+            📋 → Draft
+          </button>
+        )}
         <button style={css.chatActionBtn} onClick={doCopy}>
           {copied ? '✓ Skopírované' : '📋 Kopírovať'}
         </button>
