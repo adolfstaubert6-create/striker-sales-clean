@@ -362,6 +362,44 @@ function NoteCard({ note, onEdit, onDelete }) {
   )
 }
 
+// ── Audit Row ────────────────────────────────────────────────────────────────
+function AuditRow({ ev, onDelete }) {
+  const [copied, setCopied] = useState(false)
+
+  const text = evMessage(ev)
+
+  function doCopy() {
+    navigator.clipboard.writeText(`${fmtTs(evTs(ev))} — ${text}`).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {})
+  }
+
+  function doDelete() {
+    if (window.confirm('Zmazať tento záznam?')) onDelete(ev.id)
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', padding: '0.5rem 0', borderBottom: '1px solid #161b22' }}>
+      <span style={{ fontSize: '0.72rem', flexShrink: 0, width: 18, marginTop: '0.05rem' }}>{EVENT_ICONS[ev.type] || '·'}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#4b5563', marginBottom: '0.15rem' }}>{fmtTs(evTs(ev)) || '–'}</div>
+        <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#9ca3af', lineHeight: 1.5 }}>{text}</div>
+        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem' }}>
+          <button style={css.chatActionBtn} onClick={doCopy}>
+            {copied ? '✓ Skopírované' : '📋 Kopírovať'}
+          </button>
+          <button
+            style={css.chatActionBtn}
+            onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
+            onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
+            onClick={doDelete}>🗑 Zmazať</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── AI Chat Message ──────────────────────────────────────────────────────────
 function ChatMessage({ msg, displayText, role, onDelete, onEdit }) {
   const [copied, setCopied]     = useState(false)
@@ -440,6 +478,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [tasks, setTasks]         = useState([])
   const [newNote, setNewNote]     = useState('')
   const [notesOpen, setNotesOpen] = useState(false)
+  const [auditOpen, setAuditOpen] = useState(false)
   const [taskText, setTaskText]   = useState('')
   const [draftSubj, setDraftSubj] = useState('')
   const [draftBody, setDraftBody] = useState('')
@@ -979,6 +1018,12 @@ PRAVIDLÁ EMAILU:
     }
   }
 
+  async function handleDeleteInteraction(id) {
+    try {
+      await deleteDoc(doc(db, 'interactions', id))
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
   async function handleDeleteAiChat(id) {
     try { await deleteDoc(doc(db, 'ai_chats', id)) }
     catch (e) { showToast('Chyba: ' + e.message, 'err') }
@@ -1335,23 +1380,43 @@ PRAVIDLÁ EMAILU:
 
         <div style={css.divider} />
 
-        {/* ══ TIMELINE ══ */}
+        {/* ══ TIMELINE — trigger button ══ */}
         <div style={css.section}>
-          <ColTitle>Audit trail · {interactions.length} udalostí</ColTitle>
-          {interactions.length === 0 ? (
-            <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#4b5563' }}>Žiadne udalosti</div>
-          ) : (
-            <div style={css.timeline}>
-              {interactions.slice(0, 20).map(ev => (
-                <div key={ev.id} style={css.tlRow}>
-                  <span style={css.tlIcon}>{EVENT_ICONS[ev.type] || '·'}</span>
-                  <span style={css.tlTime}>{fmtTs(evTs(ev)) || '–'}</span>
-                  <span style={css.tlMsg}>{evMessage(ev)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <button
+            style={{ fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.35rem 0.85rem', border: '1px solid #21262d', background: 'transparent', color: interactions.length > 0 ? '#e8eaed' : '#6b7280', borderRadius: 2, cursor: 'pointer' }}
+            onClick={() => setAuditOpen(true)}>
+            🕐 Audit trail {interactions.length > 0 ? `(${interactions.length})` : ''}
+          </button>
         </div>
+
+        {/* ══ AUDIT TRAIL DRAWER ══ */}
+        {auditOpen && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 599, background: 'rgba(0,0,0,0.55)' }} onClick={() => setAuditOpen(false)} />
+            <div style={{ position: 'fixed', inset: 0, zIndex: 600, display: 'flex', justifyContent: 'flex-end', pointerEvents: 'none' }}>
+              <div style={{ width: '100%', maxWidth: 520, height: '100%', background: '#0d1117', borderLeft: '1px solid #21262d', display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.7)', pointerEvents: 'auto' }}>
+
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid #1e2530', flexShrink: 0 }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#6b7280' }}>
+                    🕐 Audit trail · {interactions.length} udalostí
+                  </span>
+                  <button style={{ background: 'transparent', border: '1px solid #21262d', color: '#6b7280', width: 28, height: 28, borderRadius: 3, fontSize: '0.85rem', cursor: 'pointer' }} onClick={() => setAuditOpen(false)}>✕</button>
+                </div>
+
+                {/* Events list */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem 1.25rem' }}>
+                  {interactions.length === 0 && (
+                    <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#4b5563', textAlign: 'center', padding: '2rem 0' }}>Žiadne udalosti</div>
+                  )}
+                  {interactions.map(ev => (
+                    <AuditRow key={ev.id} ev={ev} onDelete={handleDeleteInteraction} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         <div style={css.divider} />
 
