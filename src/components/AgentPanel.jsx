@@ -1,5 +1,8 @@
 import { useState } from 'react'
+import { db } from '../firebase.js'
+import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'
 
+const CURRENT_USER = 'Staubert'
 const mono = "'IBM Plex Mono',monospace"
 
 const SEGMENTS = [
@@ -23,10 +26,51 @@ export default function AgentPanel({ onDone }) {
   const [running, setRunning] = useState(false)
   const [activeStep, setActiveStep] = useState(null)   // current step key
   const [log, setLog]         = useState([])
-  const [result, setResult]   = useState(null)
-  const [error, setError]     = useState(null)
+  const [result, setResult]       = useState(null)
+  const [error, setError]         = useState(null)
+  const [cardStatuses, setCardStatuses] = useState({}) // { [docId]: 'pending'|'saving'|'approved'|'rejected' }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  function setCardStatus(docId, status) {
+    setCardStatuses(prev => ({ ...prev, [docId]: status }))
+  }
+
+  async function handleApprove(docId) {
+    setCardStatus(docId, 'saving')
+    try {
+      await updateDoc(doc(db, 'companies', docId), {
+        agentStatus: 'approved', updatedAt: serverTimestamp(),
+      })
+      await addDoc(collection(db, 'interactions'), {
+        companyId: docId, type: 'agent_approved',
+        message: `${CURRENT_USER} schválil agent email draft`,
+        createdBy: CURRENT_USER, createdAt: serverTimestamp(),
+      })
+      setCardStatus(docId, 'approved')
+    } catch (e) {
+      setCardStatus(docId, 'pending')
+      console.error('[AgentPanel] approve failed:', e.message)
+    }
+  }
+
+  async function handleReject(docId) {
+    setCardStatus(docId, 'saving')
+    try {
+      await updateDoc(doc(db, 'companies', docId), {
+        agentStatus: 'rejected', updatedAt: serverTimestamp(),
+      })
+      await addDoc(collection(db, 'interactions'), {
+        companyId: docId, type: 'agent_rejected',
+        message: `${CURRENT_USER} zamietol agent email draft`,
+        createdBy: CURRENT_USER, createdAt: serverTimestamp(),
+      })
+      setCardStatus(docId, 'rejected')
+    } catch (e) {
+      setCardStatus(docId, 'pending')
+      console.error('[AgentPanel] reject failed:', e.message)
+    }
+  }
 
   function addLog(msg) {
     setLog(prev => [...prev, { msg, ts: new Date().toLocaleTimeString('sk', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }])
@@ -63,6 +107,10 @@ export default function AgentPanel({ onDone }) {
 
       setActiveStep(null)
       setResult(data)
+      // Init card statuses — all pending for cards that have a docId
+      const initStatuses = {}
+      data.report?.forEach(r => { if (r.docId) initStatuses[r.docId] = 'pending' })
+      setCardStatuses(initStatuses)
       data.report?.forEach(r => {
         const icon = r.status === 'done' ? '✅' : '❌'
         const priorityLabel = r.priority === 'high' ? 'VYSOKÝ' : r.priority === 'medium' ? 'STREDNÝ' : r.priority === 'low' ? 'NÍZKY' : (r.priority || '–')
@@ -81,7 +129,7 @@ export default function AgentPanel({ onDone }) {
   }
 
   function handleReset() {
-    setResult(null); setLog([]); setError(null); setActiveStep(null)
+    setResult(null); setLog([]); setError(null); setActiveStep(null); setCardStatuses({})
   }
 
   return (
@@ -205,6 +253,33 @@ export default function AgentPanel({ onDone }) {
               {r.draftDe && <div style={css.resultDraft}>✉ {r.draftDe}</div>}
               {r.nextStep && <div style={css.resultNext}>→ ĎALŠÍ KROK: {r.nextStep}</div>}
               {r.error && <div style={css.resultError}>⚠ CHYBA: {r.error}</div>}
+
+              {/* Approve / Reject — only for cards with a Firestore doc */}
+              {r.docId && r.status === 'done' && (() => {
+                const cs = cardStatuses[r.docId] || 'pending'
+                if (cs === 'approved') return (
+                  <div style={css.statusBadgeOk}>✅ SCHVÁLENÉ</div>
+                )
+                if (cs === 'rejected') return (
+                  <div style={css.statusBadgeErr}>❌ ZAMIETNUTÉ</div>
+                )
+                return (
+                  <div style={css.actionRow}>
+                    <button
+                      style={{ ...css.approveBtn, opacity: cs === 'saving' ? 0.6 : 1 }}
+                      disabled={cs === 'saving'}
+                      onClick={() => handleApprove(r.docId)}>
+                      {cs === 'saving' ? '⏳' : '✅ SCHVÁLIŤ'}
+                    </button>
+                    <button
+                      style={{ ...css.rejectBtn, opacity: cs === 'saving' ? 0.6 : 1 }}
+                      disabled={cs === 'saving'}
+                      onClick={() => handleReject(r.docId)}>
+                      {cs === 'saving' ? '⏳' : '❌ ZAMIETNUŤ'}
+                    </button>
+                  </div>
+                )
+              })()}
             </div>
           ))}
         </div>
@@ -281,4 +356,10 @@ const css = {
   resultDraft: { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', marginTop: '0.2rem', fontStyle: 'italic' },
   resultNext:  { fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00', marginTop: '0.2rem' },
   resultError: { fontFamily: mono, fontSize: '0.6rem', color: '#ef4444', marginTop: '0.2rem' },
+
+  actionRow:      { display: 'flex', gap: '0.45rem', marginTop: '0.6rem', paddingTop: '0.55rem', borderTop: '1px solid #1e2530' },
+  approveBtn:     { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  rejectBtn:      { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: '1px solid #ef444466', background: 'rgba(239,68,68,0.08)', color: '#ef4444', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  statusBadgeOk:  { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#00cc88', marginTop: '0.55rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2530' },
+  statusBadgeErr: { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#ef4444', marginTop: '0.55rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2530' },
 }
