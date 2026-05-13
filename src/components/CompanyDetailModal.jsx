@@ -1174,7 +1174,7 @@ PRAVIDLÁ EMAILU:
 
           {/* Create / overwrite button */}
           <button style={css.btnPrimary} onClick={() => handleCreateDraft()} disabled={fb.createDraft === 'saving'}>
-            {fb.createDraft === 'saving' ? '⏳ AI generuje...' : activeDraft ? '↺ Prepísať novým AI draftom' : '+ Vytvoriť AI draft'}
+            {fb.createDraft === 'saving' ? '⏳ AI generuje...' : '✦ Vytvoriť nový draft'}
           </button>
         </div>
 
