@@ -103,6 +103,35 @@ export default function Dashboard() {
     }
   }
 
+  const [addOpen, setAddOpen]   = useState(false)
+  const [addForm, setAddForm]   = useState({ name: '', email: '', phone: '', website: '', city: '', category: 'hotel' })
+  const [addSaving, setAddSaving] = useState(false)
+
+  function setField(k, v) { setAddForm(f => ({ ...f, [k]: v })) }
+
+  async function handleAddContact() {
+    if (!addForm.name.trim()) return
+    setAddSaving(true)
+    try {
+      await addDoc(collection(db, 'companies'), {
+        name:      addForm.name.trim(),
+        email:     addForm.email.trim(),
+        phone:     addForm.phone.trim(),
+        website:   addForm.website.trim(),
+        city:      addForm.city.trim(),
+        category:  addForm.category,
+        status:    'new',
+        createdAt: serverTimestamp(),
+      })
+      setAddForm({ name: '', email: '', phone: '', website: '', city: '', category: 'hotel' })
+      setAddOpen(false)
+    } catch (e) {
+      alert('Chyba: ' + e.message)
+    } finally {
+      setAddSaving(false)
+    }
+  }
+
   const [seeded, setSeeded] = useState(false)
 
   async function handleSeedTestCompany() {
@@ -139,6 +168,7 @@ export default function Dashboard() {
       <AiSummaryPanel companies={companies} />
 
       <div style={css.toolbar}>
+        <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať kontakt</button>
         {FILTERS.map(f => (
           <button key={f.key}
             style={{ ...css.fbtn, ...(filter === f.key ? css.fbtnOn : {}) }}
@@ -190,6 +220,53 @@ export default function Dashboard() {
         />
       )}
 
+      {/* Add contact modal */}
+      {addOpen && (
+        <div style={css.overlay} onClick={e => e.target === e.currentTarget && setAddOpen(false)}>
+          <div style={css.modal}>
+            <div style={css.mhead}>
+              <span style={css.mtitle}>+ Pridať kontakt</span>
+              <button style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1rem', cursor: 'pointer' }} onClick={() => setAddOpen(false)}>✕</button>
+            </div>
+            <label style={css.mlabel}>Názov firmy *</label>
+            <input style={css.minput} placeholder="Firma GmbH" value={addForm.name} onChange={e => setField('name', e.target.value)} autoFocus />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+              <div>
+                <label style={css.mlabel}>Email</label>
+                <input style={css.minput} placeholder="info@firma.de" value={addForm.email} onChange={e => setField('email', e.target.value)} />
+              </div>
+              <div>
+                <label style={css.mlabel}>Telefón</label>
+                <input style={css.minput} placeholder="+49 171 000 0000" value={addForm.phone} onChange={e => setField('phone', e.target.value)} />
+              </div>
+              <div>
+                <label style={css.mlabel}>Web</label>
+                <input style={css.minput} placeholder="firma.de" value={addForm.website} onChange={e => setField('website', e.target.value)} />
+              </div>
+              <div>
+                <label style={css.mlabel}>Mesto</label>
+                <input style={css.minput} placeholder="Berlin" value={addForm.city} onChange={e => setField('city', e.target.value)} />
+              </div>
+            </div>
+            <label style={css.mlabel}>Kategória</label>
+            <select style={{ ...css.minput, cursor: 'pointer' }} value={addForm.category} onChange={e => setField('category', e.target.value)}>
+              <option value="hotel">🏨 Hotel</option>
+              <option value="laundry">🧺 Práčovňa</option>
+              <option value="spa">💆 Wellness / Spa</option>
+              <option value="hospital">🏥 Nemocnica</option>
+              <option value="restaurant">🍽️ Reštaurácia</option>
+            </select>
+            <div style={css.mbtns}>
+              <button style={{ ...css.mbtnOk, opacity: addSaving || !addForm.name.trim() ? 0.5 : 1 }}
+                onClick={handleAddContact} disabled={addSaving || !addForm.name.trim()}>
+                {addSaving ? '⏳ Ukladám...' : '✓ Uložiť'}
+              </button>
+              <button style={css.mbtnCancel} onClick={() => setAddOpen(false)}>Zrušiť</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Draft modal */}
       {draft && (
         <div style={css.overlay} onClick={e => e.target === e.currentTarget && setDraft(null)}>
@@ -221,6 +298,7 @@ export default function Dashboard() {
 
 const css = {
   toolbar:    { display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem', alignItems: 'center' },
+  addBtn:     { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: '1px solid #00cc8855', background: 'rgba(0,204,136,0.08)', color: '#00cc88', borderRadius: 2, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' },
   fbtn:       { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.65rem', border: '1px solid #1e2530', background: 'transparent', color: '#6b7280', borderRadius: 2 },
   fbtnOn:     { borderColor: '#ff5c00', color: '#ff5c00' },
   search:     { flex: 1, minWidth: 180, background: '#111418', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.72rem', padding: '0.28rem 0.6rem', borderRadius: 2, outline: 'none' },
