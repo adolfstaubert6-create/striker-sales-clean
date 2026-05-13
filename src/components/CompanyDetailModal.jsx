@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { db } from '../firebase.js'
 import {
-  doc, collection, onSnapshot, updateDoc, addDoc, getDocs,
+  doc, collection, onSnapshot, updateDoc, addDoc, getDocs, deleteDoc,
   query, where, serverTimestamp,
 } from 'firebase/firestore'
 import { COMPANY_STATUSES, STATUS_LIST } from '../constants/companyStatuses.js'
@@ -341,6 +341,66 @@ function NoteCard({ note, onEdit, onDelete }) {
       ) : (
         <div style={css.noteText}>{note.text}</div>
       )}
+    </div>
+  )
+}
+
+// ── AI Chat Message ──────────────────────────────────────────────────────────
+function AiChatMessage({ msg, displayText, onDelete, onEdit }) {
+  const [copied, setCopied]     = useState(false)
+  const [editing, setEditing]   = useState(false)
+  const [editText, setEditText] = useState(displayText)
+
+  function doCopy() {
+    navigator.clipboard.writeText(displayText).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {})
+  }
+
+  function doDelete() {
+    if (window.confirm('Zmazať túto správu?')) onDelete(msg.id)
+  }
+
+  function doSave() {
+    if (editText.trim()) onEdit(msg.id, editText.trim())
+    setEditing(false)
+  }
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+      <div style={{ maxWidth: '92%' }}>
+        <div style={{ background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: '3px 3px 3px 0', padding: '0.7rem 0.9rem' }}>
+          {editing ? (
+            <textarea
+              style={{ width: '100%', background: 'transparent', border: 'none', color: '#c9d1d9', fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', lineHeight: 1.75, resize: 'vertical', outline: 'none', minHeight: 80, display: 'block' }}
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              autoFocus
+            />
+          ) : (
+            <span style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.8rem', color: '#c9d1d9', lineHeight: 1.75, whiteSpace: 'pre-wrap', display: 'block' }}>{displayText}</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.2rem', marginLeft: '0.05rem' }}>
+          <button style={css.chatActionBtn} onClick={doCopy}>
+            {copied ? '✓ Skopírované' : '📋'}
+          </button>
+          {editing ? (
+            <>
+              <button style={{ ...css.chatActionBtn, color: '#00cc88', borderColor: '#00cc8833' }} onClick={doSave}>✓ Uložiť</button>
+              <button style={css.chatActionBtn} onClick={() => { setEditing(false); setEditText(displayText) }}>Zrušiť</button>
+            </>
+          ) : (
+            <button style={css.chatActionBtn} onClick={() => setEditing(true)}>✏</button>
+          )}
+          <button
+            style={css.chatActionBtn}
+            onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
+            onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
+            onClick={doDelete}>✕</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -892,6 +952,17 @@ PRAVIDLÁ EMAILU:
     }
   }
 
+  async function handleDeleteAiChat(id) {
+    try { await deleteDoc(doc(db, 'ai_chats', id)) }
+    catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  async function handleEditAiChat(id, newText) {
+    try {
+      await updateDoc(doc(db, 'ai_chats', id), { message: newText, edited: true, updatedAt: serverTimestamp() })
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
   async function sendAiMessage(text) {
     const msg = (text || aiInput).trim()
     if (!msg || aiLoading) return
@@ -1294,13 +1365,20 @@ PRAVIDLÁ EMAILU:
               const suggestion  = parsed?.suggestion || null
               return (
               <div key={m.id || i}>
-                <div style={m.role === 'user' ? css.msgUserWrap : css.msgAiWrap}>
-                  <div style={m.role === 'user' ? css.msgUser : css.msgAi}>
-                    {m.role === 'user'
-                      ? <span style={css.msgUserText}>{m.message}</span>
-                      : <span style={css.msgAiText}>{displayText}</span>}
+                {m.role === 'user' ? (
+                  <div style={css.msgUserWrap}>
+                    <div style={css.msgUser}>
+                      <span style={css.msgUserText}>{m.message}</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <AiChatMessage
+                    msg={m}
+                    displayText={displayText}
+                    onDelete={handleDeleteAiChat}
+                    onEdit={handleEditAiChat}
+                  />
+                )}
                 {/* Confidence badge */}
                 {m.role === 'assistant' && (() => {
                   const conf = extractConfidence(displayText)
@@ -1485,4 +1563,5 @@ const css = {
   btnIcon:       { background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.9rem', padding: '0 0.15rem', lineHeight: 1, color: '#6b7280' },
   cardBtn:       { fontFamily: mono, fontSize: '0.57rem', letterSpacing: '0.5px', padding: '0.18rem 0.5rem', border: '1px solid #21262d', background: 'transparent', color: '#9ca3af', borderRadius: 2, cursor: 'pointer', whiteSpace: 'nowrap' },
   cardBtnDanger: { fontFamily: mono, fontSize: '0.57rem', letterSpacing: '0.5px', padding: '0.18rem 0.5rem', border: '1px solid #ef444444', background: 'rgba(239,68,68,0.08)', color: '#ef4444', borderRadius: 2, cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600 },
+  chatActionBtn: { fontFamily: mono, fontSize: '0.56rem', letterSpacing: '0.3px', padding: '0.1rem 0.38rem', border: '1px solid #1e2530', background: 'transparent', color: '#4b5563', borderRadius: 2, cursor: 'pointer', lineHeight: 1.5 },
 }
