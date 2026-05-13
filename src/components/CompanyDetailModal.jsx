@@ -580,7 +580,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       const res = await fetch('/.netlify/functions/send-email', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ to: email.to, subject: email.subject, message: email.body }),
+        body:    JSON.stringify({ to: email.to, subject: email.subject, body: email.body, companyId: live.id, companyName: live.name }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Odoslanie zlyhalo')
