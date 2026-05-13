@@ -169,6 +169,7 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
   const [translating, setTranslating] = useState(false)
   const [editing, setEditing]         = useState(false)
   const [copied, setCopied]           = useState(false)
+  const [zoomed, setZoomed]           = useState(false)
 
   useEffect(() => {
     setSubjDe(email.subjectDe || '')
@@ -194,9 +195,9 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
   }
 
   const inp    = { width: '100%', background: '#0d1117', border: '1px solid #30363d', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.55rem', borderRadius: 2, outline: 'none', marginBottom: '0.35rem', boxSizing: 'border-box' }
-  const area   = { ...inp, resize: 'vertical', minHeight: 100, lineHeight: 1.65, fontSize: '0.63rem', marginBottom: '0.4rem' }
+  const area   = { ...inp, resize: 'vertical', minHeight: zoomed ? 320 : 100, lineHeight: 1.65, fontSize: '0.63rem', marginBottom: '0.4rem' }
   const roSubj = { fontFamily: mono, fontSize: '0.7rem', fontWeight: 600, color: '#e8eaed', marginBottom: '0.5rem', paddingBottom: '0.4rem', borderBottom: '1px solid #1e2530' }
-  const roBody = { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: '0.5rem' }
+  const roBody = { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.7, whiteSpace: 'pre-wrap', marginBottom: '0.5rem', minHeight: zoomed ? 280 : undefined, maxHeight: zoomed ? undefined : 180, overflowY: zoomed ? 'visible' : 'auto' }
 
   if (isSk) return (
     <div style={{ border: '1px solid #ffaa0044', borderLeft: '3px solid #ffaa00', borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.7rem', background: '#0d1117' }}>
@@ -205,6 +206,9 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
         <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#ffaa00' }}>🇸🇰 SK Draft</span>
         <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          <button style={css.cardBtn} onClick={() => setZoomed(v => !v)}>
+            {zoomed ? '⊖ Zoom' : '⊕ Zoom'}
+          </button>
           <button style={css.cardBtn} onClick={() => setEditing(v => !v)}>
             {editing ? '✕ Zavrieť' : '✏ Upraviť'}
           </button>
@@ -249,6 +253,9 @@ function EmailWorkflowCard({ email, companyEmail, onSaveSk, onSaveDe, onTranslat
           <button style={{ ...css.cardBtn, color: '#6b7280' }} onClick={() => onBackToSk(email.id)}>← Späť na SK</button>
         </div>
         <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          <button style={css.cardBtn} onClick={() => setZoomed(v => !v)}>
+            {zoomed ? '⊖ Zoom' : '⊕ Zoom'}
+          </button>
           <button style={css.cardBtn} onClick={() => setEditing(v => !v)}>
             {editing ? '✕ Zavrieť' : '✏ Upraviť'}
           </button>
