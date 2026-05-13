@@ -1,6 +1,6 @@
 import { db } from '../firebase.js'
 import {
-  collection, addDoc, getDocs, query, where, limit,
+  collection, addDoc, getDocs, deleteDoc, query, where, limit,
   serverTimestamp, orderBy, onSnapshot, doc, updateDoc
 } from 'firebase/firestore'
 import { normalizeCompanyData } from '../utils/normalizeCompanyData.js'
@@ -84,10 +84,14 @@ export function subscribeCompanies(callback) {
 
 export async function updateCompanyScore(id, score, reason, factors) {
   await updateDoc(doc(db, 'companies', id), {
-    aiScore: score,
-    aiReason: reason,
-    aiFactors: factors || null,
-    updatedAt: serverTimestamp(),
+    aiScore:      score,
+    aiReason:     reason,
+    aiPositive:   factors?.positive   || [],
+    aiRisks:      factors?.risks      || [],
+    aiNextStep:   factors?.nextStep   || '',
+    aiReasoning:  factors?.reasoning  || [],
+    aiConfidence: factors?.confidence || 'nízka',
+    updatedAt:    serverTimestamp(),
   })
 }
 
@@ -105,44 +109,26 @@ export async function saveDraft(companyId, companyName, subject, body) {
 
 export async function seedKnowledgeBase() {
   const ref  = collection(db, 'knowledge_base')
-  const snap = await getDocs(query(ref, limit(1)))
-  if (!snap.empty) return // already seeded
+  const snap = await getDocs(ref)
+
+  // Check for v2 (Slovak) entries — skip if already seeded
+  if (snap.docs.some(d => d.data().title === 'Co je STRIKER')) return
+
+  // Remove old German entries if present
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
 
   const entries = [
-    {
-      title:    'Was ist STRIKER',
-      category: 'technology',
-      content:  'Hydrodynamische Kavitations-Heiztechnologie. Elektrischer Input: 45 kW → Thermischer Output: 120-160 kW. COP 2.6-3.5. Einsparung bis 70% gegenüber konventionellen Systemen. Preis: 8.000-10.000 EUR. Lieferzeit 6-8 Wochen.',
-      language: 'de', active: true,
-    },
-    {
-      title:    'Zielgruppen',
-      category: 'targets',
-      content:  'Hotels (4+ Sterne, hoher Warmwasserbedarf), industrielle Wäschereien, Wellness/Spa-Zentren, Krankenhäuser und Kliniken, Restaurants mit Großküchen. Priorität: Betriebe mit >50.000 EUR jährlichen Heizkosten.',
-      language: 'de', active: true,
-    },
-    {
-      title:    'ROI Argumente',
-      category: 'sales',
-      content:  'Einsparung bis 70% gegenüber konventionellen Heizsystemen. Amortisation in 2-4 Jahren. BAFA-Förderung bis 30% möglich. Preis 8.000-10.000 EUR inkl. Installation. Wartungsarm, langlebig, keine Emissionen.',
-      language: 'de', active: true,
-    },
-    {
-      title:    'Email Regeln',
-      category: 'communication',
-      content:  'Professionell und knapp (max 150 Wörter). Kein aggressiver Verkauf. Konkreter nächster Schritt immer am Ende. B2B-Stil: Sehr geehrte Damen und Herren. Fokus auf Kosteneinsparung, nicht Technologie. Einen einzigen klaren Call-to-Action.',
-      language: 'de', active: true,
-    },
-    {
-      title:    'Einwände und Antworten',
-      category: 'objections',
-      content:  '"Zu teuer": ROI in 2-4 Jahren, BAFA-Förderung möglich. "Kein Interesse": Einsparpotenzial kurz nennen, Rückruf anbieten. "Haben bereits ein System": Ergänzung oder Modernisierung möglich. "Brauchen Zeit": Informationsmaterial zusenden, Termin in 2 Wochen vorschlagen.',
-      language: 'de', active: true,
-    },
+    { title: 'Co je STRIKER',       category: 'product',    content: 'Hydrodynamická kavitačná kúriaca technológia. 45kW elektrického vstupu → 120-160kW tepelného výkonu. COP 2.7-3.5. Cena 8000-10000 EUR. Dodacia lehota 6-8 týždňov. Patent chránená technológia.' },
+    { title: 'Cieľové segmenty',    category: 'targets',    content: 'Hotely s wellness (vysoká spotreba TÚV). Priemyselné práčovne (kontinuálna potreba tepla). Wellness centrá a kúpele. Nemocnice. Veľké objekty s dennou spotrebou >500L teplej vody.' },
+    { title: 'ROI argumenty',       category: 'roi',        content: 'Úspora 50-70% nákladov na kúrenie oproti elektrickému ohrievaču. Návratnosť investície 6-18 mesiacov. BAFA dotácia možná v Nemecku. Príklad: hotel 50 izieb ušetrí ~800-1200 EUR/mesiac.' },
+    { title: 'Obchodné argumenty',  category: 'sales',      content: 'Patentovaná technológia. Reálne inštalácie v prevádzke. Žiadna údržba nad rámec bežnej prevádzky. Montáž 1-2 dni. Kompatibilné s existujúcim systémom kúrenia.' },
+    { title: 'Email pravidlá',      category: 'email_rules',content: 'Profesionálny nemecký B2B štýl. Krátky a konkrétny. Žiadne agresívne predajné frázy. Žiadne nereálne sľuby. Jasný ďalší krok. Maximálne 150 slov. Vždy "Sie" nie "du".' },
+    { title: 'Čo nesľubovať',       category: 'warnings',   content: 'Nikdy nesľubovať konkrétne percentá úspory bez analýzy. Nikdy negarantovať BAFA dotáciu. Nikdy nesľubovať okamžitú dodávku. Nepoužívať COP čísla v komunikácii s klientom.' },
+    { title: 'Typické námietky',    category: 'objections', content: 'Príliš drahé → ROI 6-18 mesiacov, BAFA dotácia. Nemáme čas → montáž 1-2 dni, bez prerušenia prevádzky. Máme novú kotolňu → komplementárny systém, znižuje záťaž. Neznáma technológia → patent, reálne inštalácie.' },
   ]
 
   for (const entry of entries) {
     await addDoc(ref, { ...entry, createdAt: serverTimestamp() })
   }
-  console.log('[knowledgeBase] seeded 5 entries')
+  console.log('[knowledgeBase] seeded v2 — 7 entries')
 }

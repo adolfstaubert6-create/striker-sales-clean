@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { db } from '../firebase.js'
 import {
-  doc, collection, onSnapshot, updateDoc, addDoc,
+  doc, collection, onSnapshot, updateDoc, addDoc, getDocs,
   query, where, serverTimestamp,
 } from 'firebase/firestore'
 import { COMPANY_STATUSES, STATUS_LIST } from '../constants/companyStatuses.js'
@@ -517,20 +517,50 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
 
   // ── Email workflow handlers ────────────────────────────────────────────────
   async function handleCreateDraft(subject, body) {
-    const { subject: defSubj, body: defBody } = generateEmailDraft(live)
     await withFb('createDraft', async () => {
+      let finalSubj = subject
+      let finalBody = body
+
+      if (!finalSubj || !finalBody) {
+        // AI-powered generation
+        const kbSnap = await getDocs(collection(db, 'knowledge_base'))
+        const knowledgeBase = kbSnap.docs.map(d => d.data())
+
+        const reasoning3 = (live.aiReasoning || []).slice(0, 3).join(', ')
+        const prompt = `Vytvor profesionálny prvý kontaktný email v nemčine pre firmu ${live.name} (${live.category}) v ${live.city || '–'}. BPS score: ${live.aiScore ?? '–'}/100. Dôvod: ${live.aiReason || '–'}. ${reasoning3 ? 'BPS faktory: ' + reasoning3 + '.' : ''} Typ emailu: prvý kontakt. Použi STRIKER knowledge base.`
+
+        const res = await fetch('/.netlify/functions/ai-advisor', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            messages:        [{ role: 'user', content: prompt }],
+            companyContext:  buildCompanyContext(),
+            knowledgeBase,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'AI chyba pri generovaní draftu')
+
+        const text  = data.text || ''
+        const lines = text.split('\n')
+        const sLine = lines.find(l => /^betreff:/i.test(l.trim()))
+        finalSubj   = sLine ? sLine.replace(/^betreff:\s*/i, '').trim() : `STRIKER — ${live.name}`
+        const after = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
+        finalBody   = after.replace(/^\s*\n+/, '').trim()
+      }
+
       await addDoc(collection(db, 'emails'), {
-        companyId:  live.id,
+        companyId:   live.id,
         companyName: live.name,
-        to:         live.email || '',
-        subject:    subject || defSubj,
-        body:       body    || defBody,
-        status:     'draft',
-        createdAt:  serverTimestamp(),
-        createdBy:  CURRENT_USER,
-        sentAt:     null,
+        to:          live.email || '',
+        subject:     finalSubj,
+        body:        finalBody,
+        status:      'draft',
+        createdAt:   serverTimestamp(),
+        createdBy:   CURRENT_USER,
+        sentAt:      null,
       })
-      await logEvent('draft_created', `${CURRENT_USER} vytvoril email draft`)
+      await logEvent('draft_created', `${CURRENT_USER} vytvoril AI email draft pre ${live.name}`)
     })
   }
 
@@ -621,9 +651,11 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       placeId:        live.googlePlaceId,
       aiScore:        live.aiScore,
       aiReason:       live.aiReason,
-      aiPositive:     live.aiPositive || [],
-      aiRisks:        live.aiRisks    || [],
-      aiNextStep:     live.aiNextStep  || '',
+      aiPositive:     live.aiPositive   || [],
+      aiRisks:        live.aiRisks      || [],
+      aiNextStep:     live.aiNextStep   || '',
+      aiReasoning:    live.aiReasoning  || [],
+      aiConfidence:   live.aiConfidence || null,
       status:         live.status,
       notes:          notes.slice(0, 3).map(n => n.text),
       tasks:          tasks.filter(t => !t.done).map(t => t.text),
@@ -710,15 +742,19 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   ]
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const st       = COMPANY_STATUSES[live.status] || COMPANY_STATUSES.new
-  const pri      = calculatePriorityLabel(live.aiScore)
-  const sc       = live.aiScore
-  const scCol    = SCORE_COLOR(sc)
-  const positive = live.aiPositive || live.aiFactors?.positive || []
-  const risks    = live.aiRisks    || live.aiFactors?.risks    || []
-  const nextStep = live.aiNextStep || live.aiFactors?.nextStep || ''
-  const reason   = live.aiReason   || ''
-  const domain   = extractDomain(live.website)
+  const st         = COMPANY_STATUSES[live.status] || COMPANY_STATUSES.new
+  const pri        = calculatePriorityLabel(live.aiScore)
+  const sc         = live.aiScore
+  const scCol      = SCORE_COLOR(sc)
+  const positive   = live.aiPositive || live.aiFactors?.positive || []
+  const risks      = live.aiRisks    || live.aiFactors?.risks    || []
+  const nextStep   = live.aiNextStep || live.aiFactors?.nextStep || ''
+  const reason     = live.aiReason   || ''
+  const reasoning  = live.aiReasoning  || []
+  const confidence = live.aiConfidence || null
+  const domain     = extractDomain(live.website)
+
+  const CONF_COLORS = { vysoká: '#00cc88', stredná: '#ffaa00', nízka: '#ef4444' }
 
   return (
     <div style={css.overlay} onKeyDown={e => e.key === 'Escape' && onClose()} tabIndex={-1}>
@@ -738,9 +774,16 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
             {nextStep && <div style={css.headerNextStep}>→ {nextStep}</div>}
           </div>
           <div style={css.headerRight}>
-            <div style={{ ...css.scoreCircle, borderColor: scCol, color: scCol }}>
-              <div style={css.scoreNum}>{sc != null ? sc : '–'}</div>
-              <div style={css.scoreBot}>BPS</div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ ...css.scoreCircle, borderColor: scCol, color: scCol }}>
+                <div style={css.scoreNum}>{sc != null ? sc : '–'}</div>
+                <div style={css.scoreBot}>BPS</div>
+              </div>
+              {confidence && (
+                <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: CONF_COLORS[confidence], marginTop: '0.25rem' }}>
+                  {confidence}
+                </div>
+              )}
             </div>
             <div style={{ ...css.statusBadge, background: st.bg, color: st.color, borderColor: st.color + '55' }}>
               {st.label}
@@ -802,6 +845,15 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
             <ColTitle>AI Analýza</ColTitle>
             <AiBadge pri={pri} score={sc} />
             {reason && <div style={css.aiReason}>✦ {reason}</div>}
+            {reasoning.slice(0, 3).length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.75rem' }}>
+                {reasoning.slice(0, 3).map((r, i) => (
+                  <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', color: r.startsWith('-') ? '#ef4444' : '#00cc88', background: r.startsWith('-') ? 'rgba(239,68,68,0.08)' : 'rgba(0,204,136,0.08)', border: `1px solid ${r.startsWith('-') ? '#ef444433' : '#00cc8833'}`, padding: '0.1rem 0.4rem', borderRadius: 2 }}>
+                    {r}
+                  </span>
+                ))}
+              </div>
+            )}
             {positive.length > 0 && (
               <>
                 <div style={css.factorTitle}>Pozitívne signály</div>

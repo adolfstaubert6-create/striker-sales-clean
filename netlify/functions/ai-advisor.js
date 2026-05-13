@@ -6,6 +6,16 @@ Pripoj len ak je skutočne opodstatnené.
 
 OBMEDZENIA: Ak používateľ žiada zakázanú akciu (odoslanie emailu, zmena údajov, mazanie): "Môžem pripraviť návrh, ale túto akciu musíš schváliť ty. [NÁVRH AKCIE: <popis>]"`
 
+const EMAIL_INTENT_RE = /email|draft|napíš.*email|sprav.*email|vytvor.*email|prvý kontakt|first contact/i
+
+const EMAIL_FORMAT_BLOCK = `
+
+EMAIL GENEROVANIE: Keď generuješ email, použi STRIKER knowledge base. Email musí byť v nemčine, max 150 slov, profesionálny B2B štýl, Sie-forma, jasný ďalší krok. Žiadne agresívne predajné frázy. Personalizuj podľa typu firmy a BPS reasoning.
+FORMAT — odpoveď musí začínať PRESNE TAKTO (žiadny iný text pred tým):
+BETREFF: <predmet emailu>
+
+<telo emailu>`
+
 exports.handler = async (event) => {
   const apiKey = process.env.ANTHROPIC_API_KEY
   console.log('[ai-advisor] start | apiKey set:', !!apiKey, '| method:', event.httpMethod)
@@ -26,32 +36,39 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) }
   }
 
-  const { messages: rawMessages, companyContext } = body
+  const { messages: rawMessages, companyContext, knowledgeBase } = body
   if (!rawMessages?.length) {
     return { statusCode: 400, body: JSON.stringify({ error: 'messages required' }) }
   }
 
-  // Strip any extra fields — Anthropic only accepts role + content
   const messages = rawMessages.map(({ role, content }) => ({ role, content }))
 
   const contextBlock = companyContext
-    ? `\n\nFIRMA: ${companyContext.name} | ${companyContext.category} | ${companyContext.city} | BPS: ${companyContext.aiScore ?? '–'} | Status: ${companyContext.status}\nEmail: ${companyContext.email || '–'} | Tel: ${companyContext.phone || '–'} | Rating: ${companyContext.rating ?? '–'}\nAI dôvod: ${companyContext.aiReason || '–'}\nPosledné udalosti: ${(companyContext.recentEvents || []).join(' | ')}`
+    ? `\n\nFIRMA: ${companyContext.name} | ${companyContext.category} | ${companyContext.city} | BPS: ${companyContext.aiScore ?? '–'} | Status: ${companyContext.status}\nEmail: ${companyContext.email || '–'} | Tel: ${companyContext.phone || '–'} | Rating: ${companyContext.rating ?? '–'}\nAI dôvod: ${companyContext.aiReason || '–'}\nBPS faktory: ${(companyContext.aiReasoning || []).slice(0, 5).join(' | ') || '–'}\nPosledné udalosti: ${(companyContext.recentTimeline || []).slice(0, 5).join(' | ')}`
     : ''
 
+  const kbBlock = knowledgeBase?.length
+    ? `\n\nSTRIKER KNOWLEDGE BASE:\n${knowledgeBase.map(e => `[${(e.category || '').toUpperCase()}] ${e.title}: ${e.content}`).join('\n\n')}`
+    : ''
+
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || ''
+  const isEmailMode = EMAIL_INTENT_RE.test(lastUserMsg)
+  const emailBlock  = (isEmailMode || knowledgeBase?.length) ? EMAIL_FORMAT_BLOCK : ''
+
   try {
-    console.log('[ai-advisor] calling Anthropic API | company:', companyContext?.name, '| messages:', messages.length)
+    console.log('[ai-advisor] calling Anthropic | company:', companyContext?.name, '| messages:', messages.length, '| emailMode:', isEmailMode, '| kb:', knowledgeBase?.length ?? 0)
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'Content-Type':      'application/json',
+        'x-api-key':         apiKey,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1000,
-        system:     SYSTEM_PROMPT + contextBlock,
+        max_tokens: 1200,
+        system:     SYSTEM_PROMPT + contextBlock + kbBlock + emailBlock,
         messages,
       }),
     })
@@ -65,10 +82,8 @@ exports.handler = async (event) => {
 
     const text = data.content?.[0]?.text || ''
     console.log('[ai-advisor] success | chars:', text.length)
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ text }),
-    }
+    return { statusCode: 200, body: JSON.stringify({ text }) }
+
   } catch (err) {
     console.error('[ai-advisor] fetch error:', err.message)
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) }

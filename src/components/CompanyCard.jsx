@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { COMPANY_STATUSES } from '../constants/companyStatuses.js'
 import { calculatePriorityLabel } from '../utils/calculatePriorityLabel.js'
+import { CONF_COLORS } from '../utils/calculateBusinessScore.js'
 
 const TYPE_LABEL = {
   hotel: '🏨 Hotel', laundry: '🧺 Práčovňa', spa: '💆 Wellness',
@@ -24,10 +25,12 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
   }
 
   // AI factors may be stored flat (aiPositive/aiRisks/aiNextStep) or nested (aiFactors.*)
-  const positive = company.aiPositive || company.aiFactors?.positive || []
-  const risks    = company.aiRisks    || company.aiFactors?.risks    || []
-  const nextStep = company.aiNextStep || company.aiFactors?.nextStep || ''
-  const reason   = company.aiReason   || ''
+  const positive   = company.aiPositive   || company.aiFactors?.positive || []
+  const risks      = company.aiRisks      || company.aiFactors?.risks    || []
+  const nextStep   = company.aiNextStep   || company.aiFactors?.nextStep || ''
+  const reason     = company.aiReason     || ''
+  const reasoning  = company.aiReasoning  || []
+  const confidence = company.aiConfidence || null
 
   return (
     <div style={{ ...css.card, borderLeftColor: st.color }}>
@@ -48,6 +51,11 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
           )}
           {pri && !scoring && <div style={{ ...css.priLabel, color: pri.color }}>{pri.label}</div>}
           <div style={css.bpsLabel}>BPS</div>
+          {confidence && !scoring && (
+            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '0.5px', color: CONF_COLORS[confidence], marginTop: 1 }}>
+              {confidence}
+            </div>
+          )}
         </div>
       </div>
 
@@ -83,9 +91,18 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
         )}
       </div>
 
-      {/* ── Row 4: AI reason + next step (always visible) ── */}
+      {/* ── Row 4: AI reason + next step + reasoning tags ── */}
       {reason   && <div style={css.reason}>✦ {reason}</div>}
       {nextStep && <div style={css.nextStep}>→ {nextStep}</div>}
+      {reasoning.slice(0, 3).length > 0 && (
+        <div style={css.reasoningRow}>
+          {reasoning.slice(0, 3).map((r, i) => (
+            <span key={i} style={{ ...css.reasoningTag, color: r.startsWith('-') ? '#ef4444' : '#00cc88', background: r.startsWith('-') ? 'rgba(239,68,68,0.07)' : 'rgba(0,204,136,0.07)', borderColor: r.startsWith('-') ? '#ef444430' : '#00cc8830' }}>
+              {r}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* ── Row 5: expand toggle ── */}
       <button style={css.expandBtn} onClick={() => setOpen(o => !o)}>
@@ -166,7 +183,9 @@ const css = {
   scoreBtn:         { fontFamily: mono, fontSize: '0.56rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.45rem', border: '1px solid rgba(255,170,0,0.5)', background: 'transparent', color: '#ffaa00', borderRadius: 2, cursor: 'pointer' },
 
   reason:           { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', fontStyle: 'italic', marginBottom: '0.25rem', lineHeight: 1.5 },
-  nextStep:         { fontFamily: mono, fontSize: '0.6rem', color: '#00cc88', marginBottom: '0.4rem' },
+  nextStep:         { fontFamily: mono, fontSize: '0.6rem', color: '#00cc88', marginBottom: '0.3rem' },
+  reasoningRow:     { display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.35rem' },
+  reasoningTag:     { fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.3px', padding: '0.08rem 0.38rem', border: '1px solid', borderRadius: 2 },
 
   expandBtn:        { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.15rem 0', marginTop: '0.1rem' },
 

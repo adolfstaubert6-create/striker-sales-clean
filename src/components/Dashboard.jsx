@@ -42,7 +42,7 @@ export default function Dashboard() {
     setScoring(p => ({ ...p, [company.id]: true }))
     try {
       const res = await scoreCompany(company)
-      await updateCompanyScore(company.id, res.score, res.reason, res.factors)
+      await updateCompanyScore(company.id, res.score, res.reason, res)
     } catch (e) {
       alert('Chyba skórovania: ' + e.message)
     } finally {
