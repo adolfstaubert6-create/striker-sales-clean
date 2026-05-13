@@ -4,8 +4,9 @@ function cleanEmailText(text) {
   if (!text) return ''
   return text
     .replace(/<\/?STRIKER_EMAIL>/gi, '')
-    .replace(/^SUBJECT:\s*/im, '')
-    .replace(/^BODY:\s*/im, '')
+    .replace(/^SUBJECT:.*$/gm, '')
+    .replace(/^BODY:\s*/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 
