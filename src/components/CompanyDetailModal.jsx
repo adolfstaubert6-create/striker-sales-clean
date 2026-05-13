@@ -158,6 +158,16 @@ function EmailWorkflowCard({ email, onApprove, onSend, sending }) {
   )
 }
 
+// ── Confidence badge parser ──────────────────────────────────────────────────
+function extractConfidence(text) {
+  const m = text?.match(/(vysoká|stredná|nízka)\s+istota/i)
+  if (!m) return null
+  const lv = m[1].toLowerCase()
+  return lv === 'vysoká' ? { label: 'Vysoká istota', color: '#00cc88' }
+       : lv === 'stredná' ? { label: 'Stredná istota', color: '#ffaa00' }
+       : { label: 'Nízka istota', color: '#ef4444' }
+}
+
 // ── AiBadge ──────────────────────────────────────────────────────────────────
 function AiBadge({ pri, score }) {
   if (!pri) return null
@@ -253,11 +263,14 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [toast, setToast]         = useState(null)
   const [emails, setEmails]           = useState([])
   const [sendingEmail, setSendingEmail] = useState(false)
-  const [aiChats, setAiChats]         = useState([])
+  const [aiChats, setAiChats]             = useState([])
   const [aiSuggestions, setAiSuggestions] = useState([])
-  const [aiInput, setAiInput]         = useState('')
-  const [aiLoading, setAiLoading]     = useState(false)
-  const chatEndRef                     = useRef(null)
+  const [chatsLoaded, setChatsLoaded]     = useState(false)
+  const [aiInput, setAiInput]             = useState('')
+  const [aiLoading, setAiLoading]         = useState(false)
+  const chatEndRef             = useRef(null)
+  const greetingInitialized    = useRef(false)
+  const suggestionsInitialized = useRef(false)
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -330,6 +343,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
           return ta - tb
         })
         setAiChats(rows.slice(-20))
+        setChatsLoaded(true)
       }
     )
 
@@ -374,6 +388,58 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       createdAt:  serverTimestamp(),
       ...extra,
     })
+  }
+
+  // ── AI Suggestions Engine ──────────────────────────────────────────────────
+  async function generateAiSuggestions() {
+    const existing = aiSuggestions.map(s => s.type)
+    const candidates = []
+
+    if (!live.email)
+      candidates.push({ type: 'find_email', title: 'Nájsť email firmy', reason: 'Bez emailu nie je možný priamy kontakt', priority: 'high' })
+
+    if ((live.aiScore ?? 0) >= 70 && emails.length === 0)
+      candidates.push({ type: 'generate_email', title: live.email ? 'Vygenerovať prvý email' : 'Pripraviť prvý email', reason: live.email ? 'Silný kandidát bez emailu draftu' : 'Firma má vysoký potenciál', priority: 'high' })
+
+    const createdDate = live.createdAt?.toDate?.() || new Date(live.createdAt || Date.now())
+    const daysSince = (Date.now() - createdDate.getTime()) / 86400000
+    if (live.status === 'new' && daysSince > 7)
+      candidates.push({ type: 'follow_up', title: 'Firma čaká 7+ dní bez kontaktu', reason: 'Odporúčam follow-up alebo rozhodnutie', priority: 'medium' })
+
+    if ((live.aiScore ?? 100) < 40)
+      candidates.push({ type: 'low_priority', title: 'Zvážiť odloženie kontaktu', reason: 'Nízky BPS score', priority: 'low' })
+
+    if (!live.website)
+      candidates.push({ type: 'manual_check', title: 'Manuálne preveriť firmu', reason: 'Chýba web - ťažko odhadnúť potenciál', priority: 'medium' })
+
+    for (const s of candidates) {
+      if (!existing.includes(s.type)) {
+        await addDoc(collection(db, 'ai_suggestions'), {
+          companyId: live.id, ...s, status: 'pending',
+          createdAt: serverTimestamp(), createdBy: 'AI',
+        }).catch(console.error)
+      }
+    }
+  }
+
+  async function handleApproveSuggestion(suggestion) {
+    await updateDoc(doc(db, 'ai_suggestions', suggestion.id), { status: 'approved', updatedAt: serverTimestamp() })
+    await logEvent('suggestion_approved', `${CURRENT_USER} schválil návrh: ${suggestion.title}`)
+    if (suggestion.type === 'generate_email') await handleCreateDraft()
+    showToast('Návrh schválený ✓')
+  }
+
+  async function handleRejectSuggestion(id) {
+    await updateDoc(doc(db, 'ai_suggestions', id), { status: 'rejected', updatedAt: serverTimestamp() })
+    showToast('Návrh zamietnutý')
+  }
+
+  async function handleSuggestionToTask(suggestion) {
+    const text = suggestion.title
+    await addDoc(collection(db, 'tasks'), { companyId: live.id, text, done: false, createdAt: serverTimestamp(), createdBy: CURRENT_USER })
+    await logEvent('task_created', `${CURRENT_USER} pridal úlohu: ${text}`)
+    await updateDoc(doc(db, 'ai_suggestions', suggestion.id), { status: 'done', updatedAt: serverTimestamp() })
+    showToast('Úloha vytvorená ✓')
   }
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -581,13 +647,36 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
     }
   }
 
+  // ── Auto-greeting (fires once when chats load empty) ─────────────────────
+  useEffect(() => {
+    if (!chatsLoaded) return
+    if (aiChats.length === 0 && !greetingInitialized.current) {
+      greetingInitialized.current = true
+      sendAiMessage('Analyzuj túto firmu a daj mi okamžitý verdikt.')
+    }
+    if (!suggestionsInitialized.current) {
+      suggestionsInitialized.current = true
+      generateAiSuggestions()
+    }
+  }, [chatsLoaded])
+
   const QUICK_PROMPTS = [
-    { label: '🏢 Zhodnoť firmu',       text: 'Zhodnoť túto firmu pre STRIKER sales.' },
-    { label: '🎯 Ďalší krok',          text: 'Aký je najlepší ďalší krok pre túto firmu?' },
-    { label: '✉ Prvý email',           text: 'Navrhni konkrétny prvý email pre túto firmu.' },
-    { label: '⚠️ Riziká',              text: 'Aké sú hlavné riziká pri kontaktovaní tejto firmy?' },
-    { label: '🔥 Argumenty',           text: 'Aké argumenty by na nich najviac fungovali?' },
-    { label: '💰 Obchodný potenciál',  text: 'Zhrň obchodný potenciál tejto firmy pre STRIKER.' },
+    // Row 1
+    { label: '🏢 Zhodnoť firmu',    text: 'Analyzuj túto firmu a daj mi okamžitý verdikt.' },
+    { label: '🎯 Ďalší krok',       text: 'Aký je najlepší ďalší krok pre túto firmu?' },
+    { label: '✉ Prvý email',        text: 'Navrhni konkrétny prvý email pre túto firmu.' },
+    { label: '📧 Follow-up',        text: 'Napíš follow-up email pre túto firmu.' },
+    { label: '💬 Odpovedz',         text: 'Ako odpovedať na email od tejto firmy?' },
+    // Row 2
+    { label: '⚠️ Riziká',           text: 'Aké sú hlavné riziká pri kontaktovaní tejto firmy?' },
+    { label: '💰 ROI argumenty',    text: 'Aké ROI argumenty použiť pre túto firmu?' },
+    { label: '✅ Vytvor úlohy',      text: 'Vytvor zoznam konkrétnych úloh pre túto firmu.' },
+    { label: '📋 Zhrň históriu',    text: 'Zhrň históriu kontaktu s touto firmou.' },
+    { label: '🔍 Čo chýba',         text: 'Čo chýba pre posun vpred s touto firmou?' },
+    { label: '📊 Stratégia',        text: 'Navrhni obchodnú stratégiu pre túto firmu.' },
+    { label: '📞 Tel. skript',      text: 'Navrhni skript pre telefonát s touto firmou.' },
+    { label: '🔧 Tech. vysvetlenie',text: 'Ako technicky vysvetliť STRIKER tejto firme?' },
+    { label: '🤔 Má zmysel?',       text: 'Má vôbec zmysel kontaktovať túto firmu? Buď úprimný.' },
   ]
 
   // ── Derived ────────────────────────────────────────────────────────────────
@@ -796,7 +885,51 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
         <div style={css.aiSection}>
           <div style={css.aiTitle}>✦ STRIKER AI ADVISOR</div>
 
-          {/* Quick buttons */}
+          {/* Missing data warning */}
+          {(() => {
+            const missing = []
+            if (!live.email)   missing.push('email')
+            if (!live.phone)   missing.push('telefón')
+            if (!live.website) missing.push('web')
+            if (!live.contactPerson) missing.push('kontaktná osoba')
+            if (live.aiScore == null) missing.push('BPS skóre')
+            if (!missing.length) return null
+            return (
+              <div style={css.missingBar}>
+                ⚠ Chýbajúce údaje: <span style={{ color: '#e8eaed' }}>{missing.join(', ')}</span>
+              </div>
+            )
+          })()}
+
+          {/* AI NAVRHUJE — pending suggestions */}
+          {aiSuggestions.length > 0 && (
+            <div style={css.aiSuggestSection}>
+              <div style={css.aiSuggestTitle}>✦ AI NAVRHUJE</div>
+              {aiSuggestions.map(s => {
+                const priColor = s.priority === 'high' ? '#ff5c00' : s.priority === 'medium' ? '#ffaa00' : '#6b7280'
+                return (
+                  <div key={s.id} style={{ ...css.aiSuggestCard, borderLeftColor: priColor }}>
+                    <div style={css.aiSuggestRow}>
+                      <div>
+                        <span style={{ fontFamily: mono, fontSize: '0.72rem', color: '#e8eaed', fontWeight: 700 }}>{s.title}</span>
+                        <span style={{ ...css.priChip, color: priColor, borderColor: priColor + '55', marginLeft: '0.5rem' }}>
+                          {s.priority === 'high' ? 'Vysoká' : s.priority === 'medium' ? 'Stredná' : 'Nízka'} priorita
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+                        <button style={css.suggApprove} onClick={() => handleApproveSuggestion(s)}>✓ Schváliť</button>
+                        <button style={css.suggTask}    onClick={() => handleSuggestionToTask(s)}>→ Úloha</button>
+                        <button style={css.suggReject}  onClick={() => handleRejectSuggestion(s.id)}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#6b7280', marginTop: '0.2rem' }}>{s.reason}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Quick buttons — 2 rows */}
           <div style={css.quickBtns}>
             {QUICK_PROMPTS.map(q => (
               <button key={q.label} style={css.quickBtn}
@@ -827,6 +960,12 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
                       : <span style={css.msgAiText}>{displayText}</span>}
                   </div>
                 </div>
+                {/* Confidence badge */}
+                {m.role === 'assistant' && (() => {
+                  const conf = extractConfidence(displayText)
+                  if (!conf) return null
+                  return <div style={{ marginLeft: '0.75rem', marginTop: '0.25rem', fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', color: conf.color, background: conf.color + '18', border: `1px solid ${conf.color}44`, padding: '0.08rem 0.4rem', borderRadius: 2, display: 'inline-block' }}>{conf.label}</div>
+                })()}
                 {/* Status change suggestion card */}
                 {m.role === 'assistant' && suggestion?.type === 'status' && (() => {
                   const sKey = suggestion.value
@@ -985,4 +1124,15 @@ const css = {
   aiInputRow:   { display: 'flex', gap: '0.5rem' },
   aiInput:      { flex: 1, background: '#161b22', border: '1px solid #21262d', color: '#e8eaed', fontFamily: mono, fontSize: '0.72rem', padding: '0.48rem 0.65rem', borderRadius: 2, outline: 'none' },
   aiSendBtn:    { background: '#ff5c00', border: 'none', color: '#fff', fontFamily: mono, fontSize: '0.65rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.48rem 0.9rem', borderRadius: 2, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' },
+  // Missing data bar
+  missingBar:       { fontFamily: mono, fontSize: '0.62rem', color: '#ffaa00', background: 'rgba(255,170,0,0.07)', border: '1px solid rgba(255,170,0,0.2)', padding: '0.35rem 0.7rem', borderRadius: 2, marginBottom: '0.75rem' },
+  // AI NAVRHUJE section
+  aiSuggestSection: { marginBottom: '0.85rem' },
+  aiSuggestTitle:   { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#ff5c00', marginBottom: '0.5rem' },
+  aiSuggestCard:    { background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: 3, padding: '0.6rem 0.8rem', marginBottom: '0.4rem' },
+  aiSuggestRow:     { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' },
+  priChip:          { fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.08rem 0.35rem', border: '1px solid', borderRadius: 2 },
+  suggApprove:      { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.2rem 0.55rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
+  suggTask:         { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.2rem 0.5rem', border: '1px solid #ffaa0055', background: 'transparent', color: '#ffaa00', borderRadius: 2, cursor: 'pointer' },
+  suggReject:       { fontFamily: mono, fontSize: '0.58rem', padding: '0.2rem 0.45rem', border: '1px solid #21262d', background: 'transparent', color: '#4b5563', borderRadius: 2, cursor: 'pointer' },
 }
