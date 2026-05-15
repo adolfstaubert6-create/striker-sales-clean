@@ -35,20 +35,31 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
   const keyFactors = company.aiKeyFactors || []
   const aiInsight  = company.aiInsight    || ''
 
+  const hasReply = !!company.replyReceived
+
   return (
     <div
       className="company-card"
       style={{
         ...css.card,
-        borderLeftColor: st.color,
+        borderLeftColor: hasReply ? '#ff5c00' : st.color,
         borderColor: hovered ? '#2d3748' : '#1e2530',
-        boxShadow: hovered ? '0 0 12px rgba(255,92,0,0.15)' : 'none',
+        boxShadow: hasReply
+          ? '0 0 14px rgba(255,92,0,0.25)'
+          : hovered ? '0 0 12px rgba(255,92,0,0.15)' : 'none',
         transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
         cursor: 'pointer',
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+
+      {/* Reply badge — full-width, above everything */}
+      {hasReply && (
+        <div style={css.replyBadge}>
+          📩 NOVÁ ODPOVEĎ — {company.replySnippet ? `"${company.replySnippet.slice(0, 60)}..."` : company.replySubject || ''}
+        </div>
+      )}
 
       {/* ── Row 1: name + BPS score ── */}
       <div style={css.topRow}>
@@ -221,6 +232,7 @@ const css = {
   reasoningRow:     { display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.3rem' },
   reasoningTag:     { fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.3px', padding: '0.08rem 0.38rem', border: '1px solid', borderRadius: 2 },
   aiInsightRow:     { fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', color: '#6b7280', fontStyle: 'italic', lineHeight: 1.55, marginBottom: '0.3rem' },
+  replyBadge:       { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '0.5px', fontWeight: 700, color: '#ff5c00', background: 'rgba(255,92,0,0.1)', border: '1px solid rgba(255,92,0,0.35)', borderRadius: 2, padding: '0.3rem 0.6rem', marginBottom: '0.6rem', lineHeight: 1.4 },
 
   expandBtn:        { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.15rem 0', marginTop: '0.1rem', transition: 'color 0.15s ease' },
 

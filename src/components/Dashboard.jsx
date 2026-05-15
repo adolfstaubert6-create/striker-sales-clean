@@ -104,6 +104,23 @@ export default function Dashboard() {
     }
   }
 
+  const [gmailChecking, setGmailChecking] = useState(false)
+  const [gmailResult,   setGmailResult]   = useState(null)
+
+  async function handleGmailCheck() {
+    setGmailChecking(true)
+    setGmailResult(null)
+    try {
+      const res  = await fetch('/.netlify/functions/gmail-check', { method: 'POST' })
+      const data = await res.json()
+      setGmailResult(data)
+    } catch (e) {
+      setGmailResult({ ok: false, error: e.message })
+    } finally {
+      setGmailChecking(false)
+    }
+  }
+
   const [addOpen, setAddOpen]   = useState(false)
   const [addForm, setAddForm]   = useState({ name: '', email: '', phone: '', website: '', city: '', category: 'hotel' })
   const [addSaving, setAddSaving] = useState(false)
@@ -171,6 +188,20 @@ export default function Dashboard() {
 
       <div className="dashboard-toolbar" style={css.toolbar}>
         <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať kontakt</button>
+        <button
+          style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: '1px solid #ff5c0044', background: 'rgba(255,92,0,0.07)', color: '#ff5c00', borderRadius: 2, cursor: 'pointer', opacity: gmailChecking ? 0.6 : 1 }}
+          onClick={handleGmailCheck}
+          disabled={gmailChecking}
+          title="Skontrolovať Gmail schránku">
+          {gmailChecking ? '⏳ Kontrolujem...' : '📩 Gmail'}
+        </button>
+        {gmailResult && (
+          <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', color: gmailResult.ok ? '#00cc88' : '#ef4444' }}>
+            {gmailResult.ok
+              ? (gmailResult.newReplies > 0 ? `✓ ${gmailResult.newReplies} nová odpoveď` : '✓ Žiadne nové odpovede')
+              : `⚠ ${gmailResult.error}`}
+          </span>
+        )}
         {FILTERS.map(f => (
           <button key={f.key}
             style={{ ...css.fbtn, ...(filter === f.key ? css.fbtnOn : {}) }}
