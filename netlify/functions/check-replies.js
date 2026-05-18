@@ -147,34 +147,49 @@ async function callClaude(prompt, maxTokens) {
   })
 }
 
-async function generateAiReplyDraft(replySnippet, companyName, originalSubject) {
+async function generateAiAnalysis(replySnippet, companyName, originalSubject) {
   try {
-    const prompt = `Du bist ein professioneller B2B Sales-Assistent für STRIKER Wärmetechnologie.
-STRIKER: 45kW Strom → 120-160kW Wärme. Preis: 8.000–10.000 EUR. Für Hotels, Wäschereien, Wellness.
+    const prompt = `Si asistent pre B2B sales tím STRIKER (interné použitie, slovenčina).
+STRIKER: tepelné čerpadlá 45kW → 120-160kW tepla. Cena: 8.000-10.000 EUR. Pre hotely, práčovne, wellness.
 
 Firma: ${companyName}
-Ursprüngliches Email-Thema: ${originalSubject}
-Antwort des Kunden:
+Predmet emailu: ${originalSubject}
+Zákazník napísal:
 ---
 ${(replySnippet || '').slice(0, 600)}
 ---
 
-Schreibe eine kurze, professionelle B2B-Antwort auf Deutsch (Sie-Form, max 120 Wörter).
-Nur Email-Text, kein Meta-Kommentar.
-Format GENAU so (nichts davor oder danach):
-BETREFF: <Betreff>
+Odpovedz PRESNE v tomto formáte (nič iné, žiadny úvod ani záver):
+ZHRNUTIE: <1-2 vety čo zákazník chce alebo píše>
+ZÁMER: <jedno z: záujem | otázka | neutrálne | odmietnutie>
+PREDMET_SK: <predmet odpovede po slovensky>
 
-<Email-Text>`
+<text odpovede po slovensky, 3-5 viet, profesionálny tón, vykanie, bez formálnych pozdravov>`
 
-    const text  = await callClaude(prompt, 400)
-    const lines = text.trim().split('\n')
-    const sLine = lines.find(l => /^BETREFF:/i.test(l.trim()))
-    const subjectDe = sLine ? sLine.replace(/^BETREFF:\s*/i, '').trim() : `Re: ${originalSubject}`
-    const after     = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
-    const bodyDe    = after.replace(/^\s*\n+/, '').trim()
-    return { subjectDe, bodyDe }
+    const text = await callClaude(prompt, 500)
+
+    const summaryMatch = text.match(/^ZHRNUTIE:\s*(.+)$/m)
+    const intentMatch  = text.match(/^ZÁMER:\s*(.+)$/m)
+    const subjectMatch = text.match(/^PREDMET_SK:\s*(.+)$/m)
+
+    const aiSummary      = summaryMatch ? summaryMatch[1].trim() : ''
+    const aiIntent       = intentMatch  ? intentMatch[1].trim()  : 'neutrálne'
+    const aiDraftSkSubject = subjectMatch ? subjectMatch[1].trim() : `Re: ${originalSubject}`
+
+    // Body = everything after the last header line
+    const lastHeaderIdx = Math.max(
+      text.lastIndexOf('ZHRNUTIE:'),
+      text.lastIndexOf('ZÁMER:'),
+      text.lastIndexOf('PREDMET_SK:'),
+    )
+    const afterHeaders = lastHeaderIdx >= 0
+      ? text.slice(text.indexOf('\n', lastHeaderIdx) + 1)
+      : text
+    const aiDraftSkBody = afterHeaders.replace(/^\s*\n+/, '').trim()
+
+    return { aiSummary, aiIntent, aiDraftSkSubject, aiDraftSkBody }
   } catch (e) {
-    console.warn('[check-replies] AI draft failed:', e.message)
+    console.warn('[check-replies] AI analysis failed:', e.message)
     return null
   }
 }
@@ -491,14 +506,16 @@ async function runCheck() {
 
           const newDocId = newDoc?.name?.split('/').pop()
           if (newDocId) {
-            const aiDraft = await generateAiReplyDraft(replySnippet, company?.name || '', subject)
-            if (aiDraft) {
+            const analysis = await generateAiAnalysis(replySnippet, company?.name || '', subject)
+            if (analysis) {
               await fsPatch(`email_replies/${newDocId}`, {
-                aiDraftSubject: aiDraft.subjectDe,
-                aiDraftBody:    aiDraft.bodyDe,
-                aiDraftStatus:  'pending',
+                aiSummary:        analysis.aiSummary,
+                aiIntent:         analysis.aiIntent,
+                aiDraftSkSubject: analysis.aiDraftSkSubject,
+                aiDraftSkBody:    analysis.aiDraftSkBody,
+                aiDraftStatus:    'pending_sk',
               })
-              console.log(`[check-replies] ✓ AI draft for ${company?.name || matchResult.companyId}`)
+              console.log(`[check-replies] ✓ AI analysis (SK) for ${company?.name || matchResult.companyId} | intent=${analysis.aiIntent}`)
             }
           }
 

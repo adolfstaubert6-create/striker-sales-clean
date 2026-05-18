@@ -22,6 +22,9 @@
 [functions.check-replies]
   timeout = 26
 
+[functions.translate-reply]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

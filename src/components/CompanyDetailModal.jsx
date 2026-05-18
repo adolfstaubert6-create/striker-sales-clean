@@ -752,9 +752,10 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [fb, setFb]               = useState({})
   const [toast, setToast]         = useState(null)
   const [emails,       setEmails]       = useState([])
-  const [replies,      setReplies]      = useState([])
-  const [replyEdits,   setReplyEdits]   = useState({}) // { [replyId]: { open, subject, body } }
-  const [sendingReply, setSendingReply] = useState({})
+  const [replies,         setReplies]         = useState([])
+  const [replyEdits,      setReplyEdits]      = useState({}) // { [replyId]: { open, subject, body, lang } }
+  const [sendingReply,    setSendingReply]    = useState({})
+  const [translating,     setTranslating]     = useState({})
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailSearch, setEmailSearch] = useState({ state: null, email: null, hunterResults: null })
   const [hunterKey,   setHunterKey]   = useState(() => localStorage.getItem('hunterApiKey') || '')
@@ -1220,7 +1221,36 @@ PRAVIDLÁ EMAILU:
       .catch(() => showToast('Kopírovanie zlyhalo', 'err'))
   }
 
-  // ── Reply approval workflow ──────────────────────────────────────────────────
+  // ── Reply workflow ───────────────────────────────────────────────────────────
+  async function handleTranslateToDE(reply) {
+    const edit = replyEdits[reply.id]
+    const skSubject = edit?.open ? edit.subject : (reply.aiDraftSkSubject || '')
+    const skBody    = edit?.open ? edit.body    : (reply.aiDraftSkBody    || '')
+    if (!skBody) { showToast('SK návrh je prázdny', 'err'); return }
+    setTranslating(p => ({ ...p, [reply.id]: true }))
+    try {
+      const res  = await fetch('/.netlify/functions/translate-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          replyId:         reply.id,
+          skSubject,
+          skBody,
+          companyName:     live.name,
+          originalSubject: reply.subject,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Preklad zlyhal')
+      setReplyEdits(p => { const n = { ...p }; delete n[reply.id]; return n })
+      showToast('DE preklad hotový', 'ok')
+    } catch (e) {
+      showToast('Preklad zlyhal: ' + e.message, 'err')
+    } finally {
+      setTranslating(p => ({ ...p, [reply.id]: false }))
+    }
+  }
+
   async function handleApproveAndSendReply(reply, subjectOverride, bodyOverride) {
     const to = reply.fromEmail || live.email
     if (!to) { showToast('Chýba email príjemcu', 'err'); return }
@@ -1231,8 +1261,8 @@ PRAVIDLÁ EMAILU:
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           to,
-          subjectDe:   subjectOverride || reply.aiDraftSubject,
-          bodyDe:      bodyOverride    || reply.aiDraftBody,
+          subjectDe:   subjectOverride || reply.aiDraftDeSubject,
+          bodyDe:      bodyOverride    || reply.aiDraftDeBody,
           companyId:   live.id,
           companyName: live.name,
         }),
@@ -1252,11 +1282,10 @@ PRAVIDLÁ EMAILU:
     }
   }
 
-  function openReplyEdit(reply) {
-    setReplyEdits(p => ({
-      ...p,
-      [reply.id]: { open: true, subject: reply.aiDraftSubject || '', body: reply.aiDraftBody || '' },
-    }))
+  function openReplyEdit(reply, lang = 'sk') {
+    const subject = lang === 'de' ? (reply.aiDraftDeSubject || '') : (reply.aiDraftSkSubject || '')
+    const body    = lang === 'de' ? (reply.aiDraftDeBody    || '') : (reply.aiDraftSkBody    || '')
+    setReplyEdits(p => ({ ...p, [reply.id]: { open: true, lang, subject, body } }))
   }
 
   async function handleFindEmail() {
@@ -1847,78 +1876,143 @@ PRAVIDLÁ EMAILU:
           <div style={{ ...css.section, borderLeft: '3px solid #ff5c00', paddingLeft: '0.85rem' }}>
             <ColTitle>📩 Odpovede ({replies.length})</ColTitle>
             {replies.map(r => {
-              const d        = r.replyDate?.toDate ? r.replyDate.toDate() : r.replyDate ? new Date(r.replyDate) : null
-              const dateStr  = d ? d.toLocaleDateString('sk-SK') + ' ' + d.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }) : '–'
-              const hasDraft = r.aiDraftStatus === 'pending' && r.aiDraftBody
-              const isSent   = r.aiDraftStatus === 'sent'
-              const edit     = replyEdits[r.id]
-              const sending  = !!sendingReply[r.id]
+              const d       = r.replyDate?.toDate ? r.replyDate.toDate() : r.replyDate ? new Date(r.replyDate) : null
+              const dateStr = d ? d.toLocaleDateString('sk-SK') + ' ' + d.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }) : '–'
+              const status  = r.aiDraftStatus // 'pending_sk' | 'pending_de' | 'sent' | legacy 'pending'
+              const isSent  = status === 'sent'
+              const hasSk   = !!r.aiDraftSkBody
+              const hasDe   = !!r.aiDraftDeBody
+              const edit    = replyEdits[r.id]
+              const sending = !!sendingReply[r.id]
+              const xlating = !!translating[r.id]
+
+              const intentColor = { záujem: '#00cc88', otázka: '#60a5fa', odmietnutie: '#ef4444' }[r.aiIntent] || '#9ca3af'
+
               return (
-                <div key={r.id} style={{ background: '#0d1117', border: `1px solid ${hasDraft ? '#ff5c0088' : '#ff5c0044'}`, borderRadius: 2, padding: '0.65rem 0.85rem', marginBottom: '0.5rem' }}>
-                  {/* Reply header */}
+                <div key={r.id} style={{ background: '#0d1117', border: `1px solid ${isSent ? '#00cc8844' : '#ff5c0055'}`, borderRadius: 2, padding: '0.65rem 0.85rem', marginBottom: '0.6rem' }}>
+
+                  {/* Header row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
                     <span style={{ fontFamily: mono, fontSize: '0.65rem', color: '#ff5c00', fontWeight: 700 }}>{r.fromEmail}</span>
                     <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
                       {r.highInterest && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#00cc88', background: 'rgba(0,204,136,0.12)', border: '1px solid rgba(0,204,136,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2 }}>⚡ ZÁUJEM</span>}
-                      {hasDraft && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#ff5c00', background: 'rgba(255,92,0,0.12)', border: '1px solid rgba(255,92,0,0.35)', padding: '0.1rem 0.4rem', borderRadius: 2 }}>⏳ ČAKÁ NA SCHVÁLENIE</span>}
-                      {isSent   && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#00cc88', background: 'rgba(0,204,136,0.1)', border: '1px solid rgba(0,204,136,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2 }}>✓ ODPOVEĎ ODOSLANÁ</span>}
+                      {!isSent && hasSk && !hasDe && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#ff5c00', background: 'rgba(255,92,0,0.1)', border: '1px solid rgba(255,92,0,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2 }}>⏳ SK NÁVRH</span>}
+                      {!isSent && hasDe && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#60a5fa', background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2 }}>🇩🇪 DE PRIPRAVENÉ</span>}
+                      {isSent && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#00cc88', background: 'rgba(0,204,136,0.1)', border: '1px solid rgba(0,204,136,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2 }}>✓ ODOSLANÁ</span>}
                       <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280' }}>{dateStr}</span>
                     </div>
                   </div>
-                  {r.subject && <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', marginBottom: '0.25rem' }}>Re: {r.subject}</div>}
-                  {r.snippet && <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.7rem', color: '#e8eaed', lineHeight: 1.55, marginBottom: hasDraft ? '0.65rem' : 0 }}>„{r.snippet}"</div>}
 
-                  {/* AI draft section */}
-                  {hasDraft && !edit && (
-                    <div style={{ background: '#111a1f', border: '1px solid #1e3040', borderRadius: 2, padding: '0.6rem 0.75rem', marginTop: '0.4rem' }}>
-                      <div style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', color: '#00cc88', marginBottom: '0.35rem', textTransform: 'uppercase' }}>🤖 AI návrh odpovede</div>
-                      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', marginBottom: '0.2rem' }}>Predmet: {r.aiDraftSubject}</div>
-                      <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', color: '#c9d1d9', lineHeight: 1.6, marginBottom: '0.6rem', whiteSpace: 'pre-wrap' }}>{r.aiDraftBody}</div>
-                      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                        <button
-                          style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.7rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.6 : 1 }}
-                          onClick={() => handleApproveAndSendReply(r)}
-                          disabled={sending}>
-                          {sending ? '⏳ Odosielam...' : '✓ SCHVÁLIŤ A ODOSLAŤ'}
-                        </button>
-                        <button
-                          style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.6rem', border: '1px solid #1e3040', background: 'transparent', color: '#9ca3af', borderRadius: 2, cursor: 'pointer' }}
-                          onClick={() => openReplyEdit(r)}>
-                          ✏ UPRAVIŤ
-                        </button>
-                      </div>
+                  {r.subject && <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', marginBottom: '0.2rem' }}>{r.subject}</div>}
+                  {r.snippet  && <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.7rem', color: '#e8eaed', lineHeight: 1.5, marginBottom: '0.5rem' }}>„{r.snippet}"</div>}
+
+                  {/* ─── SEKCIA 1: AI Zhrnutie ─── */}
+                  {(r.aiSummary || r.aiIntent) && (
+                    <div style={{ background: '#0a0e14', border: '1px solid #1a2535', borderRadius: 2, padding: '0.5rem 0.7rem', marginBottom: '0.45rem' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', color: '#4b5563', marginBottom: '0.3rem', textTransform: 'uppercase' }}>AI Zhrnutie odpovede</div>
+                      {r.aiSummary && <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', color: '#c9d1d9', lineHeight: 1.5, marginBottom: r.aiIntent ? '0.25rem' : 0 }}>{r.aiSummary}</div>}
+                      {r.aiIntent  && <div style={{ fontFamily: mono, fontSize: '0.58rem', color: intentColor }}>● {r.aiIntent.toUpperCase()}</div>}
                     </div>
                   )}
 
-                  {/* Edit form */}
-                  {edit?.open && (
-                    <div style={{ background: '#111a1f', border: '1px solid #ff5c0055', borderRadius: 2, padding: '0.65rem 0.75rem', marginTop: '0.4rem' }}>
-                      <div style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', color: '#ff5c00', marginBottom: '0.45rem', textTransform: 'uppercase' }}>✏ Upraviť odpoveď</div>
-                      <input
-                        style={{ width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: mono, fontSize: '0.68rem', padding: '0.35rem 0.6rem', borderRadius: 2, outline: 'none', marginBottom: '0.4rem' }}
-                        value={edit.subject}
-                        onChange={e => setReplyEdits(p => ({ ...p, [r.id]: { ...p[r.id], subject: e.target.value } }))}
-                        placeholder="Predmet"
-                      />
-                      <textarea
-                        style={{ width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', padding: '0.4rem 0.6rem', borderRadius: 2, outline: 'none', resize: 'vertical', minHeight: 100, lineHeight: 1.6, marginBottom: '0.5rem' }}
-                        value={edit.body}
-                        onChange={e => setReplyEdits(p => ({ ...p, [r.id]: { ...p[r.id], body: e.target.value } }))}
-                      />
-                      <div style={{ display: 'flex', gap: '0.4rem' }}>
-                        <button
-                          style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.7rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.6 : 1 }}
-                          onClick={() => handleApproveAndSendReply(r, edit.subject, edit.body)}
-                          disabled={sending}>
-                          {sending ? '⏳ Odosielam...' : '✓ ODOSLAŤ'}
-                        </button>
-                        <button
-                          style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.55rem', border: '1px solid #1e2530', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' }}
-                          onClick={() => setReplyEdits(p => { const n={...p}; delete n[r.id]; return n })}>
-                          Zrušiť
-                        </button>
-                      </div>
+                  {/* ─── SEKCIA 2: SK Návrh ─── */}
+                  {hasSk && !isSent && (
+                    <div style={{ background: '#111a1f', border: '1px solid #1e3040', borderRadius: 2, padding: '0.6rem 0.75rem', marginBottom: '0.45rem' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', color: '#00cc88', marginBottom: '0.3rem', textTransform: 'uppercase' }}>SK Návrh odpovede</div>
+
+                      {edit?.open && edit?.lang === 'sk' ? (
+                        <>
+                          <input
+                            style={{ width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: mono, fontSize: '0.65rem', padding: '0.3rem 0.55rem', borderRadius: 2, outline: 'none', marginBottom: '0.35rem', boxSizing: 'border-box' }}
+                            value={edit.subject}
+                            onChange={e => setReplyEdits(p => ({ ...p, [r.id]: { ...p[r.id], subject: e.target.value } }))}
+                            placeholder="Predmet (SK)"
+                          />
+                          <textarea
+                            style={{ width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', padding: '0.35rem 0.55rem', borderRadius: 2, outline: 'none', resize: 'vertical', minHeight: 90, lineHeight: 1.6, marginBottom: '0.4rem', boxSizing: 'border-box' }}
+                            value={edit.body}
+                            onChange={e => setReplyEdits(p => ({ ...p, [r.id]: { ...p[r.id], body: e.target.value } }))}
+                          />
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.65rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: xlating ? 'not-allowed' : 'pointer', opacity: xlating ? 0.6 : 1 }}
+                              onClick={() => handleTranslateToDE(r)} disabled={xlating}>
+                              {xlating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do DE →'}
+                            </button>
+                            <button style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.5rem', border: '1px solid #1e2530', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' }}
+                              onClick={() => setReplyEdits(p => { const n={...p}; delete n[r.id]; return n })}>
+                              Zrušiť
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#9ca3af', marginBottom: '0.15rem' }}>{r.aiDraftSkSubject}</div>
+                          <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', color: '#c9d1d9', lineHeight: 1.55, marginBottom: '0.45rem', whiteSpace: 'pre-wrap' }}>{r.aiDraftSkBody}</div>
+                          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <button style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.65rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: xlating ? 'not-allowed' : 'pointer', opacity: xlating ? 0.6 : 1 }}
+                              onClick={() => handleTranslateToDE(r)} disabled={xlating}>
+                              {xlating ? '⏳ Prekladám...' : '🇩🇪 Preložiť do DE →'}
+                            </button>
+                            <button style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.55rem', border: '1px solid #1e3040', background: 'transparent', color: '#9ca3af', borderRadius: 2, cursor: 'pointer' }}
+                              onClick={() => openReplyEdit(r, 'sk')}>
+                              ✏ Upraviť SK
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
+                  )}
+
+                  {/* ─── SEKCIA 3: DE Finálna verzia ─── */}
+                  {hasDe && !isSent && (
+                    <div style={{ background: '#0e1820', border: '1px solid #1e3a5f', borderRadius: 2, padding: '0.6rem 0.75rem' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', color: '#60a5fa', marginBottom: '0.3rem', textTransform: 'uppercase' }}>🇩🇪 DE Finálna verzia</div>
+
+                      {edit?.open && edit?.lang === 'de' ? (
+                        <>
+                          <input
+                            style={{ width: '100%', background: '#0a0c0f', border: '1px solid #1e2a40', color: '#e8eaed', fontFamily: mono, fontSize: '0.65rem', padding: '0.3rem 0.55rem', borderRadius: 2, outline: 'none', marginBottom: '0.35rem', boxSizing: 'border-box' }}
+                            value={edit.subject}
+                            onChange={e => setReplyEdits(p => ({ ...p, [r.id]: { ...p[r.id], subject: e.target.value } }))}
+                            placeholder="Betreff (DE)"
+                          />
+                          <textarea
+                            style={{ width: '100%', background: '#0a0c0f', border: '1px solid #1e2a40', color: '#e8eaed', fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', padding: '0.35rem 0.55rem', borderRadius: 2, outline: 'none', resize: 'vertical', minHeight: 90, lineHeight: 1.6, marginBottom: '0.4rem', boxSizing: 'border-box' }}
+                            value={edit.body}
+                            onChange={e => setReplyEdits(p => ({ ...p, [r.id]: { ...p[r.id], body: e.target.value } }))}
+                          />
+                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                            <button style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.65rem', border: 'none', background: '#60a5fa', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.6 : 1 }}
+                              onClick={() => handleApproveAndSendReply(r, edit.subject, edit.body)} disabled={sending}>
+                              {sending ? '⏳ Odosielam...' : '✓ ODOSLAŤ DE'}
+                            </button>
+                            <button style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.5rem', border: '1px solid #1e2a40', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' }}
+                              onClick={() => setReplyEdits(p => { const n={...p}; delete n[r.id]; return n })}>
+                              Zrušiť
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#9ca3af', marginBottom: '0.15rem' }}>{r.aiDraftDeSubject}</div>
+                          <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', color: '#c9d1d9', lineHeight: 1.55, marginBottom: '0.45rem', whiteSpace: 'pre-wrap' }}>{r.aiDraftDeBody}</div>
+                          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <button style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.65rem', border: 'none', background: '#60a5fa', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.6 : 1 }}
+                              onClick={() => handleApproveAndSendReply(r)} disabled={sending}>
+                              {sending ? '⏳ Odosielam...' : '✓ SCHVÁLIŤ A ODOSLAŤ DE'}
+                            </button>
+                            <button style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.55rem', border: '1px solid #1e2a40', background: 'transparent', color: '#9ca3af', borderRadius: 2, cursor: 'pointer' }}
+                              onClick={() => openReplyEdit(r, 'de')}>
+                              ✏ Upraviť DE
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {isSent && (
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#00cc8899', marginTop: '0.3rem' }}>✓ Odpoveď odoslaná</div>
                   )}
                 </div>
               )
