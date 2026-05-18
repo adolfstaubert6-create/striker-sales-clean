@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "imapflow": "^1.0.169",
+    "mailparser": "^3.7.1",
     "resend": "^4.0.0"
   }
 }

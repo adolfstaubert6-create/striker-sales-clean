@@ -751,7 +751,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [draftOpen, setDraftOpen] = useState(false)
   const [fb, setFb]               = useState({})
   const [toast, setToast]         = useState(null)
-  const [emails, setEmails]           = useState([])
+  const [emails,  setEmails]  = useState([])
+  const [replies, setReplies] = useState([])
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailSearch, setEmailSearch] = useState({ state: null, email: null, hunterResults: null })
   const [hunterKey,   setHunterKey]   = useState(() => localStorage.getItem('hunterApiKey') || '')
@@ -824,6 +825,19 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       }
     )
 
+    const unsubReplies = onSnapshot(
+      query(collection(db, 'email_replies'), where('companyId', '==', id)),
+      snap => {
+        const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        rows.sort((a, b) => {
+          const ta = a.replyDate?.toDate?.() || new Date(a.replyDate || 0)
+          const tb = b.replyDate?.toDate?.() || new Date(b.replyDate || 0)
+          return tb - ta
+        })
+        setReplies(rows)
+      }
+    )
+
     // ai_chats — last 20, oldest first for chat display
     const unsubChats = onSnapshot(
       query(collection(db, 'ai_chats'), where('companyId', '==', id)),
@@ -845,7 +859,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
       snap => setAiSuggestions(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     )
 
-    return () => { unsubDoc(); unsubInter(); unsubNotes(); unsubTasks(); unsubEmails(); unsubChats(); unsubAiSugg() }
+    return () => { unsubDoc(); unsubInter(); unsubNotes(); unsubTasks(); unsubEmails(); unsubReplies(); unsubChats(); unsubAiSugg() }
   }, [initialCompany.id])
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -1786,6 +1800,30 @@ PRAVIDLÁ EMAILU:
         </div>
 
         <div style={css.divider} />
+
+        {/* ══ REPLIES ══ */}
+        {replies.length > 0 && (
+          <div style={{ ...css.section, borderLeft: '3px solid #ff5c00', paddingLeft: '0.85rem' }}>
+            <ColTitle>📩 Odpovede ({replies.length})</ColTitle>
+            {replies.map(r => {
+              const d = r.replyDate?.toDate ? r.replyDate.toDate() : r.replyDate ? new Date(r.replyDate) : null
+              const dateStr = d ? d.toLocaleDateString('sk-SK') + ' ' + d.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }) : '–'
+              return (
+                <div key={r.id} style={{ background: '#0d1117', border: '1px solid #ff5c0044', borderRadius: 2, padding: '0.65rem 0.85rem', marginBottom: '0.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontFamily: mono, fontSize: '0.65rem', color: '#ff5c00', fontWeight: 700 }}>{r.fromEmail}</span>
+                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                      {r.highInterest && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#00cc88', background: 'rgba(0,204,136,0.12)', border: '1px solid rgba(0,204,136,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2 }}>⚡ ZÁUJEM</span>}
+                      <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280' }}>{dateStr}</span>
+                    </div>
+                  </div>
+                  {r.subject && <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', marginBottom: '0.25rem' }}>Re: {r.subject}</div>}
+                  {r.snippet && <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.7rem', color: '#e8eaed', lineHeight: 1.55 }}>„{r.snippet}"</div>}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* ══ EMAIL WORKFLOW ══ */}
         <div style={css.section}>
