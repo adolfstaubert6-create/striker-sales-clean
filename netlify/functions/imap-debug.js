@@ -2,6 +2,14 @@
 // DELETE after use
 const { ImapFlow } = require('imapflow')
 
+function parseHeader(headers, name) {
+  if (!headers) return null
+  const raw = Buffer.isBuffer(headers) ? headers.toString() : String(headers)
+  const re  = new RegExp('^' + name + ':\\s*(.+)', 'im')
+  const m   = raw.match(re)
+  return m ? m[1].trim() : null
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'POST only' }
   const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
@@ -34,8 +42,8 @@ exports.handler = async (event) => {
           subject:    msg.envelope?.subject,
           date:       msg.envelope?.date,
           messageId:  msg.envelope?.messageId,
-          inReplyTo:  msg.headers?.get('in-reply-to') || null,
-          references: msg.headers?.get('references')  || null,
+          inReplyTo:  parseHeader(msg.headers, 'in-reply-to'),
+          references: parseHeader(msg.headers, 'references'),
         })
       }
     } finally { lock.release() }
