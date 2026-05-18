@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db } from '../firebase.js'
-import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'
+import { doc, updateDoc, addDoc, collection, serverTimestamp, deleteDoc } from 'firebase/firestore'
 import { subscribeCompanies, updateCompanyScore, saveDraft } from '../services/firebaseService.js'
 import { scoreCompany } from '../services/aiScoringService.js'
 import { generateEmailDraft } from '../services/emailService.js'
@@ -104,6 +104,31 @@ export default function Dashboard() {
     }
   }
 
+  const [checkedIds,    setCheckedIds]    = useState(new Set())
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting,      setDeleting]      = useState(false)
+
+  function toggleCheck(id) {
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  async function handleDeleteSelected() {
+    setDeleting(true)
+    try {
+      await Promise.all([...checkedIds].map(id => deleteDoc(doc(db, 'companies', id))))
+      setCheckedIds(new Set())
+      setConfirmDelete(false)
+    } catch (e) {
+      alert('Chyba vymazania: ' + e.message)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const [gmailChecking, setGmailChecking] = useState(false)
   const [gmailResult,   setGmailResult]   = useState(null)
 
@@ -188,6 +213,11 @@ export default function Dashboard() {
 
       <div className="dashboard-toolbar" style={css.toolbar}>
         <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať kontakt</button>
+        {checkedIds.size > 0 && (
+          <button style={css.deleteBtn} onClick={() => setConfirmDelete(true)}>
+            🗑 Vymazať vybrané ({checkedIds.size})
+          </button>
+        )}
         <button
           style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: '1px solid #ff5c0044', background: 'rgba(255,92,0,0.07)', color: '#ff5c00', borderRadius: 2, cursor: 'pointer', opacity: gmailChecking ? 0.6 : 1 }}
           onClick={handleGmailCheck}
@@ -234,13 +264,24 @@ export default function Dashboard() {
         </div>
       ) : (
         filtered.map(c => (
-          <div key={c.id} onClick={() => setSelected(c)} style={{ cursor: 'pointer' }}>
-            <CompanyCard
-              company={c}
-              scoring={!!scoring[c.id]}
-              onDraft={e => { e?.stopPropagation?.(); openDraft(c) }}
-              onScore={e => { e?.stopPropagation?.(); handleScore(c) }}
-            />
+          <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+            <div style={{ paddingTop: '0.95rem', flexShrink: 0 }}>
+              <input
+                type="checkbox"
+                checked={checkedIds.has(c.id)}
+                onChange={() => toggleCheck(c.id)}
+                onClick={e => e.stopPropagation()}
+                style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#ef4444' }}
+              />
+            </div>
+            <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => setSelected(c)}>
+              <CompanyCard
+                company={c}
+                scoring={!!scoring[c.id]}
+                onDraft={e => { e?.stopPropagation?.(); openDraft(c) }}
+                onScore={e => { e?.stopPropagation?.(); handleScore(c) }}
+              />
+            </div>
           </div>
         ))
       )}
@@ -300,6 +341,32 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div style={css.overlay} onClick={e => e.target === e.currentTarget && setConfirmDelete(false)}>
+          <div style={{ ...css.modal, maxWidth: 380 }}>
+            <div style={{ ...css.mhead, flexDirection: 'column', alignItems: 'flex-start', gap: '0.4rem' }}>
+              <span style={css.mtitle}>⚠ Potvrdiť vymazanie</span>
+              <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.88rem', color: '#e8eaed' }}>
+                Naozaj vymazať {checkedIds.size} kontakt{checkedIds.size > 1 ? 'y' : ''}?
+              </span>
+              <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', color: '#ef4444' }}>
+                Táto akcia je nevratná.
+              </span>
+            </div>
+            <div style={{ ...css.mbtns, marginTop: '1rem' }}>
+              <button
+                style={{ ...css.mbtnOk, background: '#ef4444', opacity: deleting ? 0.6 : 1, cursor: deleting ? 'not-allowed' : 'pointer' }}
+                onClick={handleDeleteSelected}
+                disabled={deleting}>
+                {deleting ? '⏳ Mažem...' : `🗑 Vymazať (${checkedIds.size})`}
+              </button>
+              <button style={css.mbtnCancel} onClick={() => setConfirmDelete(false)}>Zrušiť</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Draft modal */}
       {draft && (
         <div style={css.overlay} onClick={e => e.target === e.currentTarget && setDraft(null)}>
@@ -330,6 +397,7 @@ export default function Dashboard() {
 }
 
 const css = {
+  deleteBtn:  { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: '1px solid #ef444466', background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderRadius: 2, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' },
   toolbar:    { display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem', alignItems: 'center' },
   addBtn:     { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: '1px solid #00cc8855', background: 'rgba(0,204,136,0.08)', color: '#00cc88', borderRadius: 2, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' },
   fbtn:       { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.65rem', border: '1px solid #1e2530', background: 'transparent', color: '#6b7280', borderRadius: 2 },
