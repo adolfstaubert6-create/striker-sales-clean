@@ -498,6 +498,7 @@ async function runCheck() {
           console.log(`[check-replies] ✓ SAVED ${matchResult.confidence.toUpperCase()} → ${company?.name || matchResult.companyId} highInterest=${highInterest}`)
         } catch (msgErr) {
           console.error(`[check-replies] msg error uid=${msg.uid}:`, msgErr.message)
+          skipReasons.push({ uid: msg.uid, reason: `EXCEPTION: ${msgErr.message}`, stack: msgErr.stack?.split('\n').slice(0,3).join(' | ') })
         }
       }
 
