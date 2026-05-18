@@ -721,7 +721,7 @@ function HunterKeyInput({ onSearch }) {
       />
       <button
         disabled={!key.trim()}
-        onClick={() => onSearch(key.trim())}
+        onClick={() => { console.log('[hunter] input key clicked, key:', key.trim().slice(0,8)+'...'); onSearch(key.trim()) }}
         style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.2rem 0.5rem', border: '1px solid #6366f155', background: key.trim() ? 'rgba(99,102,241,0.15)' : 'transparent', color: key.trim() ? '#818cf8' : '#4b5563', borderRadius: 2, cursor: key.trim() ? 'pointer' : 'default' }}>
         🔎 Hľadať
       </button>
@@ -1226,25 +1226,43 @@ PRAVIDLÁ EMAILU:
   }
 
   async function handleHunterSearch(key) {
-    const apiKey = key || hunterKey
-    if (!apiKey) return
-    // Uložiť key pre budúce použitie
+    const apiKey = (key || hunterKey || '').trim()
+    console.log('[hunter] handleHunterSearch called, apiKey length:', apiKey.length)
+    if (!apiKey) { console.warn('[hunter] no apiKey'); return }
+
     localStorage.setItem('hunterApiKey', apiKey)
     setHunterKey(apiKey)
 
     const d = extractDomain(live.website) || live.name
-    setEmailSearch(s => ({ ...s, state: 'hunter-searching' }))
+    console.log('[hunter] domain:', d, '| website:', live.website)
+    setEmailSearch(s => ({ ...s, state: 'hunter-searching', hunterError: null }))
+
     try {
-      const res  = await fetch(`https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(d)}&api_key=${apiKey}`)
+      console.log('[hunter] calling /.netlify/functions/hunter-search')
+      const res  = await fetch('/.netlify/functions/hunter-search', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ domain: d, apiKey }),
+      })
       const data = await res.json()
-      const emails = data?.data?.emails || []
-      if (emails.length > 0) {
-        setEmailSearch({ state: 'hunter-found', email: null, hunterResults: emails, hunterDomain: d })
-      } else {
-        setEmailSearch({ state: 'hunter-notfound', email: null, hunterResults: [], hunterDomain: d })
+      console.log('[hunter] response:', JSON.stringify(data).slice(0, 300))
+
+      if (data.error) {
+        console.warn('[hunter] API error:', data.error)
+        setEmailSearch({ state: 'hunter-notfound', email: null, hunterResults: [], hunterDomain: d, hunterError: data.error })
+        return
       }
-    } catch {
-      setEmailSearch({ state: 'hunter-notfound', email: null, hunterResults: [], hunterDomain: null })
+
+      const emails = data?.data?.emails || []
+      console.log('[hunter] emails found:', emails.length)
+      if (emails.length > 0) {
+        setEmailSearch({ state: 'hunter-found', email: null, hunterResults: emails, hunterDomain: d, hunterError: null })
+      } else {
+        setEmailSearch({ state: 'hunter-notfound', email: null, hunterResults: [], hunterDomain: d, hunterError: null })
+      }
+    } catch (e) {
+      console.error('[hunter] fetch exception:', e.message)
+      setEmailSearch({ state: 'hunter-notfound', email: null, hunterResults: [], hunterDomain: null, hunterError: e.message })
     }
   }
 
@@ -1609,7 +1627,11 @@ PRAVIDLÁ EMAILU:
                   </div>
                 : emailSearch.state === 'hunter-notfound'
                 ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                    <span style={{ color: '#6b7280', fontFamily: mono, fontSize: '0.68rem' }}>Hunter nič nenašiel</span>
+                    <span style={{ color: '#6b7280', fontFamily: mono, fontSize: '0.68rem' }}>
+                      {emailSearch.hunterError
+                        ? `⚠ ${emailSearch.hunterError}`
+                        : 'Hunter nič nenašiel'}
+                    </span>
                     <a
                       href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(live.name)}`}
                       target="_blank" rel="noreferrer"
