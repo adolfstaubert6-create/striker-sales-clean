@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node -e \"const {execSync}=require\\('child_process'\\);console.log\\(execSync\\('netlify --version',{encoding:'utf8'}\\)\\)\")"
+    ]
+  }
+}

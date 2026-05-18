@@ -104,9 +104,10 @@ export default function Dashboard() {
     }
   }
 
-  const [checkedIds,    setCheckedIds]    = useState(new Set())
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [deleting,      setDeleting]      = useState(false)
+  const [checkedIds,       setCheckedIds]       = useState(new Set())
+  const [confirmDelete,    setConfirmDelete]    = useState(false)
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
+  const [deleting,         setDeleting]         = useState(false)
 
   function toggleCheck(id) {
     setCheckedIds(prev => {
@@ -114,6 +115,19 @@ export default function Dashboard() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  async function handleDeleteAll() {
+    setDeleting(true)
+    try {
+      await Promise.all(filtered.map(c => deleteDoc(doc(db, 'companies', c.id))))
+      setCheckedIds(new Set())
+      setConfirmDeleteAll(false)
+    } catch (e) {
+      alert('Chyba vymazania: ' + e.message)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   async function handleDeleteSelected() {
@@ -216,6 +230,11 @@ export default function Dashboard() {
         {checkedIds.size > 0 && (
           <button style={css.deleteBtn} onClick={() => setConfirmDelete(true)}>
             🗑 Vymazať vybrané ({checkedIds.size})
+          </button>
+        )}
+        {filtered.length > 0 && (
+          <button style={css.deleteBtn} onClick={() => setConfirmDeleteAll(true)}>
+            🗑 Vymazať všetky ({filtered.length})
           </button>
         )}
         <button
@@ -336,6 +355,32 @@ export default function Dashboard() {
                 {addSaving ? '⏳ Ukladám...' : '✓ Uložiť'}
               </button>
               <button style={css.mbtnCancel} onClick={() => setAddOpen(false)}>Zrušiť</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete ALL confirmation modal */}
+      {confirmDeleteAll && (
+        <div style={css.overlay} onClick={e => e.target === e.currentTarget && setConfirmDeleteAll(false)}>
+          <div style={{ ...css.modal, maxWidth: 420 }}>
+            <div style={{ ...css.mhead, flexDirection: 'column', alignItems: 'flex-start', gap: '0.4rem' }}>
+              <span style={css.mtitle}>⚠ Vymazať všetky kontakty</span>
+              <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.88rem', color: '#e8eaed' }}>
+                Naozaj vymazať VŠETKÝCH {filtered.length} kontaktov?
+              </span>
+              <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', color: '#ef4444' }}>
+                Táto akcia je nevratná.
+              </span>
+            </div>
+            <div style={{ ...css.mbtns, marginTop: '1rem' }}>
+              <button
+                style={{ ...css.mbtnOk, background: '#ef4444', opacity: deleting ? 0.6 : 1, cursor: deleting ? 'not-allowed' : 'pointer' }}
+                onClick={handleDeleteAll}
+                disabled={deleting}>
+                {deleting ? '⏳ Mažem...' : `🗑 Vymazať všetkých (${filtered.length})`}
+              </button>
+              <button style={css.mbtnCancel} onClick={() => setConfirmDeleteAll(false)}>Zrušiť</button>
             </div>
           </div>
         </div>
