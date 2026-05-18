@@ -1,23 +1,17 @@
 /**
- * STRIKER Reply Checker — IONOS IMAP polling
+ * STRIKER Reply Checker — IONOS IMAP + 3-layer matching
  *
- * Scheduled: every 10 minutes via cron-job.org
- * POST /.netlify/functions/check-replies  (manual trigger)
- * GET  /.netlify/functions/check-replies  (health check)
+ * Layer 1 HIGH:   In-Reply-To / References → outbound_emails.messageId
+ * Layer 2 MEDIUM: exact fromEmail + normalizedSubject → outbound_emails
+ * Layer 3 LOW:    domain match (non-free only) → possible_match flag only
  *
- * Required env vars:
- *   IONOS_IMAP_HOST        imap.ionos.de
- *   IONOS_IMAP_PORT        993
- *   IONOS_EMAIL            adolf.staubert@striker-energy.de
- *   IONOS_PASSWORD         <mailbox password>
- *   VITE_FIREBASE_API_KEY
- *   VITE_FIREBASE_PROJECT_ID
+ * POST /.netlify/functions/check-replies  — run check
+ * GET  /.netlify/functions/check-replies  — health check
  */
 
-const { ImapFlow } = require('imapflow')
+const { ImapFlow }    = require('imapflow')
 const { simpleParser } = require('mailparser')
 
-// ── Config ────────────────────────────────────────────────────────────────────
 const IMAP_HOST    = process.env.IONOS_IMAP_HOST    || 'imap.ionos.de'
 const IMAP_PORT    = parseInt(process.env.IONOS_IMAP_PORT || '993', 10)
 const IMAP_USER    = process.env.IONOS_EMAIL
@@ -26,16 +20,21 @@ const FB_API_KEY   = process.env.VITE_FIREBASE_API_KEY
 const FB_PROJECT   = process.env.VITE_FIREBASE_PROJECT_ID
 const FROM_ADDRESS = (IMAP_USER || '').toLowerCase()
 
-// Keywords that indicate high interest
+// Free email providers — domain matching disabled for these
+const FREE_DOMAINS = new Set([
+  'gmail.com','yahoo.com','hotmail.com','outlook.com','live.com',
+  'aol.com','icloud.com','me.com','mail.com','gmx.com','gmx.de',
+  'web.de','t-online.de','yahoo.de','hotmail.de','outlook.de',
+  'protonmail.com','proton.me','fastmail.com','zoho.com',
+])
+
 const HIGH_INTEREST_KEYWORDS = [
-  'interested', 'interesse', 'interessiert',
-  'angebot', 'offer', 'quote', 'preis', 'price',
-  'call', 'anruf', 'meeting', 'treffen', 'termin',
-  'ja', 'yes', 'gerne', 'gefällt', 'super', 'toll',
-  'wann', 'when', 'kosten', 'cost',
+  'interested','interesse','interessiert','angebot','offer','quote',
+  'preis','price','call','anruf','meeting','treffen','termin',
+  'ja','yes','gerne','gefällt','super','toll','wann','when','kosten','cost',
 ]
 
-// ── Firestore REST helpers ────────────────────────────────────────────────────
+// ── Firestore REST ────────────────────────────────────────────────────────────
 const FS_BASE = () =>
   `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`
 
@@ -48,205 +47,235 @@ function toFsVal(v) {
   if (typeof v === 'object')         return { mapValue: { fields: toFsFields(v) } }
   return { stringValue: String(v) }
 }
-
 function toFsFields(obj) {
   const f = {}
   for (const [k, v] of Object.entries(obj)) if (v !== undefined) f[k] = toFsVal(v)
   return f
 }
-
 function fromFsDoc(doc) {
   const id = doc.name?.split('/').pop()
-  function getVal(field) {
+  function g(field) {
     if (!field) return null
-    if (field.stringValue  !== undefined) return field.stringValue
-    if (field.booleanValue !== undefined) return field.booleanValue
-    if (field.integerValue !== undefined) return parseInt(field.integerValue, 10)
+    if (field.stringValue    !== undefined) return field.stringValue
+    if (field.booleanValue   !== undefined) return field.booleanValue
+    if (field.integerValue   !== undefined) return parseInt(field.integerValue, 10)
     if (field.timestampValue !== undefined) return field.timestampValue
-    if (field.mapValue)    return Object.fromEntries(Object.entries(field.mapValue.fields || {}).map(([k, v]) => [k, getVal(v)]))
+    if (field.mapValue) return Object.fromEntries(
+      Object.entries(field.mapValue.fields || {}).map(([k, v]) => [k, g(v)])
+    )
     return null
   }
   const data = {}
-  for (const [k, v] of Object.entries(doc.fields || {})) data[k] = getVal(v)
+  for (const [k, v] of Object.entries(doc.fields || {})) data[k] = g(v)
   return { id, ...data }
 }
-
-async function fsQuery(collection, field, value) {
-  const url = `${FS_BASE()}/${collection}?key=${FB_API_KEY}&pageSize=500`
-  const res  = await fetch(url)
+async function fsQuery(col) {
+  const res  = await fetch(`${FS_BASE()}/${col}?key=${FB_API_KEY}&pageSize=500`)
   const data = await res.json()
-  return (data.documents || [])
-    .map(fromFsDoc)
-    .filter(d => !field || d[field] === value)
+  return (data.documents || []).map(fromFsDoc)
 }
-
 async function fsPatch(docPath, data) {
   const mask = Object.keys(data).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&')
   const res  = await fetch(`${FS_BASE()}/${docPath}?key=${FB_API_KEY}&${mask}`, {
-    method:  'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ fields: toFsFields(data) }),
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: toFsFields(data) }),
+  })
+  return res.json()
+}
+async function fsCreate(col, data) {
+  const res = await fetch(`${FS_BASE()}/${col}?key=${FB_API_KEY}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: toFsFields(data) }),
   })
   return res.json()
 }
 
-async function fsCreate(collectionId, data) {
-  const res = await fetch(`${FS_BASE()}/${collectionId}?key=${FB_API_KEY}`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ fields: toFsFields(data) }),
-  })
-  return res.json()
+// ── Text helpers ──────────────────────────────────────────────────────────────
+function normalizeSubject(s) {
+  return (s || '')
+    .replace(/^(Re|Fwd|Fw|AW|SV|WG|Antw|ENC|RIF|FS|VB|RES|Odp|Trans|Ref|Vs|NA|Svar|Ynt)(\s*:)+\s*/gi, '')
+    .replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
-async function fsExists(collection, field, value) {
-  const docs = await fsQuery(collection, field, value)
-  return docs.length > 0
-}
-
-// ── IMAP helpers ──────────────────────────────────────────────────────────────
-function buildImapClient() {
-  return new ImapFlow({
-    host:    IMAP_HOST,
-    port:    IMAP_PORT,
-    secure:  true,
-    auth:    { user: IMAP_USER, pass: IMAP_PASS },
-    logger:  false,
-    tls:     { rejectUnauthorized: false },
-    connectionTimeout: 15000,
-    greetingTimeout:   10000,
-  })
-}
-
-// Extract plain text from parsed mail (fallback chain)
 function extractBody(parsed) {
   if (parsed.text) return parsed.text.slice(0, 2000).trim()
-  if (parsed.html) {
-    return parsed.html
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s{2,}/g, ' ')
-      .slice(0, 2000)
-      .trim()
-  }
+  if (parsed.html) return parsed.html.replace(/<[^>]+>/g,' ').replace(/\s{2,}/g,' ').slice(0,2000).trim()
   return ''
 }
 
-// Detect high-interest keywords in subject + body
 function detectHighInterest(subject, body) {
-  const text = ((subject || '') + ' ' + (body || '')).toLowerCase()
+  const text = ((subject||'')+' '+(body||'')).toLowerCase()
   return HIGH_INTEREST_KEYWORDS.some(kw => text.includes(kw))
 }
 
-// Check if this looks like a reply (Re: prefix or In-Reply-To header)
-function isReply(parsed) {
-  const subject = parsed.subject || ''
-  const inReplyTo = parsed.inReplyTo || ''
-  const references = (parsed.references || []).join(' ')
-  return (
-    /^re:/i.test(subject.trim()) ||
-    inReplyTo.length > 0 ||
-    references.length > 0
-  )
+function parseMsgIds(header) {
+  if (!header) return []
+  return (header.match(/<[^>]+>/g) || []).map(s => s.toLowerCase())
 }
 
-// ── Match reply to a company ──────────────────────────────────────────────────
-function matchCompanyByEmail(fromAddress, companies) {
-  const from = fromAddress.toLowerCase()
-  return companies.find(c => {
-    const ce = (c.email || '').toLowerCase()
-    if (!ce) return false
-    // Exact match
-    if (from === ce) return true
-    // Same domain
-    const fromDomain = from.split('@')[1]
-    const compDomain = ce.split('@')[1]
-    if (fromDomain && compDomain && fromDomain === compDomain) return true
-    return false
+// ── IMAP ──────────────────────────────────────────────────────────────────────
+function buildImapClient() {
+  return new ImapFlow({
+    host: IMAP_HOST, port: IMAP_PORT, secure: true,
+    auth: { user: IMAP_USER, pass: IMAP_PASS },
+    logger: false, tls: { rejectUnauthorized: false },
+    connectionTimeout: 15000, greetingTimeout: 10000,
   })
+}
+
+// ── 3-layer matching engine ───────────────────────────────────────────────────
+function buildOutboundIndexes(outbounds) {
+  const byMsgId      = new Map() // messageId (lowercase) → outbound
+  const byFingerprint = new Map() // toEmail::normalizedSubject → outbound
+
+  for (const o of outbounds) {
+    if (o.messageId) {
+      byMsgId.set(o.messageId.toLowerCase(), o)
+    }
+    if (o.toEmail && o.normalizedSubject !== undefined && o.normalizedSubject !== null) {
+      const key = `${o.toEmail.toLowerCase()}::${o.normalizedSubject}`
+      byFingerprint.set(key, o)
+    }
+  }
+  return { byMsgId, byFingerprint }
+}
+
+function matchReply({ fromAddr, subject, inReplyToIds, referenceIds }, { byMsgId, byFingerprint }, companies) {
+  const normSubj = normalizeSubject(subject)
+
+  // ── Layer 1: HIGH — Message-ID thread headers ──────────────────────────────
+  const allRefIds = [...inReplyToIds, ...referenceIds]
+  for (const id of allRefIds) {
+    const o = byMsgId.get(id.toLowerCase())
+    if (o) return { confidence: 'high', outbound: o, companyId: o.companyId }
+  }
+
+  // ── Layer 2: MEDIUM — exact email + normalized subject ─────────────────────
+  const fingerprintKey = `${fromAddr}::${normSubj}`
+  const o2 = byFingerprint.get(fingerprintKey)
+  if (o2) return { confidence: 'medium', outbound: o2, companyId: o2.companyId }
+
+  // ── Layer 3: LOW — domain match (non-free domains only) ───────────────────
+  const fromDomain = fromAddr.split('@')[1]
+  if (fromDomain && !FREE_DOMAINS.has(fromDomain)) {
+    const domainMatch = companies.find(c => {
+      const cd = (c.email || '').split('@')[1]?.toLowerCase()
+      return cd && cd === fromDomain
+    })
+    if (domainMatch) {
+      return { confidence: 'low', outbound: null, companyId: domainMatch.id }
+    }
+  }
+
+  return null
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function runCheck() {
-  if (!IMAP_USER || !IMAP_PASS) throw new Error('IONOS_EMAIL or IONOS_PASSWORD not set')
-  if (!FB_API_KEY || !FB_PROJECT)  throw new Error('Firebase env vars not set')
+  if (!IMAP_USER || !IMAP_PASS)   throw new Error('IONOS_EMAIL or IONOS_PASSWORD not set')
+  if (!FB_API_KEY || !FB_PROJECT) throw new Error('Firebase env vars not set')
 
   console.log(`[check-replies] connecting to ${IMAP_HOST}:${IMAP_PORT} as ${IMAP_USER}`)
 
-  // Load all companies with emails
-  const companies = await fsQuery('companies')
-  const withEmail = companies.filter(c => c.email)
-  console.log(`[check-replies] loaded ${companies.length} companies, ${withEmail.length} with email`)
+  // Load data from Firestore
+  const [companies, existingReplies, outbounds] = await Promise.all([
+    fsQuery('companies'),
+    fsQuery('email_replies'),
+    fsQuery('outbound_emails'),
+  ])
 
-  // Load existing reply message IDs to avoid duplicates
-  const existingReplies = await fsQuery('email_replies')
-  const knownMessageIds = new Set(existingReplies.map(r => r.messageId).filter(Boolean))
-  console.log(`[check-replies] ${knownMessageIds.size} known replies in DB`)
+  const withEmail     = companies.filter(c => c.email)
+  const knownMsgIds   = new Set(existingReplies.map(r => r.messageId).filter(Boolean))
+  const { byMsgId, byFingerprint } = buildOutboundIndexes(outbounds)
+
+  console.log(`[check-replies] ${withEmail.length} companies | ${outbounds.length} outbound records | ${knownMsgIds.size} known replies`)
 
   const client = buildImapClient()
-  let newReplies = 0
+  let newReplies = 0, lowConfidence = 0
 
   try {
     await client.connect()
     console.log('[check-replies] IMAP connected ✓')
   } catch (connErr) {
-    // Surface auth / network errors clearly
-    const msg = connErr.message || String(connErr)
-    const hint = /authenticationfailed|invalid credentials|command failed/i.test(msg)
-      ? ' (check IONOS_PASSWORD in Netlify env vars)'
-      : /timeout|connect/i.test(msg)
-      ? ' (IMAP host unreachable — check IONOS_IMAP_HOST)'
-      : ''
+    const msg  = connErr.message || String(connErr)
+    const hint = /authenticationfailed|command failed/i.test(msg) ? ' (check IONOS_PASSWORD)' : ''
     throw new Error(`IMAP connection failed: ${msg}${hint}`)
   }
 
   try {
     const lock = await client.getMailboxLock('INBOX')
     try {
-      // Fetch messages since last 7 days
       const since = new Date()
       since.setDate(since.getDate() - 7)
 
       const messages = []
-      // imapflow fetch API: use source range + fetchOptions
       for await (const msg of client.fetch({ since }, {
-        uid:      true,
-        envelope: true,
-        source:   false,
+        uid: true, envelope: true, headers: true,
       })) {
         messages.push(msg)
       }
-      console.log(`[check-replies] fetched ${messages.length} messages from last 7 days`)
+      console.log(`[check-replies] ${messages.length} messages fetched`)
 
       for (const msg of messages) {
         try {
-          const msgId    = msg.envelope?.messageId || `uid-${msg.uid}`
+          const msgId    = (msg.envelope?.messageId || `uid-${msg.uid}`).toLowerCase()
           const fromAddr = (msg.envelope?.from?.[0]?.address || '').toLowerCase()
-          const toAddrs  = (msg.envelope?.to   || []).map(a => (a.address || '').toLowerCase())
+          const toAddrs  = (msg.envelope?.to || []).map(a => (a.address||'').toLowerCase())
           const subject  = msg.envelope?.subject || ''
 
           if (fromAddr === FROM_ADDRESS) continue
-          if (knownMessageIds.has(msgId)) continue
-          const toUs = toAddrs.some(a => a === FROM_ADDRESS)
-          if (!toUs) continue
+          if (knownMsgIds.has(msgId))   continue
+          if (!toAddrs.some(a => a === FROM_ADDRESS)) continue
 
-          // Reply detection: Re: prefix is sufficient (header fetch removed for stability)
-          const looksLikeReply = /^re:/i.test(subject.trim())
+          // Parse threading headers
+          const inReplyToRaw  = msg.headers?.get('in-reply-to') || ''
+          const referencesRaw = msg.headers?.get('references')  || ''
+          const inReplyToIds  = parseMsgIds(inReplyToRaw)
+          const referenceIds  = parseMsgIds(referencesRaw)
+
+          // Need Re: OR threading headers to consider as reply
+          const looksLikeReply = /^re:/i.test(subject.trim()) || inReplyToIds.length > 0 || referenceIds.length > 0
           if (!looksLikeReply) continue
 
-          const company = matchCompanyByEmail(fromAddr, withEmail)
-          if (!company) {
-            console.log(`[check-replies] no match for: ${fromAddr}`)
+          // Run 3-layer matching
+          const match = matchReply(
+            { fromAddr, subject, inReplyToIds, referenceIds },
+            { byMsgId, byFingerprint },
+            withEmail
+          )
+
+          if (!match) {
+            console.log(`[check-replies] no match (${fromAddr}) — subject: "${subject.slice(0,50)}"`)
             continue
           }
 
-          // Download full message for body text
+          console.log(`[check-replies] match confidence=${match.confidence} | from=${fromAddr} | companyId=${match.companyId}`)
+
+          // LOW confidence: save to DB with flag, do NOT update company
+          if (match.confidence === 'low') {
+            lowConfidence++
+            await fsCreate('email_replies', {
+              companyId:       match.companyId,
+              messageId:       msgId,
+              fromEmail:       fromAddr,
+              subject,
+              matchConfidence: 'low',
+              possibleMatch:   true,
+              processedAt:     new Date(),
+              replyDate:       msg.envelope?.date || new Date(),
+            })
+            knownMsgIds.add(msgId)
+            console.log(`[check-replies] LOW confidence saved (not updating company)`)
+            continue
+          }
+
+          // HIGH / MEDIUM: fetch full body + save everything
           let bodyText = ''
           try {
             const dl = await client.download(msg.uid, undefined, { uid: true })
             const chunks = []
             for await (const chunk of dl.content) chunks.push(chunk)
-            const raw = Buffer.concat(chunks)
-            const parsed = await simpleParser(raw)
+            const parsed = await simpleParser(Buffer.concat(chunks))
             bodyText = extractBody(parsed)
           } catch (dlErr) {
             console.warn(`[check-replies] body download failed uid ${msg.uid}:`, dlErr.message)
@@ -256,24 +285,26 @@ async function runCheck() {
           const replySnippet = bodyText.slice(0, 120).replace(/\n/g, ' ')
           const highInterest = detectHighInterest(subject, bodyText)
           const replyDate    = msg.envelope?.date || new Date()
-
-          console.log(`[check-replies] reply: ${fromAddr} → ${company.name} | high_interest=${highInterest}`)
+          const company      = companies.find(c => c.id === match.companyId)
 
           await fsCreate('email_replies', {
-            companyId:   company.id,
-            companyName: company.name,
-            messageId:   msgId,
-            fromEmail:   fromAddr,
+            companyId:       match.companyId,
+            companyName:     company?.name || null,
+            messageId:       msgId,
+            fromEmail:       fromAddr,
             subject,
-            bodyText:    bodyText.slice(0, 3000),
-            snippet:     replySnippet,
+            normalizedSubject: normalizeSubject(subject),
+            bodyText:        bodyText.slice(0, 3000),
+            snippet:         replySnippet,
             highInterest,
-            processedAt: new Date(),
-            replyDate:   replyDate instanceof Date ? replyDate : new Date(replyDate),
+            matchConfidence: match.confidence,
+            outboundMsgId:   match.outbound?.messageId || null,
+            processedAt:     new Date(),
+            replyDate:       replyDate instanceof Date ? replyDate : new Date(replyDate),
           })
-          knownMessageIds.add(msgId)
+          knownMsgIds.add(msgId)
 
-          const updateFields = {
+          const companyUpdate = {
             replyReceived: true,
             replySubject:  subject,
             replySnippet,
@@ -281,10 +312,11 @@ async function runCheck() {
             lastReplyAt:   replyDate instanceof Date ? replyDate : new Date(replyDate),
             updatedAt:     new Date(),
           }
-          if (highInterest) updateFields.highInterest = true
-          await fsPatch(`companies/${company.id}`, updateFields)
+          if (highInterest) companyUpdate.highInterest = true
+
+          await fsPatch(`companies/${match.companyId}`, companyUpdate)
           newReplies++
-          console.log(`[check-replies] ✓ saved reply for ${company.name}`)
+          console.log(`[check-replies] ✓ ${match.confidence.toUpperCase()} match → ${company?.name || match.companyId} | high_interest=${highInterest}`)
         } catch (msgErr) {
           console.error(`[check-replies] msg error uid ${msg.uid}:`, msgErr.message)
         }
@@ -297,7 +329,7 @@ async function runCheck() {
     console.log('[check-replies] IMAP disconnected')
   }
 
-  return { newReplies, companiesChecked: withEmail.length }
+  return { newReplies, lowConfidenceSkipped: lowConfidence, companiesChecked: withEmail.length, outboundRecords: outbounds.length }
 }
 
 // ── Netlify handler ───────────────────────────────────────────────────────────
@@ -305,48 +337,25 @@ exports.handler = async (event) => {
   const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
 
   if (event.httpMethod === 'GET') {
-    return {
-      statusCode: 200,
-      headers: CORS,
-      body: JSON.stringify({
-        ok: true,
-        fn: 'check-replies',
-        imapHost:    IMAP_HOST,
-        imapUser:    IMAP_USER || '(not set)',
-        fbConfigured: !!(FB_API_KEY && FB_PROJECT),
-        imapConfigured: !!(IMAP_USER && IMAP_PASS),
-      }),
-    }
+    return { statusCode: 200, headers: CORS, body: JSON.stringify({
+      ok: true, fn: 'check-replies',
+      imapHost: IMAP_HOST, imapUser: IMAP_USER || '(not set)',
+      fbConfigured: !!(FB_API_KEY && FB_PROJECT),
+      imapConfigured: !!(IMAP_USER && IMAP_PASS),
+    })}
   }
-
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers: CORS, body: JSON.stringify({ error: 'Method not allowed' }) }
   }
 
-  const missing = ['IONOS_EMAIL', 'IONOS_PASSWORD', 'VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_PROJECT_ID']
-    .filter(k => !process.env[k])
-  if (missing.length) {
-    return {
-      statusCode: 500,
-      headers: CORS,
-      body: JSON.stringify({ error: `Missing env vars: ${missing.join(', ')}` }),
-    }
-  }
+  const missing = ['IONOS_EMAIL','IONOS_PASSWORD','VITE_FIREBASE_API_KEY','VITE_FIREBASE_PROJECT_ID'].filter(k => !process.env[k])
+  if (missing.length) return { statusCode: 500, headers: CORS, body: JSON.stringify({ error: `Missing env: ${missing.join(', ')}` }) }
 
   try {
     const result = await runCheck()
-    console.log(`[check-replies] done: ${result.newReplies} new replies`)
-    return {
-      statusCode: 200,
-      headers: CORS,
-      body: JSON.stringify({ ok: true, ...result }),
-    }
+    return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true, ...result }) }
   } catch (e) {
-    console.error('[check-replies] fatal error:', e.message)
-    return {
-      statusCode: 500,
-      headers: CORS,
-      body: JSON.stringify({ ok: false, error: e.message }),
-    }
+    console.error('[check-replies] fatal:', e.message)
+    return { statusCode: 500, headers: CORS, body: JSON.stringify({ ok: false, error: e.message }) }
   }
 }
