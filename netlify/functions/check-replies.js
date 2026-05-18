@@ -9,7 +9,8 @@
  * GET  /.netlify/functions/check-replies  — health check
  */
 
-const { ImapFlow }    = require('imapflow')
+const https            = require('https')
+const { ImapFlow }     = require('imapflow')
 const { simpleParser } = require('mailparser')
 
 const IMAP_HOST    = process.env.IONOS_IMAP_HOST    || 'imap.ionos.de'
@@ -111,6 +112,72 @@ function detectHighInterest(subject, body) {
 function parseMsgIds(header) {
   if (!header) return []
   return (header.match(/<[^>]+>/g) || []).map(s => s.toLowerCase())
+}
+
+// ── AI reply draft generation ────────────────────────────────────────────────
+async function callClaude(prompt, maxTokens) {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      model:      'claude-haiku-4-5',
+      max_tokens: maxTokens || 400,
+      messages:   [{ role: 'user', content: prompt }],
+    })
+    const req = https.request({
+      hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', 'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01', 'Content-Length': Buffer.byteLength(body),
+      },
+    }, res => {
+      let data = ''
+      res.on('data', c => data += c)
+      res.on('end', () => {
+        try {
+          const p = JSON.parse(data)
+          if (res.statusCode !== 200) reject(new Error(p.error?.message || `HTTP ${res.statusCode}`))
+          else resolve(p.content?.[0]?.text || '')
+        } catch(e) { reject(e) }
+      })
+    })
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('Claude timeout')) })
+    req.on('error', reject)
+    req.write(body)
+    req.end()
+  })
+}
+
+async function generateAiReplyDraft(replySnippet, companyName, originalSubject) {
+  try {
+    const prompt = `Du bist ein professioneller B2B Sales-Assistent für STRIKER Wärmetechnologie.
+STRIKER: 45kW Strom → 120-160kW Wärme. Preis: 8.000–10.000 EUR. Für Hotels, Wäschereien, Wellness.
+
+Firma: ${companyName}
+Ursprüngliches Email-Thema: ${originalSubject}
+Antwort des Kunden:
+---
+${(replySnippet || '').slice(0, 600)}
+---
+
+Schreibe eine kurze, professionelle B2B-Antwort auf Deutsch (Sie-Form, max 120 Wörter).
+Nur Email-Text, kein Meta-Kommentar.
+Format GENAU so (nichts davor oder danach):
+BETREFF: <Betreff>
+
+<Email-Text>`
+
+    const text  = await callClaude(prompt, 400)
+    const lines = text.trim().split('\n')
+    const sLine = lines.find(l => /^BETREFF:/i.test(l.trim()))
+    const subjectDe = sLine ? sLine.replace(/^BETREFF:\s*/i, '').trim() : `Re: ${originalSubject}`
+    const after     = sLine ? text.slice(text.indexOf(sLine) + sLine.length) : text
+    const bodyDe    = after.replace(/^\s*\n+/, '').trim()
+    return { subjectDe, bodyDe }
+  } catch (e) {
+    console.warn('[check-replies] AI draft failed:', e.message)
+    return null
+  }
 }
 
 // ── IMAP ──────────────────────────────────────────────────────────────────────
@@ -287,7 +354,7 @@ async function runCheck() {
           const replyDate    = msg.envelope?.date || new Date()
           const company      = companies.find(c => c.id === match.companyId)
 
-          await fsCreate('email_replies', {
+          const newDoc = await fsCreate('email_replies', {
             companyId:       match.companyId,
             companyName:     company?.name || null,
             messageId:       msgId,
@@ -315,6 +382,21 @@ async function runCheck() {
           if (highInterest) companyUpdate.highInterest = true
 
           await fsPatch(`companies/${match.companyId}`, companyUpdate)
+
+          // Generate AI reply draft and save back to the reply doc
+          const newDocId = newDoc?.name?.split('/').pop()
+          if (newDocId) {
+            const aiDraft = await generateAiReplyDraft(replySnippet, company?.name || companyName || '', subject)
+            if (aiDraft) {
+              await fsPatch(`email_replies/${newDocId}`, {
+                aiDraftSubject: aiDraft.subjectDe,
+                aiDraftBody:    aiDraft.bodyDe,
+                aiDraftStatus:  'pending',
+              })
+              console.log(`[check-replies] ✓ AI draft generated for ${company?.name}`)
+            }
+          }
+
           newReplies++
           console.log(`[check-replies] ✓ ${match.confidence.toUpperCase()} match → ${company?.name || match.companyId} | high_interest=${highInterest}`)
         } catch (msgErr) {
