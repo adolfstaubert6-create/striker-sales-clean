@@ -190,12 +190,24 @@ function buildImapClient() {
 }
 
 // ── 3-layer matching engine ───────────────────────────────────────────────────
-function buildOutboundIndexes(outbounds) {
+function buildOutboundIndexes(outbounds, companies) {
   const byMsgId       = new Map()
   const byFingerprint = new Map()
   const byToEmail     = new Map()
 
-  for (const o of outbounds) {
+  // Build a set of valid (non-ghost) companyIds — companies that have name + email
+  const validCompanyIds = new Set(
+    (companies || []).filter(c => c.name && c.email).map(c => c.id)
+  )
+
+  // Sort: valid companyId outbounds first, so they win when multiple share same key
+  const sorted = [...outbounds].sort((a, b) => {
+    const aValid = validCompanyIds.has(a.companyId) ? 1 : 0
+    const bValid = validCompanyIds.has(b.companyId) ? 1 : 0
+    return aValid - bValid // valid entries overwrite ghost entries
+  })
+
+  for (const o of sorted) {
     if (o.messageId) {
       byMsgId.set(o.messageId.toLowerCase(), o)
     }
@@ -203,10 +215,7 @@ function buildOutboundIndexes(outbounds) {
       const normStored = (o.normalizedSubject || '').replace(/[—–‒―]/g, '-')
       const key = `${o.toEmail.toLowerCase()}::${normStored}`
       byFingerprint.set(key, o)
-      // also index by toEmail alone for 2b
-      if (!byToEmail.has(o.toEmail.toLowerCase())) {
-        byToEmail.set(o.toEmail.toLowerCase(), o)
-      }
+      byToEmail.set(o.toEmail.toLowerCase(), o)
     }
   }
   return { byMsgId, byFingerprint, byToEmail }
@@ -285,7 +294,7 @@ async function runCheck() {
 
   const withEmail   = companies.filter(c => c.email)
   const knownMsgIds = new Set(existingReplies.map(r => r.messageId).filter(Boolean))
-  const indexes     = buildOutboundIndexes(outbounds)
+  const indexes     = buildOutboundIndexes(outbounds, companies)
 
   console.log(`[check-replies] companies_with_email=${withEmail.length} outbound=${outbounds.length} known_replies=${knownMsgIds.size}`)
   console.log(`[check-replies] outbound toEmails: ${[...indexes.byToEmail.keys()].join(', ')}`)
