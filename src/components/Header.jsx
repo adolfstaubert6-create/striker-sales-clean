@@ -1,3 +1,6 @@
+import { useState, useEffect } from 'react'
+import { getAuth, onAuthStateChanged } from 'firebase/auth'
+
 const mono = "'IBM Plex Mono', monospace"
 
 const s = {
@@ -68,6 +71,16 @@ const s = {
 }
 
 export default function Header({ view, setView, module, setModule }) {
+  const [userEmail, setUserEmail] = useState(null)
+
+  useEffect(() => {
+    try {
+      const auth = getAuth()
+      return onAuthStateChanged(auth, u => setUserEmail(u ? (u.email || u.uid) : 'anonymous / no auth'))
+    } catch {
+      setUserEmail('auth unavailable')
+    }
+  }, [])
   const isIntelligence = module === 'intelligence'
   const isSales        = !isIntelligence
 
@@ -99,8 +112,8 @@ export default function Header({ view, setView, module, setModule }) {
           )}
         </button>
         <div style={{ flex: 1 }} />
-        <div style={{ fontFamily: mono, fontSize: '0.45rem', color: '#1e2530', alignSelf: 'center', letterSpacing: '1px' }}>
-          STRIKER AI · v2
+        <div style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151', alignSelf: 'center', letterSpacing: '0.5px' }}>
+          Logged in as: <span style={{ color: '#6b7280' }}>{userEmail ?? '…'}</span>
         </div>
       </div>
 
