@@ -332,7 +332,7 @@ async function runCheck() {
 
       const messages = []
       for await (const msg of client.fetch({ since }, {
-        uid: true, envelope: true, headers: ['in-reply-to', 'references'], flags: true,
+        uid: true, envelope: true, flags: true,
       })) {
         messages.push(msg)
       }
@@ -359,11 +359,10 @@ async function runCheck() {
 
           console.log(`[check-replies] msg uid=${msg.uid} from=${fromAddr} subj="${subject.slice(0,50)}" date=${date}`)
 
-          // headers is a Map<string, string[]> when fetched with headers:[...]
-          const inReplyToRaw  = String(msg.headers?.get('in-reply-to') || '')
-          const referencesRaw = String(msg.headers?.get('references')  || '')
-          const inReplyToIds  = parseMsgIds(inReplyToRaw)
-          const referenceIds  = parseMsgIds(referencesRaw)
+          // Layer 1 (In-Reply-To) disabled: Resend overwrites Message-ID with SES ID
+          // so our stored messageId never matches. Detection via Re: prefix only.
+          const inReplyToIds = []
+          const referenceIds = []
 
           const msgDebug = {
             uid: msg.uid,
