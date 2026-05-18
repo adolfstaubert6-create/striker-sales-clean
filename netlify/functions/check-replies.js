@@ -275,7 +275,7 @@ async function runCheck() {
   console.log(`[check-replies] ${withEmail.length} companies | ${outbounds.length} outbound records | ${knownMsgIds.size} known replies`)
 
   const client = buildImapClient()
-  let newReplies = 0, lowConfidence = 0
+  let newReplies = 0, lowConfidence = 0, messagesScanned = 0
 
   try {
     await client.connect()
@@ -298,7 +298,8 @@ async function runCheck() {
       })) {
         messages.push(msg)
       }
-      console.log(`[check-replies] ${messages.length} messages fetched`)
+      messagesScanned = messages.length
+      console.log(`[check-replies] ${messages.length} messages fetched (last 30 days)`)
 
       for (const msg of messages) {
         try {
@@ -428,7 +429,7 @@ async function runCheck() {
     console.log('[check-replies] IMAP disconnected')
   }
 
-  return { newReplies, lowConfidenceSkipped: lowConfidence, companiesChecked: withEmail.length, outboundRecords: outbounds.length }
+  return { newReplies, lowConfidenceSkipped: lowConfidence, companiesChecked: withEmail.length, outboundRecords: outbounds.length, messagesScanned }
 }
 
 // ── Netlify handler ───────────────────────────────────────────────────────────
