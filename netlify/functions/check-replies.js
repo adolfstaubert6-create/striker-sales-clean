@@ -331,7 +331,7 @@ async function runCheck() {
 
       const messages = []
       for await (const msg of client.fetch({ since }, {
-        uid: true, envelope: true, headers: true, flags: true,
+        uid: true, envelope: true, headers: ['in-reply-to', 'references'], flags: true,
       })) {
         messages.push(msg)
       }
@@ -351,6 +351,14 @@ async function runCheck() {
           const date     = msg.envelope?.date ? new Date(msg.envelope.date).toISOString() : null
           const flags    = [...(msg.flags || [])]
 
+          // Record this message immediately before any parsing that could throw
+          scannedSubjects.push(subject.slice(0, 80))
+          scannedFrom.push(fromAddr)
+          scannedDates.push(date)
+
+          console.log(`[check-replies] msg uid=${msg.uid} from=${fromAddr} subj="${subject.slice(0,50)}" date=${date}`)
+
+          // headers is a Map when fetched with headers: ['in-reply-to','references']
           const inReplyToRaw  = msg.headers?.get('in-reply-to') || ''
           const referencesRaw = msg.headers?.get('references')  || ''
           const inReplyToIds  = parseMsgIds(inReplyToRaw)
@@ -369,12 +377,6 @@ async function runCheck() {
             date,
             flags,
           }
-
-          console.log(`[check-replies] msg uid=${msg.uid} from=${fromAddr} subj="${subject.slice(0,50)}" date=${date}`)
-
-          scannedSubjects.push(subject.slice(0, 80))
-          scannedFrom.push(fromAddr)
-          scannedDates.push(date)
 
           // Skip checks
           if (fromAddr === FROM_ADDRESS) {
