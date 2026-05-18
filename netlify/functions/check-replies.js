@@ -95,6 +95,7 @@ async function fsCreate(col, data) {
 function normalizeSubject(s) {
   return (s || '')
     .replace(/^(Re|Fwd|Fw|AW|SV|WG|Antw|ENC|RIF|FS|VB|RES|Odp|Trans|Ref|Vs|NA|Svar|Ynt)(\s*:)+\s*/gi, '')
+    .replace(/[—–‒―]/g, '-') // normalize em/en dashes to hyphen
     .replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
@@ -221,6 +222,22 @@ function matchReply({ fromAddr, subject, inReplyToIds, referenceIds }, { byMsgId
   const fingerprintKey = `${fromAddr}::${normSubj}`
   const o2 = byFingerprint.get(fingerprintKey)
   if (o2) return { confidence: 'medium', outbound: o2, companyId: o2.companyId }
+
+  // ── Layer 2b: MEDIUM — exact email match (subject normalization fallback) ──
+  // Catches cases where em-dash or encoding differs between stored and received
+  const o2b = companies.find(c => {
+    if (!c.email) return false
+    if (FREE_DOMAINS.has(fromAddr.split('@')[1])) return false // still block free for company match
+    return c.email.toLowerCase() === fromAddr
+  })
+  // For free-domain senders (gmail etc), only match via outbound toEmail
+  const o2bOut = !o2b ? null : null // skip company-only match for free domains
+  // Looser: find outbound record where toEmail === fromAddr
+  const o2c = [...byFingerprint.values()].find(o => o.toEmail?.toLowerCase() === fromAddr)
+  if (o2c) {
+    console.log(`[check-replies] Layer 2b hit: toEmail match ${fromAddr}, normSubj mismatch. stored="${o2c.normalizedSubject}" incoming="${normSubj}"`)
+    return { confidence: 'medium', outbound: o2c, companyId: o2c.companyId }
+  }
 
   // ── Layer 3: LOW — domain match (non-free domains only) ───────────────────
   const fromDomain = fromAddr.split('@')[1]
