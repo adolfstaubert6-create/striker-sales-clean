@@ -290,11 +290,11 @@ async function runCheck() {
     const lock = await client.getMailboxLock('INBOX')
     try {
       const since = new Date()
-      since.setDate(since.getDate() - 7)
+      since.setDate(since.getDate() - 30)
 
       const messages = []
       for await (const msg of client.fetch({ since }, {
-        uid: true, envelope: true, headers: true,
+        uid: true, envelope: true, headers: true, flags: true,
       })) {
         messages.push(msg)
       }
@@ -307,9 +307,9 @@ async function runCheck() {
           const toAddrs  = (msg.envelope?.to || []).map(a => (a.address||'').toLowerCase())
           const subject  = msg.envelope?.subject || ''
 
-          if (fromAddr === FROM_ADDRESS) continue
-          if (knownMsgIds.has(msgId))   continue
-          if (!toAddrs.some(a => a === FROM_ADDRESS)) continue
+          if (fromAddr === FROM_ADDRESS) { console.log(`[check-replies] skip self: ${msgId}`); continue }
+          if (knownMsgIds.has(msgId))   { console.log(`[check-replies] skip known: ${msgId}`); continue }
+          if (!toAddrs.some(a => a === FROM_ADDRESS)) { console.log(`[check-replies] skip wrong-to: from=${fromAddr} to=${toAddrs.join(',')}`); continue }
 
           // Parse threading headers
           const inReplyToRaw  = msg.headers?.get('in-reply-to') || ''
@@ -319,7 +319,7 @@ async function runCheck() {
 
           // Need Re: OR threading headers to consider as reply
           const looksLikeReply = /^re:/i.test(subject.trim()) || inReplyToIds.length > 0 || referenceIds.length > 0
-          if (!looksLikeReply) continue
+          if (!looksLikeReply) { console.log(`[check-replies] skip not-reply: from=${fromAddr} subj="${subject.slice(0,40)}"`); continue }
 
           // Run 3-layer matching
           const match = matchReply(
