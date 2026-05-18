@@ -757,6 +757,7 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [sendingReply,    setSendingReply]    = useState({})
   const [translating,     setTranslating]     = useState({})
   const [expandedReplies, setExpandedReplies] = useState({}) // { [replyId]: true }
+  const [replyFilter,     setReplyFilter]     = useState('active') // 'active' | 'archived'
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailSearch, setEmailSearch] = useState({ state: null, email: null, hunterResults: null })
   const [hunterKey,   setHunterKey]   = useState(() => localStorage.getItem('hunterApiKey') || '')
@@ -1227,44 +1228,69 @@ PRAVIDLÁ EMAILU:
     setExpandedReplies(p => ({ ...p, [id]: !p[id] }))
   }
 
-  async function handleArchiveReply(replyId) {
-    try {
-      await updateDoc(doc(db, 'email_replies', replyId), {
-        archived: true, archivedAt: serverTimestamp(),
-      })
-      showToast('Reply archivovaná')
-    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
-  }
-
-  async function handleHideReply(replyId) {
-    try {
-      await updateDoc(doc(db, 'email_replies', replyId), {
-        hidden: true, hiddenAt: serverTimestamp(),
-      })
-      showToast('Reply skrytá z CRM')
-    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  // After any state change, check if company unread badge should clear
+  async function _syncCompanyUnread(skipReplyId, extraFlag) {
+    // Count active unread replies (excluding the one being acted on)
+    const stillUnread = replies.filter(r =>
+      r.id !== skipReplyId &&
+      !r.hidden && !r.archived && !r.resolved &&
+      !(extraFlag?.id === r.id) &&
+      !r.readAt
+    )
+    if (stillUnread.length === 0) {
+      try {
+        await updateDoc(doc(db, 'companies', live.id), {
+          hasUnreadReply: false, unreadReplyCount: 0, updatedAt: serverTimestamp(),
+        })
+      } catch (e) { /* silent */ }
+    }
   }
 
   async function handleMarkOneReplyRead(replyId) {
     try {
-      await updateDoc(doc(db, 'email_replies', replyId), {
-        readAt: serverTimestamp(),
-      })
+      await updateDoc(doc(db, 'email_replies', replyId), { readAt: serverTimestamp() })
+      await _syncCompanyUnread(replyId)
     } catch (e) { /* silent */ }
   }
 
-  // ── Mark replies as read ─────────────────────────────────────────────────────
+  async function handleResolveReply(replyId) {
+    try {
+      await updateDoc(doc(db, 'email_replies', replyId), {
+        resolved: true, resolvedAt: serverTimestamp(), readAt: serverTimestamp(),
+      })
+      await _syncCompanyUnread(replyId)
+      showToast('✅ Označené ako vybavené')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  async function handleArchiveReply(replyId) {
+    try {
+      await updateDoc(doc(db, 'email_replies', replyId), {
+        archived: true, archivedAt: serverTimestamp(), readAt: serverTimestamp(),
+      })
+      await _syncCompanyUnread(replyId)
+      showToast('📥 Archivovaná')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  async function handleDeleteFromCRM(replyId) {
+    try {
+      await updateDoc(doc(db, 'email_replies', replyId), {
+        hidden: true, hiddenAt: serverTimestamp(), readAt: serverTimestamp(),
+      })
+      await _syncCompanyUnread(replyId)
+      showToast('Zmazaná z CRM (email v IMAP zostáva)')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
+  }
+
+  // ── Mark all replies as read ──────────────────────────────────────────────────
   async function handleMarkRepliesRead() {
     try {
       await updateDoc(doc(db, 'companies', live.id), {
-        hasUnreadReply:   false,
-        unreadReplyCount: 0,
-        updatedAt:        serverTimestamp(),
+        hasUnreadReply: false, unreadReplyCount: 0, updatedAt: serverTimestamp(),
       })
-      showToast('Odpovede označené ako prečítané')
-    } catch (e) {
-      showToast('Chyba: ' + e.message, 'err')
-    }
+      showToast('Všetky odpovede prečítané')
+    } catch (e) { showToast('Chyba: ' + e.message, 'err') }
   }
 
   // ── Reply workflow ───────────────────────────────────────────────────────────
@@ -1927,19 +1953,41 @@ PRAVIDLÁ EMAILU:
         {/* ══ REPLIES ══ */}
         {replies.filter(r => !r.hidden).length > 0 && (
           <div style={{ ...css.section, borderLeft: '3px solid #ff5c00', paddingLeft: '0.85rem' }}>
-            {/* Section header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#4b5563' }}>
-                📩 Inbox ({replies.filter(r => !r.hidden).length})
-              </div>
-              {live.hasUnreadReply && (
-                <button
-                  style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.18rem 0.55rem', border: '1px solid rgba(255,92,0,0.35)', background: 'transparent', color: '#ff5c00', borderRadius: 2, cursor: 'pointer' }}
-                  onClick={handleMarkRepliesRead}>
-                  ✓ Všetky prečítané
-                </button>
-              )}
-            </div>
+            {/* Section header + filter tabs */}
+            {(() => {
+              const activeReplies   = replies.filter(r => !r.hidden && !r.archived)
+              const archivedReplies = replies.filter(r => !r.hidden && r.archived)
+              const unreadActive    = activeReplies.filter(r => !r.readAt).length
+              return (
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                    <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#4b5563' }}>📩 Odpovede</div>
+                    {live.hasUnreadReply && (
+                      <button style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.15rem 0.5rem', border: '1px solid rgba(255,92,0,0.3)', background: 'transparent', color: '#ff5c00', borderRadius: 2, cursor: 'pointer' }}
+                        onClick={handleMarkRepliesRead}>✓ Všetky prečítané</button>
+                    )}
+                  </div>
+                  {/* Tabs */}
+                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                    {[
+                      { key: 'active',   label: 'Aktívne',  count: activeReplies.length,   unread: unreadActive },
+                      { key: 'archived', label: 'Archív',   count: archivedReplies.length,  unread: 0 },
+                    ].map(tab => (
+                      <button key={tab.key}
+                        style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.2rem 0.6rem', border: `1px solid ${replyFilter === tab.key ? '#ff5c0088' : '#1e2530'}`, background: replyFilter === tab.key ? 'rgba(255,92,0,0.1)' : 'transparent', color: replyFilter === tab.key ? '#ff5c00' : '#4b5563', borderRadius: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                        onClick={() => setReplyFilter(tab.key)}>
+                        {tab.label}
+                        {tab.count > 0 && (
+                          <span style={{ background: tab.unread > 0 ? '#ff5c00' : '#1e2530', color: tab.unread > 0 ? '#0d1117' : '#4b5563', borderRadius: 99, fontSize: '0.48rem', padding: '0.02rem 0.3rem', fontWeight: 700 }}>
+                            {tab.unread > 0 ? tab.unread : tab.count}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Thread timeline — outbound + inbound combined, sorted by date */}
             {(() => {
@@ -1986,24 +2034,29 @@ PRAVIDLÁ EMAILU:
               )
             })()}
 
-            {/* Reply cards */}
-            {replies.filter(r => !r.hidden).map(r => {
+            {/* Reply cards — filtered by tab */}
+            {replies.filter(r => {
+              if (r.hidden) return false
+              if (replyFilter === 'archived') return !!r.archived
+              return !r.archived // active tab: non-archived (includes resolved)
+            }).map(r => {
               const d       = r.replyDate?.toDate ? r.replyDate.toDate() : r.replyDate ? new Date(r.replyDate) : null
               const dateStr = d ? d.toLocaleDateString('sk-SK') + ' ' + d.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }) : '–'
-              const status  = r.aiDraftStatus
-              const isSent  = status === 'sent'
-              const hasSk   = !!r.aiDraftSkBody
-              const hasDe   = !!r.aiDraftDeBody
-              const isRead  = !!r.readAt
-              const isArch  = !!r.archived
+              const status    = r.aiDraftStatus
+              const isSent    = status === 'sent'
+              const hasSk     = !!r.aiDraftSkBody
+              const hasDe     = !!r.aiDraftDeBody
+              const isRead    = !!r.readAt
+              const isArch    = !!r.archived
+              const isResolved = !!r.resolved
               const edit    = replyEdits[r.id]
               const sending = !!sendingReply[r.id]
               const xlating = !!translating[r.id]
               const expanded = !!expandedReplies[r.id]
               const intentColor = { záujem: '#00cc88', otázka: '#60a5fa', odmietnutie: '#ef4444' }[r.aiIntent] || '#9ca3af'
 
-              const cardBorder = isSent ? '#00cc8844' : isArch ? '#1e2530' : '#ff5c0055'
-              const cardBg     = isArch ? '#0a0c0f' : '#0d1117'
+              const cardBorder = isSent || isResolved ? '#00cc8830' : isArch ? '#1e2530' : '#ff5c0044'
+              const cardBg     = isArch || isResolved ? '#0a0c0f' : '#0d1117'
 
               return (
                 <div key={r.id} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 2, marginBottom: '0.55rem', overflow: 'hidden' }}>
@@ -2023,9 +2076,11 @@ PRAVIDLÁ EMAILU:
                         {isArch && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151', padding: '0.08rem 0.35rem', borderRadius: 2, border: '1px solid #1e2530' }}>ARCHÍV</span>}
                       </div>
                       <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexShrink: 0 }}>
-                        {!isSent && hasSk && !hasDe && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#ff5c00', background: 'rgba(255,92,0,0.08)', border: '1px solid rgba(255,92,0,0.25)', padding: '0.08rem 0.35rem', borderRadius: 2 }}>SK NÁVRH</span>}
-                        {!isSent && hasDe    && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#60a5fa', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', padding: '0.08rem 0.35rem', borderRadius: 2 }}>🇩🇪 DE</span>}
-                        {isSent              && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#00cc88', background: 'rgba(0,204,136,0.08)', border: '1px solid rgba(0,204,136,0.25)', padding: '0.08rem 0.35rem', borderRadius: 2 }}>✓ ODOSLANÁ</span>}
+                        {!isSent && !isResolved && hasSk && !hasDe && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#ff5c00', background: 'rgba(255,92,0,0.08)', border: '1px solid rgba(255,92,0,0.25)', padding: '0.08rem 0.35rem', borderRadius: 2 }}>SK NÁVRH</span>}
+                        {!isSent && !isResolved && hasDe && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#60a5fa', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', padding: '0.08rem 0.35rem', borderRadius: 2 }}>🇩🇪 DE</span>}
+                        {isSent      && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#00cc88', background: 'rgba(0,204,136,0.08)', border: '1px solid rgba(0,204,136,0.25)', padding: '0.08rem 0.35rem', borderRadius: 2 }}>✓ ODOSLANÁ</span>}
+                        {isResolved && !isSent && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#00cc88', background: 'rgba(0,204,136,0.06)', border: '1px solid rgba(0,204,136,0.2)', padding: '0.08rem 0.35rem', borderRadius: 2 }}>✅ VYBAVENÉ</span>}
+                        {isArch      && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151', padding: '0.08rem 0.35rem', borderRadius: 2, border: '1px solid #1e2530' }}>ARCHÍV</span>}
                         <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151' }}>{dateStr}</span>
                         <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#374151' }}>{expanded ? '▲' : '▼'}</span>
                       </div>
@@ -2085,18 +2140,34 @@ PRAVIDLÁ EMAILU:
                       )}
 
                       {/* Action bar */}
-                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', paddingTop: '0.1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', paddingTop: '0.05rem', borderTop: '1px solid #1a1f2a', paddingTop: '0.5rem' }}>
+                        {!isResolved && !isSent && (
+                          <button style={{ ...css.replyAction, color: '#00cc88', borderColor: '#00cc8844' }}
+                            onClick={() => handleResolveReply(r.id)}>✅ Vybavené</button>
+                        )}
                         {!isRead && (
-                          <button style={css.replyAction} onClick={() => handleMarkOneReplyRead(r.id)}>✓ Prečítané</button>
+                          <button style={css.replyAction}
+                            onClick={() => handleMarkOneReplyRead(r.id)}>👁 Prečítané</button>
                         )}
                         {!isArch && (
-                          <button style={css.replyAction} onClick={() => handleArchiveReply(r.id)}>📁 Archivovať</button>
+                          <button style={css.replyAction}
+                            onClick={() => handleArchiveReply(r.id)}>📥 Archivovať</button>
                         )}
-                        <button style={{ ...css.replyAction, color: '#4b5563', borderColor: '#1e2530' }} onClick={() => handleHideReply(r.id)}>✕ Skryť</button>
+                        {isArch && (
+                          <button style={css.replyAction}
+                            onClick={() => updateDoc(doc(db, 'email_replies', r.id), { archived: false }).catch(() => {})}>
+                            ↩ Obnoviť
+                          </button>
+                        )}
+                        <button style={{ ...css.replyAction, color: '#374151', borderColor: '#1e2530' }}
+                          onClick={() => handleDeleteFromCRM(r.id)}
+                          title="Zmaže z CRM. Email v IMAP zostáva nedotknutý.">
+                          🗑 Zmazať z CRM
+                        </button>
                         {r.fromEmail && (
                           <a href={`mailto:${r.fromEmail}?subject=${encodeURIComponent('Re: ' + (r.subject || ''))}`}
-                            style={{ ...css.replyAction, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-                            ↗ Otvoriť email
+                            style={{ ...css.replyAction, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', color: '#4b5563' }}>
+                            ↗ Originál
                           </a>
                         )}
                       </div>
