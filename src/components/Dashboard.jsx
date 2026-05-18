@@ -237,13 +237,24 @@ export default function Dashboard() {
             🗑 Vymazať všetky ({filtered.length})
           </button>
         )}
-        <button
-          style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: '1px solid #ff5c0044', background: 'rgba(255,92,0,0.07)', color: '#ff5c00', borderRadius: 2, cursor: 'pointer', opacity: gmailChecking ? 0.6 : 1 }}
-          onClick={handleGmailCheck}
-          disabled={gmailChecking}
-          title="Skontrolovať odpovede (IONOS IMAP)">
-          {gmailChecking ? '⏳ Kontrolujem...' : '📩 Odpovede'}
-        </button>
+        {(() => {
+          const unreadCompanies = companies.filter(c => c.hasUnreadReply)
+          const totalUnread     = unreadCompanies.reduce((s, c) => s + (c.unreadReplyCount || 1), 0)
+          return (
+            <button
+              style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: `1px solid ${totalUnread > 0 ? '#ff5c00aa' : '#ff5c0044'}`, background: totalUnread > 0 ? 'rgba(255,92,0,0.14)' : 'rgba(255,92,0,0.07)', color: '#ff5c00', borderRadius: 2, cursor: 'pointer', opacity: gmailChecking ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '0.35rem', position: 'relative' }}
+              onClick={handleGmailCheck}
+              disabled={gmailChecking}
+              title="Skontrolovať odpovede (IONOS IMAP)">
+              {gmailChecking ? '⏳ Kontrolujem...' : '📩 Odpovede'}
+              {totalUnread > 0 && (
+                <span style={{ background: '#ff5c00', color: '#0d1117', borderRadius: 99, fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.52rem', fontWeight: 700, padding: '0.05rem 0.38rem', lineHeight: 1.4 }}>
+                  {totalUnread}
+                </span>
+              )}
+            </button>
+          )
+        })()}
         {gmailResult && (
           <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', color: gmailResult.ok ? '#00cc88' : '#ef4444' }}>
             {gmailResult.ok

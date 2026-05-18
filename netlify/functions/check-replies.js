@@ -494,13 +494,20 @@ async function runCheck() {
           })
           knownMsgIds.add(msgId)
 
+          // Count existing unread for this company to increment
+          const existingUnread = existingReplies.filter(
+            r => r.companyId === matchResult.companyId && !r.readAt
+          ).length
+
           await fsPatch(`companies/${matchResult.companyId}`, {
-            replyReceived: true,
-            replySubject:  subject,
+            replyReceived:    true,
+            hasUnreadReply:   true,
+            unreadReplyCount: existingUnread + 1,
+            replySubject:     subject,
             replySnippet,
-            replyFrom:     fromAddr,
-            lastReplyAt:   replyDate instanceof Date ? replyDate : new Date(replyDate),
-            updatedAt:     new Date(),
+            replyFrom:        fromAddr,
+            lastReplyAt:      replyDate instanceof Date ? replyDate : new Date(replyDate),
+            updatedAt:        new Date(),
             ...(highInterest ? { highInterest: true } : {}),
           })
 

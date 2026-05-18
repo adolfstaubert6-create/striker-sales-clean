@@ -1221,6 +1221,20 @@ PRAVIDLÁ EMAILU:
       .catch(() => showToast('Kopírovanie zlyhalo', 'err'))
   }
 
+  // ── Mark replies as read ─────────────────────────────────────────────────────
+  async function handleMarkRepliesRead() {
+    try {
+      await updateDoc(doc(db, 'companies', live.id), {
+        hasUnreadReply:   false,
+        unreadReplyCount: 0,
+        updatedAt:        serverTimestamp(),
+      })
+      showToast('Odpovede označené ako prečítané')
+    } catch (e) {
+      showToast('Chyba: ' + e.message, 'err')
+    }
+  }
+
   // ── Reply workflow ───────────────────────────────────────────────────────────
   async function handleTranslateToDE(reply) {
     const edit = replyEdits[reply.id]
@@ -1622,7 +1636,14 @@ PRAVIDLÁ EMAILU:
         {/* ══ HEADER ══ */}
         <div style={css.header}>
           <div style={css.headerLeft}>
-            <div style={css.companyName}>{live.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <div style={css.companyName}>{live.name}</div>
+              {live.hasUnreadReply && (
+                <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#ff5c00', background: 'rgba(255,92,0,0.12)', border: '1px solid rgba(255,92,0,0.4)', padding: '0.12rem 0.5rem', borderRadius: 2, animation: 'priPulse 2s ease-in-out infinite', whiteSpace: 'nowrap' }}>
+                  📩 {live.unreadReplyCount > 1 ? `${live.unreadReplyCount} nové odpovede` : 'Nová odpoveď'}
+                </span>
+              )}
+            </div>
             <div style={css.headerMeta}>
               {TYPE_LABEL[live.category] || live.category}
               {live.city    && <><span style={css.dot}>·</span><span>{live.city}</span></>}
@@ -1874,7 +1895,16 @@ PRAVIDLÁ EMAILU:
         {/* ══ REPLIES ══ */}
         {replies.length > 0 && (
           <div style={{ ...css.section, borderLeft: '3px solid #ff5c00', paddingLeft: '0.85rem' }}>
-            <ColTitle>📩 Odpovede ({replies.length})</ColTitle>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#4b5563' }}>📩 Odpovede ({replies.length})</div>
+              {live.hasUnreadReply && (
+                <button
+                  style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.18rem 0.55rem', border: '1px solid rgba(255,92,0,0.35)', background: 'transparent', color: '#ff5c00', borderRadius: 2, cursor: 'pointer' }}
+                  onClick={handleMarkRepliesRead}>
+                  ✓ Označiť ako prečítané
+                </button>
+              )}
+            </div>
             {replies.map(r => {
               const d       = r.replyDate?.toDate ? r.replyDate.toDate() : r.replyDate ? new Date(r.replyDate) : null
               const dateStr = d ? d.toLocaleDateString('sk-SK') + ' ' + d.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }) : '–'

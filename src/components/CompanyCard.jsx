@@ -35,29 +35,41 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
   const keyFactors = company.aiKeyFactors || []
   const aiInsight  = company.aiInsight    || ''
 
-  const hasReply = !!company.replyReceived
+  const hasUnread  = !!company.hasUnreadReply
+  const unreadCnt  = company.unreadReplyCount || 0
 
   return (
+    <>
+      <style>{`
+        @keyframes replyGlow {
+          0%,100% { box-shadow: 0 0 10px rgba(255,92,0,0.22); }
+          50%      { box-shadow: 0 0 22px rgba(255,92,0,0.48); }
+        }
+        @keyframes dotPulse {
+          0%,100% { opacity:1; transform:scale(1); }
+          50%      { opacity:0.65; transform:scale(1.25); }
+        }
+      `}</style>
     <div
       className="company-card"
       style={{
         ...css.card,
-        borderLeftColor: hasReply ? '#ff5c00' : st.color,
-        borderColor: hovered ? '#2d3748' : '#1e2530',
-        boxShadow: hasReply
-          ? '0 0 14px rgba(255,92,0,0.25)'
-          : hovered ? '0 0 12px rgba(255,92,0,0.15)' : 'none',
-        transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+        borderLeftColor: hasUnread ? '#ff5c00' : st.color,
+        borderColor: hovered ? '#2d3748' : (hasUnread ? '#ff5c0033' : '#1e2530'),
+        animation: hasUnread ? 'replyGlow 2.4s ease-in-out infinite' : 'none',
+        boxShadow: !hasUnread && hovered ? '0 0 12px rgba(255,92,0,0.15)' : undefined,
+        transition: 'border-color 0.2s ease',
         cursor: 'pointer',
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
 
-      {/* Reply badge — full-width, above everything */}
-      {hasReply && (
+      {/* Unread reply badge — full-width, above everything */}
+      {hasUnread && (
         <div style={css.replyBadge}>
-          📩 NOVÁ ODPOVEĎ — {company.replySnippet ? `"${company.replySnippet.slice(0, 60)}..."` : company.replySubject || ''}
+          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#ff5c00', marginRight: '0.45rem', verticalAlign: 'middle', animation: 'dotPulse 1.6s ease-in-out infinite' }} />
+          📩 NOVÁ ODPOVEĎ{unreadCnt > 1 ? ` (${unreadCnt})` : ''}{company.replySnippet ? ` — "${company.replySnippet.slice(0, 55)}..."` : ''}
         </div>
       )}
 
@@ -180,6 +192,7 @@ export default function CompanyCard({ company, scoring, onDraft, onScore }) {
         </div>
       )}
     </div>
+    </>
   )
 }
 
