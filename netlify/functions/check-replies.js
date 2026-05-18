@@ -187,105 +187,110 @@ async function runCheck() {
 
   try {
     await client.connect()
-    console.log('[check-replies] IMAP connected')
+    console.log('[check-replies] IMAP connected ✓')
+  } catch (connErr) {
+    // Surface auth / network errors clearly
+    const msg = connErr.message || String(connErr)
+    const hint = /authenticationfailed|invalid credentials|command failed/i.test(msg)
+      ? ' (check IONOS_PASSWORD in Netlify env vars)'
+      : /timeout|connect/i.test(msg)
+      ? ' (IMAP host unreachable — check IONOS_IMAP_HOST)'
+      : ''
+    throw new Error(`IMAP connection failed: ${msg}${hint}`)
+  }
 
-    await client.mailboxOpen('INBOX')
+  try {
+    const lock = await client.getMailboxLock('INBOX')
+    try {
+      // Fetch messages since last 7 days
+      const since = new Date()
+      since.setDate(since.getDate() - 7)
 
-    // Fetch unseen messages from last 7 days
-    const since = new Date()
-    since.setDate(since.getDate() - 7)
-
-    const messages = []
-    for await (const msg of client.fetch({ since }, {
-      uid: true, flags: true, envelope: true,
-      headers: ['from', 'to', 'subject', 'in-reply-to', 'references', 'message-id', 'date'],
-      bodyStructure: true,
-    })) {
-      messages.push(msg)
-    }
-    console.log(`[check-replies] fetched ${messages.length} recent messages`)
-
-    for (const msg of messages) {
-      try {
-        const msgId    = msg.envelope?.messageId || `uid-${msg.uid}`
-        const fromAddr = (msg.envelope?.from?.[0]?.address || '').toLowerCase()
-        const toAddrs  = (msg.envelope?.to || []).map(a => a.address?.toLowerCase() || '')
-        const subject  = msg.envelope?.subject || ''
-
-        // Skip messages we sent (FROM our own address)
-        if (fromAddr === FROM_ADDRESS) continue
-
-        // Skip if we've already processed this message
-        if (knownMessageIds.has(msgId)) continue
-
-        // Check if this is addressed to our sending address
-        const toUs = toAddrs.some(a => a === FROM_ADDRESS)
-        if (!toUs) continue
-
-        // Check if it looks like a reply
-        const inReplyTo  = msg.headers?.get('in-reply-to') || ''
-        const references = msg.headers?.get('references')  || ''
-        const looksLikeReply = /^re:/i.test(subject.trim()) || inReplyTo || references
-
-        if (!looksLikeReply) continue
-
-        // Match to a company
-        const company = matchCompanyByEmail(fromAddr, withEmail)
-        if (!company) {
-          console.log(`[check-replies] no company match for: ${fromAddr}`)
-          continue
-        }
-
-        // Fetch full message body
-        let bodyText = ''
-        try {
-          const { content } = await client.download(`${msg.uid}`, undefined, { uid: true })
-          const parsed = await simpleParser(content)
-          bodyText = extractBody(parsed)
-        } catch (e) {
-          console.warn(`[check-replies] body fetch failed for uid ${msg.uid}:`, e.message)
-          bodyText = subject // fallback to subject only
-        }
-
-        const replySnippet    = bodyText.slice(0, 120).replace(/\n/g, ' ')
-        const highInterest    = detectHighInterest(subject, bodyText)
-        const replyDate       = msg.envelope?.date || new Date()
-
-        console.log(`[check-replies] reply from ${fromAddr} → ${company.name} | high_interest=${highInterest}`)
-
-        // 1. Save to email_replies collection
-        await fsCreate('email_replies', {
-          companyId:    company.id,
-          companyName:  company.name,
-          messageId:    msgId,
-          fromEmail:    fromAddr,
-          subject:      subject,
-          bodyText:     bodyText.slice(0, 3000),
-          snippet:      replySnippet,
-          highInterest,
-          processedAt:  new Date(),
-          replyDate:    replyDate instanceof Date ? replyDate : new Date(replyDate),
-        })
-        knownMessageIds.add(msgId)
-
-        // 2. Update company document
-        const updateFields = {
-          replyReceived:  true,
-          replySubject:   subject,
-          replySnippet:   replySnippet,
-          replyFrom:      fromAddr,
-          lastReplyAt:    replyDate instanceof Date ? replyDate : new Date(replyDate),
-          updatedAt:      new Date(),
-        }
-        if (highInterest) updateFields.highInterest = true
-
-        await fsPatch(`companies/${company.id}`, updateFields)
-        newReplies++
-
-        console.log(`[check-replies] ✓ saved reply for ${company.name}, high_interest=${highInterest}`)
-      } catch (msgErr) {
-        console.error(`[check-replies] error processing msg uid ${msg.uid}:`, msgErr.message)
+      const messages = []
+      // imapflow fetch API: use source range + fetchOptions
+      for await (const msg of client.fetch({ since }, {
+        uid:      true,
+        envelope: true,
+        source:   false,
+      })) {
+        messages.push(msg)
       }
+      console.log(`[check-replies] fetched ${messages.length} messages from last 7 days`)
+
+      for (const msg of messages) {
+        try {
+          const msgId    = msg.envelope?.messageId || `uid-${msg.uid}`
+          const fromAddr = (msg.envelope?.from?.[0]?.address || '').toLowerCase()
+          const toAddrs  = (msg.envelope?.to   || []).map(a => (a.address || '').toLowerCase())
+          const subject  = msg.envelope?.subject || ''
+
+          if (fromAddr === FROM_ADDRESS) continue
+          if (knownMessageIds.has(msgId)) continue
+          const toUs = toAddrs.some(a => a === FROM_ADDRESS)
+          if (!toUs) continue
+
+          // Reply detection: Re: prefix is sufficient (header fetch removed for stability)
+          const looksLikeReply = /^re:/i.test(subject.trim())
+          if (!looksLikeReply) continue
+
+          const company = matchCompanyByEmail(fromAddr, withEmail)
+          if (!company) {
+            console.log(`[check-replies] no match for: ${fromAddr}`)
+            continue
+          }
+
+          // Download full message for body text
+          let bodyText = ''
+          try {
+            const dl = await client.download(msg.uid, undefined, { uid: true })
+            const chunks = []
+            for await (const chunk of dl.content) chunks.push(chunk)
+            const raw = Buffer.concat(chunks)
+            const parsed = await simpleParser(raw)
+            bodyText = extractBody(parsed)
+          } catch (dlErr) {
+            console.warn(`[check-replies] body download failed uid ${msg.uid}:`, dlErr.message)
+            bodyText = subject
+          }
+
+          const replySnippet = bodyText.slice(0, 120).replace(/\n/g, ' ')
+          const highInterest = detectHighInterest(subject, bodyText)
+          const replyDate    = msg.envelope?.date || new Date()
+
+          console.log(`[check-replies] reply: ${fromAddr} → ${company.name} | high_interest=${highInterest}`)
+
+          await fsCreate('email_replies', {
+            companyId:   company.id,
+            companyName: company.name,
+            messageId:   msgId,
+            fromEmail:   fromAddr,
+            subject,
+            bodyText:    bodyText.slice(0, 3000),
+            snippet:     replySnippet,
+            highInterest,
+            processedAt: new Date(),
+            replyDate:   replyDate instanceof Date ? replyDate : new Date(replyDate),
+          })
+          knownMessageIds.add(msgId)
+
+          const updateFields = {
+            replyReceived: true,
+            replySubject:  subject,
+            replySnippet,
+            replyFrom:     fromAddr,
+            lastReplyAt:   replyDate instanceof Date ? replyDate : new Date(replyDate),
+            updatedAt:     new Date(),
+          }
+          if (highInterest) updateFields.highInterest = true
+          await fsPatch(`companies/${company.id}`, updateFields)
+          newReplies++
+          console.log(`[check-replies] ✓ saved reply for ${company.name}`)
+        } catch (msgErr) {
+          console.error(`[check-replies] msg error uid ${msg.uid}:`, msgErr.message)
+        }
+      }
+    } finally {
+      lock.release()
     }
   } finally {
     try { await client.logout() } catch {}
