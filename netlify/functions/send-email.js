@@ -1,6 +1,6 @@
 const { randomUUID } = require('crypto')
 
-const FROM        = 'adolf.staubert@striker-energy.de'
+const FROM        = process.env.IONOS_EMAIL || 'info@striker-energy.de'
 const FB_API_KEY  = process.env.VITE_FIREBASE_API_KEY
 const FB_PROJECT  = process.env.VITE_FIREBASE_PROJECT_ID
 const FS_BASE     = () => `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`
@@ -100,7 +100,7 @@ exports.handler = async (event) => {
         to:      [to],
         subject: finalSubject,
         text:    finalBody,
-        headers: { 'Message-ID': messageId },
+        headers: { 'Message-ID': messageId, 'Reply-To': FROM },
       }),
     })
 
