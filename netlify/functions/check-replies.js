@@ -110,7 +110,8 @@ function detectHighInterest(subject, body) {
 
 function parseMsgIds(header) {
   if (!header) return []
-  return (header.match(/<[^>]+>/g) || []).map(s => s.toLowerCase())
+  const str = Array.isArray(header) ? header.join(' ') : String(header)
+  return (str.match(/<[^>]+>/g) || []).map(s => s.toLowerCase())
 }
 
 // ── AI reply draft ────────────────────────────────────────────────────────────
@@ -358,9 +359,9 @@ async function runCheck() {
 
           console.log(`[check-replies] msg uid=${msg.uid} from=${fromAddr} subj="${subject.slice(0,50)}" date=${date}`)
 
-          // headers is a Map when fetched with headers: ['in-reply-to','references']
-          const inReplyToRaw  = msg.headers?.get('in-reply-to') || ''
-          const referencesRaw = msg.headers?.get('references')  || ''
+          // headers is a Map<string, string[]> when fetched with headers:[...]
+          const inReplyToRaw  = String(msg.headers?.get('in-reply-to') || '')
+          const referencesRaw = String(msg.headers?.get('references')  || '')
           const inReplyToIds  = parseMsgIds(inReplyToRaw)
           const referenceIds  = parseMsgIds(referencesRaw)
 
