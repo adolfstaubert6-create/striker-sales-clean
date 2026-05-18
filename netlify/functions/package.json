@@ -1,6 +1,7 @@
 {
   "name": "striker-ai-functions",
   "version": "1.0.0",
+  "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "imapflow": "^1.0.169",

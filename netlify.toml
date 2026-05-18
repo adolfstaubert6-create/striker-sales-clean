@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build"
+  command = "npm install --prefix netlify/functions && npm run build"
   publish = "dist"
   functions = "netlify/functions"
 
@@ -7,7 +7,8 @@
   SECRETS_SCAN_OMIT_KEYS = "VITE_FIREBASE_API_KEY,VITE_FIREBASE_APP_ID,VITE_FIREBASE_SENDER_ID"
 
 [functions]
-  node_bundler = "nft"
+  node_bundler = "esbuild"
+  external_node_modules = ["imapflow", "mailparser"]
 
 [functions.ai-advisor]
   timeout = 26
