@@ -707,6 +707,28 @@ function ConfirmDeleteModal({ companyName, onConfirm, onCancel }) {
   )
 }
 
+// ── Hunter.io API key input ──────────────────────────────────────────────────
+function HunterKeyInput({ onSearch }) {
+  const [key, setKey] = useState('')
+  const mono = "'IBM Plex Mono',monospace"
+  return (
+    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <input
+        placeholder="Hunter.io API key"
+        value={key}
+        onChange={e => setKey(e.target.value)}
+        style={{ fontFamily: mono, fontSize: '0.62rem', background: '#0d1117', border: '1px solid #1e2530', color: '#e8eaed', padding: '0.2rem 0.5rem', borderRadius: 2, outline: 'none', width: 190 }}
+      />
+      <button
+        disabled={!key.trim()}
+        onClick={() => onSearch(key.trim())}
+        style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.2rem 0.5rem', border: '1px solid #6366f155', background: key.trim() ? 'rgba(99,102,241,0.15)' : 'transparent', color: key.trim() ? '#818cf8' : '#4b5563', borderRadius: 2, cursor: key.trim() ? 'pointer' : 'default' }}>
+        🔎 Hľadať
+      </button>
+    </div>
+  )
+}
+
 // ── Main modal ───────────────────────────────────────────────────────────────
 export default function CompanyDetailModal({ company: initialCompany, onClose }) {
   const [live, setLive]           = useState(initialCompany)
@@ -731,7 +753,8 @@ export default function CompanyDetailModal({ company: initialCompany, onClose })
   const [toast, setToast]         = useState(null)
   const [emails, setEmails]           = useState([])
   const [sendingEmail, setSendingEmail] = useState(false)
-  const [emailSearch, setEmailSearch] = useState({ state: null, email: null })
+  const [emailSearch, setEmailSearch] = useState({ state: null, email: null, hunterResults: null })
+  const [hunterKey,   setHunterKey]   = useState(() => localStorage.getItem('hunterApiKey') || '')
   const [aiChats, setAiChats]             = useState([])
   const [aiSuggestions, setAiSuggestions] = useState([])
   const [chatsLoaded, setChatsLoaded]     = useState(false)
@@ -1183,7 +1206,7 @@ PRAVIDLÁ EMAILU:
 
   async function handleFindEmail() {
     if (!live.website) return
-    setEmailSearch({ state: 'searching', email: null })
+    setEmailSearch({ state: 'searching', email: null, hunterResults: null })
     try {
       const res = await fetch('/.netlify/functions/find-email', {
         method:  'POST',
@@ -1191,12 +1214,46 @@ PRAVIDLÁ EMAILU:
         body:    JSON.stringify({ website: live.website }),
       })
       const data = await res.json()
-      setEmailSearch(data.email
-        ? { state: 'found',    email: data.email }
-        : { state: 'notfound', email: null })
+      if (data.email) {
+        setEmailSearch({ state: 'found', email: data.email, hunterResults: null })
+      } else {
+        // Scrape nenašiel email — prejsť na Hunter.io krok
+        setEmailSearch({ state: 'notfound', email: null, hunterResults: null })
+      }
     } catch {
-      setEmailSearch({ state: 'notfound', email: null })
+      setEmailSearch({ state: 'notfound', email: null, hunterResults: null })
     }
+  }
+
+  async function handleHunterSearch(key) {
+    const apiKey = key || hunterKey
+    if (!apiKey) return
+    // Uložiť key pre budúce použitie
+    localStorage.setItem('hunterApiKey', apiKey)
+    setHunterKey(apiKey)
+
+    const d = extractDomain(live.website) || live.name
+    setEmailSearch(s => ({ ...s, state: 'hunter-searching' }))
+    try {
+      const res  = await fetch(`https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(d)}&api_key=${apiKey}`)
+      const data = await res.json()
+      const emails = data?.data?.emails || []
+      if (emails.length > 0) {
+        setEmailSearch({ state: 'hunter-found', email: null, hunterResults: emails, hunterDomain: d })
+      } else {
+        setEmailSearch({ state: 'hunter-notfound', email: null, hunterResults: [], hunterDomain: d })
+      }
+    } catch {
+      setEmailSearch({ state: 'hunter-notfound', email: null, hunterResults: [], hunterDomain: null })
+    }
+  }
+
+  async function handleSaveHunterEmail(email) {
+    await withFb('saveEmail', async () => {
+      await updateDoc(doc(db, 'companies', live.id), { email, updatedAt: serverTimestamp() })
+      await logEvent('email_found', `${CURRENT_USER} uložil email cez Hunter.io: ${email}`)
+      setEmailSearch({ state: null, email: null, hunterResults: null })
+    })
   }
 
   async function handleSaveFoundEmail() {
@@ -1517,7 +1574,49 @@ PRAVIDLÁ EMAILU:
                     </button>
                   </div>
                 : emailSearch.state === 'notfound'
-                ? <span style={{ color: '#6b7280', fontFamily: mono, fontSize: '0.68rem' }}>Email sa nenašiel na webe</span>
+                ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <span style={{ color: '#6b7280', fontFamily: mono, fontSize: '0.68rem' }}>Email sa nenašiel na webe</span>
+                    {hunterKey
+                      ? <button
+                          style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.15rem 0.55rem', border: '1px solid #6366f155', background: 'rgba(99,102,241,0.1)', color: '#818cf8', borderRadius: 2, cursor: 'pointer', alignSelf: 'flex-start' }}
+                          onClick={() => handleHunterSearch(hunterKey)}>
+                          🔎 Skúšam Hunter.io
+                        </button>
+                      : <HunterKeyInput onSearch={handleHunterSearch} />}
+                  </div>
+                : emailSearch.state === 'hunter-searching'
+                ? <span style={{ color: '#818cf8', fontFamily: mono, fontSize: '0.68rem' }}>⏳ Skúšam Hunter.io...</span>
+                : emailSearch.state === 'hunter-found'
+                ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <span style={{ color: '#00cc88', fontFamily: mono, fontSize: '0.65rem', letterSpacing: '0.5px' }}>✓ Hunter našiel kontakty</span>
+                    {(emailSearch.hunterResults || []).slice(0, 5).map((r, i) => (
+                      <div key={i} style={{ background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2, padding: '0.4rem 0.6rem', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontFamily: mono, fontSize: '0.68rem', color: '#e8eaed' }}>{r.value}</span>
+                          {r.confidence != null && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: r.confidence >= 70 ? '#00cc88' : '#ffaa00', border: '1px solid currentColor', padding: '0 0.3rem', borderRadius: 2 }}>{r.confidence}%</span>}
+                        </div>
+                        {(r.first_name || r.last_name) && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af' }}>{[r.first_name, r.last_name].filter(Boolean).join(' ')}{r.position ? ` · ${r.position}` : ''}</span>}
+                        {r.type && <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#4b5563' }}>{r.type}</span>}
+                        <button
+                          style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.12rem 0.4rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer', alignSelf: 'flex-start', opacity: fb.saveEmail === 'saving' ? 0.6 : 1 }}
+                          onClick={() => handleSaveHunterEmail(r.value)}
+                          disabled={fb.saveEmail === 'saving'}>
+                          Uložiť
+                        </button>
+                      </div>
+                    ))}
+                    {!hunterKey && <button style={{ fontFamily: mono, fontSize: '0.52rem', color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', alignSelf: 'flex-start', padding: 0 }} onClick={() => { localStorage.removeItem('hunterApiKey'); setHunterKey('') }}>🔑 Zmeniť API key</button>}
+                  </div>
+                : emailSearch.state === 'hunter-notfound'
+                ? <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    <span style={{ color: '#6b7280', fontFamily: mono, fontSize: '0.68rem' }}>Hunter nič nenašiel</span>
+                    <a
+                      href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(live.name)}`}
+                      target="_blank" rel="noreferrer"
+                      style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.15rem 0.55rem', border: '1px solid #0a66c255', background: 'rgba(10,102,194,0.1)', color: '#0a66c2', borderRadius: 2, cursor: 'pointer', textDecoration: 'none', alignSelf: 'flex-start', display: 'inline-block' }}>
+                      🔗 Hľadať na LinkedIn
+                    </a>
+                  </div>
                 : <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     <span style={{ color: '#ffaa00', fontFamily: mono, fontSize: '0.68rem' }}>⚠ Email chýba</span>
                     {live.website && (
