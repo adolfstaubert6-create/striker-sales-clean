@@ -90,7 +90,7 @@ export default function Header({ view, setView, module, setModule, currentUser, 
       {currentUser === 'Staubert' && (
         <div style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: '#070a0d', borderBottom: '1px solid #0f1318', gap: '0.25rem' }}>
           {['A', 'B'].map(d => (
-            <button key={d} onClick={() => setDivision(d)} style={{
+            <button key={d} onClick={() => { setDivision(d); setModule('sales') }} style={{
               fontFamily: mono, fontSize: '0.55rem', letterSpacing: '2px', textTransform: 'uppercase',
               padding: '0.3rem 0.75rem', border: 'none', background: 'transparent', cursor: 'pointer',
               borderBottom: division === d ? '2px solid #ff5c00' : '2px solid transparent',
@@ -111,7 +111,7 @@ export default function Header({ view, setView, module, setModule, currentUser, 
             borderBottom: isSales ? '2px solid #ff5c00' : '2px solid transparent',
           }}
           onClick={() => setModule('sales')}>
-          A — SALES OPS
+          SALES OPS
         </button>
         <button
           style={{
@@ -120,7 +120,7 @@ export default function Header({ view, setView, module, setModule, currentUser, 
             borderBottom: isIntelligence ? '2px solid #ffaa00' : '2px solid transparent',
           }}
           onClick={() => setModule('intelligence')}>
-          B — INTELLIGENCE
+          INTELLIGENCE
           {isIntelligence && (
             <span style={{ fontFamily: mono, fontSize: '0.42rem', color: '#ff5c00', background: 'rgba(255,92,0,0.12)', border: '1px solid rgba(255,92,0,0.3)', padding: '0.05rem 0.3rem', borderRadius: 2, marginLeft: '0.4rem', letterSpacing: '1px' }}>
               BETA
