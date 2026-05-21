@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 
 const mono = "'IBM Plex Mono', monospace"
 
-export default function Header({ view, setView }) {
+export default function Header({ view, setView, currentUser, division, setDivision }) {
   const [userEmail, setUserEmail] = useState(null)
 
   useEffect(() => {
@@ -15,6 +15,24 @@ export default function Header({ view, setView }) {
 
   return (
     <header style={{ background: '#0a0c0f', borderBottom: '1px solid #1e2530', position: 'sticky', top: 0, zIndex: 100 }}>
+
+      {/* Prepínač oddelení — iba Staubert */}
+      {currentUser === 'Staubert' && (
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: '#070a0d', borderBottom: '1px solid #0f1318', gap: '0.25rem' }}>
+          {['A', 'B'].map(d => (
+            <button key={d} onClick={() => setDivision(d)} style={{
+              fontFamily: mono, fontSize: '0.55rem', letterSpacing: '2px', textTransform: 'uppercase',
+              padding: '0.3rem 0.75rem', border: 'none', background: 'transparent', cursor: 'pointer',
+              borderBottom: division === d ? '2px solid #ff5c00' : '2px solid transparent',
+              color: division === d ? '#ff5c00' : '#374151',
+            }}>
+              ODDELENIE {d}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Logo + nav */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 1.25rem' }}>
         <div>
           <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.55rem', letterSpacing: '3px', color: '#ff5c00', lineHeight: 1 }}>

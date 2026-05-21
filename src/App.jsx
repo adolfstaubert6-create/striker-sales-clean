@@ -11,6 +11,7 @@ export default function App() {
   const [view,          setView]          = useState('dashboard')
   const [searchResults, setSearchResults] = useState([])
   const [searching,     setSearching]     = useState(false)
+  const [division,      setDivision]      = useState('A')
   const [currentUser,   setCurrentUser]   = useState(() => {
     const saved = localStorage.getItem('striker-user')
     return (saved && VALID_USERS[saved]) ? saved : null
@@ -29,18 +30,24 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Header view={view} setView={setView} />
+      <Header
+        view={view}
+        setView={setView}
+        currentUser={currentUser}
+        division={division}
+        setDivision={d => { setDivision(d); setView('dashboard') }}
+      />
       <main className="app-main" style={{ flex: 1 }}>
         {view === 'search' ? (
           <SearchPanel
             onResults={setSearchResults}
             searching={searching}
             setSearching={setSearching}
-            division="A"
+            division={division}
           />
         ) : (
           <div style={{ padding: '1.25rem', maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-            <Dashboard division="A" />
+            <Dashboard division={division} />
           </div>
         )}
       </main>
