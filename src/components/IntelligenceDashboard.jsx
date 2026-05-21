@@ -299,7 +299,7 @@ export default function IntelligenceDashboard() {
       <div style={{ marginBottom: '1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '4px', textTransform: 'uppercase', color: '#ff5c00' }}>
-            ◈ B — STRIKER INTELLIGENCE
+            ◈ STRIKER INTELLIGENCE
           </div>
           <div style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151' }}>
             AI-driven lead intelligence · intent scoring · pain signal detection
