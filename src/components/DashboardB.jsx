@@ -17,7 +17,10 @@ export default function DashboardB() {
   const [targets, setTargets]           = useState([])
   const [filter, setFilter]             = useState('all')
   const [search, setSearch]             = useState('')
-  const [selected, setSelected]         = useState(null)
+  const [selected, setSelected]         = useState(null)  // { target, tab }
+
+  function openDetail(target, tab = 'overview') { setSelected({ target, tab }) }
+  function closeDetail() { setSelected(null) }
   const [checkedIds, setCheckedIds]     = useState(new Set())
   const [confirmDelete,    setConfirmDelete]    = useState(false)
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
@@ -27,8 +30,8 @@ export default function DashboardB() {
 
   useEffect(() => {
     if (!selected) return
-    const fresh = targets.find(t => t.id === selected.id)
-    if (fresh) setSelected(fresh)
+    const fresh = targets.find(t => t.id === selected.target?.id)
+    if (fresh) setSelected(s => ({ ...s, target: fresh }))
   }, [targets])
 
   const filtered = targets.filter(t => {
@@ -74,7 +77,7 @@ export default function DashboardB() {
       {/* 2. IntelAgentPanel — rovnaká pozícia ako AgentPanel */}
       <IntelAgentPanel
         onDone={() => {}}
-        onAdded={newTarget => setSelected(newTarget)}
+        onAdded={newTarget => openDetail(newTarget, 'overview')}
       />
 
       {/* 3. Toolbar — identická štruktúra ako Dashboard toolbar */}
@@ -119,7 +122,7 @@ export default function DashboardB() {
             target={t}
             checked={checkedIds.has(t.id)}
             onCheck={() => toggleCheck(t.id)}
-            onOpen={() => setSelected(t)}
+            onOpen={(target, tab) => openDetail(target, tab)}
           />
         ))
       )}
@@ -127,9 +130,10 @@ export default function DashboardB() {
       {/* 6. Detail modal — rovnaký trigger ako CompanyDetailModal */}
       {selected && (
         <IntelCompanyDetail
-          target={selected}
-          onClose={() => setSelected(null)}
-          onDelete={() => setSelected(null)}
+          target={selected.target}
+          initialTab={selected.tab || 'overview'}
+          onClose={closeDetail}
+          onDelete={closeDetail}
         />
       )}
 

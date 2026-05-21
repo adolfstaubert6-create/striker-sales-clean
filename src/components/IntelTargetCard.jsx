@@ -1,166 +1,166 @@
-// Vizuálny klon CompanyCard.jsx — rovnaké CSS, intelligence obsah
 import { useState } from 'react'
 import { INTEL_STATUSES, REC_META, scoreColor } from '../constants/intelMeta.js'
-import { CONF_COLORS } from '../utils/calculateBusinessScore.js'
 
 const mono = "'IBM Plex Mono',monospace"
+const sans = "'IBM Plex Sans',sans-serif"
 
-function Tag({ color, bg, children }) {
-  return <span style={{ fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.38rem', borderRadius: 2, border: `1px solid ${color}55`, color, background: bg }}>{children}</span>
+function getPriority(score) {
+  if (score >= 80) return { label: 'EXTREME TARGET', color: '#ff5c00', bg: 'rgba(255,92,0,0.1)',   border: '#ff5c0044' }
+  if (score >= 70) return { label: 'HIGH TARGET',    color: '#ffaa00', bg: 'rgba(255,170,0,0.1)',  border: '#ffaa0044' }
+  if (score >= 55) return { label: 'MEDIUM TARGET',  color: '#818cf8', bg: 'rgba(129,140,248,0.1)',border: '#818cf844' }
+  return              { label: 'LOW PRIORITY',    color: '#4b5563', bg: 'rgba(75,85,99,0.1)',    border: '#4b556344' }
 }
 
-function DetailRow({ label, value, link }) {
-  if (!value) return null
-  return (
-    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.35rem', alignItems: 'baseline' }}>
-      <span style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#6b7280', flexShrink: 0, width: 110 }}>{label}</span>
-      {link
-        ? <a href={link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontFamily: mono, fontSize: '0.68rem', color: '#ff5c00', textDecoration: 'none' }}>{value}</a>
-        : <span style={{ fontFamily: mono, fontSize: '0.68rem', color: '#e8eaed' }}>{value}</span>}
-    </div>
-  )
+function getMainProblem(t) {
+  if (t.aiAnalysis?.energyProblem) return t.aiAnalysis.energyProblem.split('.')[0].trim()
+  if ((t.signals || [])[0])        return t.signals[0]
+  const MAP = {
+    hotel:      'Vysoká spotreba teplej vody a vykurovania',
+    wellness:   'Nepretržitý ohrev vody pre wellness zariadenia',
+    laundry:    'Vysoká tepelná spotreba pri priemyselnom praní',
+    hospital:   'Nepretržitá potreba tepla a TÚV pre prevádzku',
+    food:       'Procesné teplo vo výrobe potravín',
+    brewery:    'Vysoká tepelná spotreba pri varení a fermentácii',
+    industrial: 'Priemyselný ohrev a procesné teplo',
+    restaurant: 'Ohrev vody a gastro prevádzka',
+  }
+  return MAP[t.segment] || 'Vysoká spotreba energie'
+}
+
+function getAiSummary(t) {
+  if (t.aiReasoning)           return t.aiReasoning.split('.')[0].trim()
+  if (t.businessOpportunity)   return t.businessOpportunity.split('.')[0].trim()
+  if (t.whyFound)              return t.whyFound.split('.')[0].trim()
+  if (t.aiAnalysis?.mainArgument) return t.aiAnalysis.mainArgument.split('.')[0].trim()
+  return null
 }
 
 export default function IntelTargetCard({ target: t, onOpen, checked, onCheck }) {
-  const [open,    setOpen]    = useState(false)
-  const [copied,  setCopied]  = useState(false)
   const [hovered, setHovered] = useState(false)
 
-  const status = INTEL_STATUSES[t.status] || INTEL_STATUSES.new
-  const rec    = REC_META[t.recommendation] || REC_META.monitor
-  const oc     = scoreColor(t.overallScore ?? 0)
-  const hasWeb = !!t.web
-  const signals = (t.signals || []).slice(0, 3)
-
-  function copyWeb(e) {
-    e.stopPropagation()
-    navigator.clipboard.writeText(t.web).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
-  }
+  const oc       = scoreColor(t.overallScore ?? 0)
+  const priority = getPriority(t.overallScore ?? 0)
+  const problem  = getMainProblem(t)
+  const summary  = getAiSummary(t)
+  const status   = INTEL_STATUSES[t.status] || INTEL_STATUSES.new
 
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.45rem' }}>
-      {/* Checkbox — identický s Dashboard */}
+
+      {/* Checkbox */}
       <div style={{ paddingTop: '0.95rem', flexShrink: 0 }}>
         <input type="checkbox" checked={checked} onChange={onCheck} onClick={e => e.stopPropagation()}
           style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#ef4444' }} />
       </div>
 
-      {/* Karta — identické CSS ako CompanyCard */}
+      {/* Karta */}
       <div
-        style={{ ...css.card, borderLeftColor: oc, borderColor: hovered ? '#2d3748' : '#1e2530', boxShadow: hovered ? '0 0 12px rgba(255,92,0,0.15)' : undefined, transition: 'border-color 0.2s ease', cursor: 'pointer' }}
-        onClick={onOpen}
+        style={{
+          flex: 1,
+          background: '#111418',
+          borderTop: '1px solid #1e2530',
+          borderRight: '1px solid #1e2530',
+          borderBottom: '1px solid #1e2530',
+          borderLeft: `3px solid ${hovered ? '#ff5c00' : oc}`,
+          borderRadius: 2,
+          padding: '0.85rem 1rem',
+          cursor: 'pointer',
+          boxShadow: hovered ? '0 0 12px rgba(255,92,0,0.12)' : undefined,
+          transition: 'box-shadow 0.2s ease',
+        }}
+        onClick={() => onOpen(t, 'overview')}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
-        {/* Row 1: meno + FIT score — klon Row 1 CompanyCard */}
-        <div style={css.topRow}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={css.name}>{t.name}</span>
-            {t.city && <span style={css.city}> · {t.city}</span>}
-          </div>
-          <div style={css.scoreWrap}>
-            <span style={{ ...css.scoreBadge, color: oc, borderColor: oc + '66' }}>
-              {t.overallScore ?? '–'}<span style={css.scoreSlash}>/100</span>
-            </span>
-            <div style={{ ...css.priLabel, color: oc }}>
-              {(t.overallScore ?? 0) >= 70 ? 'Vysoký' : (t.overallScore ?? 0) >= 50 ? 'Stredný' : 'Nízky'}
+        {/* Názov firmy */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.65rem' }}>
+          <div>
+            <div style={{ fontFamily: sans, fontWeight: 700, fontSize: '0.95rem', color: '#e8eaed', marginBottom: '0.1rem' }}>
+              {t.name}
             </div>
-            <div style={css.bpsLabel}>FIT</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              {t.segmentLabel && (
+                <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280' }}>🏭 {t.segmentLabel}</span>
+              )}
+              {(t.city || t.country) && (
+                <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280' }}>📍 {[t.city, t.country].filter(Boolean).join(', ')}</span>
+              )}
+              <span style={{
+                fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase',
+                padding: '0.08rem 0.38rem', borderRadius: 2,
+                color: status.color, background: status.bg,
+              }}>{status.label}</span>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontFamily: mono, fontSize: '1.6rem', fontWeight: 700, color: oc, lineHeight: 1 }}>
+              {t.overallScore ?? '–'}
+            </div>
+            <div style={{ fontFamily: mono, fontSize: '0.42rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '1px' }}>FIT</div>
           </div>
         </div>
 
-        {/* Row 2: Web block — klon email block CompanyCard */}
-        <div style={hasWeb ? css.emailBlockFound : css.emailBlockMissing}>
-          <div style={css.emailLeft}>
-            <span style={hasWeb ? css.emailBadgeFound : css.emailBadgeMissing}>
-              {hasWeb ? '✓ Web nájdený' : '⚠ Web chýba'}
-            </span>
-            {hasWeb && <span style={css.emailAddr}>{t.web}</span>}
-          </div>
-          <div style={css.emailActions}>
-            {hasWeb && (
-              <button style={css.copyBtn} onClick={copyWeb}
-                onMouseOver={e => e.currentTarget.style.opacity = '0.75'}
-                onMouseOut={e => e.currentTarget.style.opacity = '1'}>
-                {copied ? '✓ Skopírované' : '⎘ Kopírovať'}
-              </button>
-            )}
+        {/* STRIKER FIT bar */}
+        <div style={{ marginBottom: '0.6rem' }}>
+          <div style={{ height: 4, background: '#1e2530', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ width: `${t.overallScore ?? 0}%`, height: '100%', background: oc, borderRadius: 2 }} />
           </div>
         </div>
 
-        {/* Row 3: tagy — klon Row 3 CompanyCard */}
-        <div style={css.tags}>
-          <Tag color={status.color} bg={status.bg}>{status.label}</Tag>
-          {t.segmentLabel && <Tag color="#6b7280" bg="transparent">{t.segmentLabel}</Tag>}
-          {t.lastGatherSummary?.isRealPressure && <Tag color="#ff5c00" bg="rgba(255,92,0,0.08)">⚡ Reálny tlak</Tag>}
-          <span style={{ fontFamily: mono, fontSize: '0.55rem', color: rec.color }}>{rec.icon} {rec.label}</span>
+        {/* Hlavný problém */}
+        <div style={{ marginBottom: '0.5rem', padding: '0.4rem 0.6rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.15rem' }}>
+            ⚠ Hlavný problém
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#ffaa00', lineHeight: 1.4 }}>
+            {problem}
+          </div>
         </div>
 
-        {/* Row 4: whyFound + signals + striker argument — klon reason+keyFactors+aiInsight */}
-        {t.whyFound && (
-          <div style={css.reason}>✦ {t.whyFound.length > 120 ? t.whyFound.slice(0, 120) + '…' : t.whyFound}</div>
-        )}
-        {signals.length > 0 && (
-          <div style={css.reasoningRow}>
-            {signals.map((s, i) => (
-              <span key={i} style={{ ...css.reasoningTag, color: '#00cc88', background: 'rgba(0,204,136,0.07)', borderColor: '#00cc8830' }}>
-                ▲ {s.length > 45 ? s.slice(0, 45) + '…' : s}
-              </span>
-            ))}
+        {/* Priorita */}
+        <div style={{ marginBottom: '0.5rem' }}>
+          <span style={{
+            fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', fontWeight: 700,
+            padding: '0.15rem 0.5rem', borderRadius: 2,
+            color: priority.color, background: priority.bg, border: `1px solid ${priority.border}`,
+          }}>
+            🎯 {priority.label}
+          </span>
+        </div>
+
+        {/* AI zhrnutie */}
+        {summary && (
+          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280', lineHeight: 1.5, marginBottom: '0.65rem', fontStyle: 'italic' }}>
+            🤖 {summary.length > 90 ? summary.slice(0, 90) + '…' : summary}
           </div>
         )}
-        {t.lastGatherSummary?.strikerArgument && (
-          <div style={css.aiInsightRow}>💡 {t.lastGatherSummary.strikerArgument}</div>
-        )}
 
-        {/* Row 5: expand — identický */}
-        <button style={css.expandBtn} onClick={e => { e.stopPropagation(); setOpen(o => !o) }}>
-          {open ? '▲ Skryť detail' : '▼ Zobraziť detail'}
-        </button>
-
-        {/* Row 6: expandable detail — identický vzor */}
-        {open && (
-          <div style={css.detail}>
-            <DetailRow label="Web"          value={t.web}        link={t.web ? (t.web.startsWith('http') ? t.web : `https://${t.web}`) : null} />
-            <DetailRow label="Lokalita"     value={[t.city, t.country].filter(Boolean).join(', ')} />
-            <DetailRow label="Segment"      value={t.segmentLabel} />
-            <DetailRow label="Veľkosť"      value={t.companySize}  />
-            <DetailRow label="Zamestnanci"  value={t.employees}    />
-            {t.strikerFitScore   != null && <DetailRow label="Striker FIT"    value={`${t.strikerFitScore}/100`}   />}
-            {t.energyPainScore   != null && <DetailRow label="Energ. problém" value={`${t.energyPainScore}/100`}   />}
-            {t.urgencyScore      != null && <DetailRow label="Urgentnosť"     value={`${t.urgencyScore}/100`}      />}
-            {t.buyingIntentScore != null && <DetailRow label="Záujem o kúpu"  value={`${t.buyingIntentScore}/100`} />}
-          </div>
-        )}
+        {/* Akčné tlačidlá */}
+        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', paddingTop: '0.55rem', borderTop: '1px solid #1e2530' }}>
+          <ActionBtn label="DETAIL"      color="#ff5c00" onClick={e => { e.stopPropagation(); onOpen(t, 'overview') }} />
+          <ActionBtn label="ANALYZOVAŤ"  color="#ffaa00" onClick={e => { e.stopPropagation(); onOpen(t, 'ai')       }} />
+          <ActionBtn label="CRM"         color="#818cf8" onClick={e => { e.stopPropagation(); onOpen(t, 'crm')      }} />
+          <ActionBtn label="✉ EMAIL"     color="#00cc88" onClick={e => { e.stopPropagation(); onOpen(t, 'email')    }} />
+        </div>
       </div>
     </div>
   )
 }
 
-// Identické CSS ako CompanyCard
-const css = {
-  card:              { background: '#111418', border: '1px solid #1e2530', borderLeft: '3px solid #1e2530', borderRadius: 2, padding: '0.85rem 1rem', flex: 1 },
-  topRow:            { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.6rem' },
-  name:              { fontWeight: 600, fontSize: '0.92rem' },
-  city:              { fontFamily: mono, fontSize: '0.62rem', color: '#6b7280' },
-  scoreWrap:         { textAlign: 'right', flexShrink: 0 },
-  scoreBadge:        { fontFamily: mono, fontSize: '1.05rem', fontWeight: 700, border: '1px solid', borderRadius: 2, padding: '0.08rem 0.4rem', lineHeight: 1.2 },
-  scoreSlash:        { fontSize: '0.52rem' },
-  priLabel:          { fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', marginTop: 2 },
-  bpsLabel:          { fontFamily: mono, fontSize: '0.42rem', color: '#4b5563', letterSpacing: 1, marginTop: 1 },
-  emailBlockFound:   { background: 'rgba(0,204,136,0.06)', border: '1px solid rgba(0,204,136,0.25)', borderRadius: 2, padding: '0.5rem 0.75rem', marginBottom: '0.55rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' },
-  emailBlockMissing: { background: 'rgba(255,170,0,0.05)', border: '1px solid rgba(255,170,0,0.2)', borderRadius: 2, padding: '0.5rem 0.75rem', marginBottom: '0.55rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' },
-  emailLeft:         { display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' },
-  emailBadgeFound:   { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#00cc88', background: 'rgba(0,204,136,0.12)', border: '1px solid rgba(0,204,136,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2, whiteSpace: 'nowrap' },
-  emailBadgeMissing: { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#ffaa00', background: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.3)', padding: '0.1rem 0.4rem', borderRadius: 2, whiteSpace: 'nowrap' },
-  emailAddr:         { fontFamily: mono, fontSize: '0.68rem', color: '#e8eaed', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  emailActions:      { display: 'flex', gap: '0.4rem', flexShrink: 0 },
-  copyBtn:           { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.6rem', border: '1px solid rgba(0,204,136,0.4)', background: 'transparent', color: '#00cc88', borderRadius: 2, cursor: 'pointer', transition: 'opacity 0.15s' },
-  tags:              { display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.45rem', alignItems: 'center' },
-  reason:            { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', fontStyle: 'italic', marginBottom: '0.25rem', lineHeight: 1.5 },
-  reasoningRow:      { display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.3rem' },
-  reasoningTag:      { fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.3px', padding: '0.08rem 0.38rem', border: '1px solid', borderRadius: 2 },
-  aiInsightRow:      { fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.68rem', color: '#6b7280', fontStyle: 'italic', lineHeight: 1.55, marginBottom: '0.3rem' },
-  expandBtn:         { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', color: '#4b5563', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0.15rem 0', marginTop: '0.1rem', transition: 'color 0.15s' },
-  detail:            { marginTop: '0.65rem', paddingTop: '0.65rem', borderTop: '1px solid #1e2530' },
+function ActionBtn({ label, color, onClick }) {
+  const [h, setH] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      style={{
+        fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase',
+        padding: '0.22rem 0.6rem', border: `1px solid ${color}44`,
+        background: h ? `${color}18` : 'transparent',
+        color, borderRadius: 2, cursor: 'pointer', transition: 'background 0.15s',
+      }}>
+      {label}
+    </button>
+  )
 }

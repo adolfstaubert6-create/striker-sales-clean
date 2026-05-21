@@ -1,332 +1,535 @@
-// Vizuálny klon CompanyDetailModal.jsx — rovnaké CSS, intelligence obsah
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { INTEL_STATUS_LIST, REC_META, INTEL_STATUSES, scoreColor } from '../constants/intelMeta.js'
 import { updateTarget, deleteTarget, addContact, removeContact } from '../services/intelTargetService.js'
 
 const mono = "'IBM Plex Mono',monospace"
 const sans = "'IBM Plex Sans',sans-serif"
 
+const TABS = [
+  { key: 'overview', label: 'Prehľad'       },
+  { key: 'energy',   label: 'Energia'        },
+  { key: 'ai',       label: 'AI Analýza'     },
+  { key: 'sources',  label: 'Dôkazy'         },
+  { key: 'roi',      label: 'ROI'            },
+  { key: 'crm',      label: 'CRM'            },
+  { key: 'email',    label: 'Email'          },
+]
+
 const CONTACT_ROLES = ['CEO / Geschäftsführer', 'Facility Manager', 'Energy Manager', 'Technical Director', 'Operations Manager', 'Iné']
 
-export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
+// ── Pomocné komponenty ────────────────────────────────────────────────────────
+
+function InfoRow({ label, value, color }) {
+  if (!value) return null
+  return (
+    <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '0.4rem', alignItems: 'flex-start' }}>
+      <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#4b5563', flexShrink: 0, width: 120, paddingTop: '0.12rem' }}>{label}</span>
+      <span style={{ fontFamily: mono, fontSize: '0.65rem', color: color || '#9ca3af', lineHeight: 1.5 }}>{value}</span>
+    </div>
+  )
+}
+
+function ScoreGauge({ label, score }) {
+  const c = scoreColor(score ?? 0)
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#4b5563', marginBottom: '0.25rem' }}>{label}</div>
+      <div style={{ height: 4, background: '#1e2530', borderRadius: 2, overflow: 'hidden', marginBottom: '0.2rem' }}>
+        <div style={{ width: `${score ?? 0}%`, height: '100%', background: c, borderRadius: 2 }} />
+      </div>
+      <div style={{ fontFamily: mono, fontSize: '0.8rem', fontWeight: 700, color: c }}>{score ?? '–'}%</div>
+    </div>
+  )
+}
+
+function SectionTitle({ children }) {
+  return (
+    <div style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#ff5c00', marginBottom: '0.85rem', paddingBottom: '0.5rem', borderBottom: '1px solid #1e2530' }}>
+      {children}
+    </div>
+  )
+}
+
+function TextBlock({ value, placeholder }) {
+  if (!value) return <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic' }}>{placeholder || '—'}</div>
+  return <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#9ca3af', lineHeight: 1.7 }}>{value}</div>
+}
+
+// ── Taby ──────────────────────────────────────────────────────────────────────
+
+function TabOverview({ t }) {
+  const rec      = REC_META[t.recommendation] || REC_META.monitor
+  const priority = t.overallScore >= 80 ? 'EXTREME TARGET' : t.overallScore >= 70 ? 'HIGH TARGET' : t.overallScore >= 55 ? 'MEDIUM TARGET' : 'LOW PRIORITY'
+  const priColor = t.overallScore >= 80 ? '#ff5c00' : t.overallScore >= 70 ? '#ffaa00' : t.overallScore >= 55 ? '#818cf8' : '#4b5563'
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '5fr 2fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
+        <div>
+          <SectionTitle>Základné informácie</SectionTitle>
+          <InfoRow label="Web"           value={t.web}        color="#818cf8" />
+          <InfoRow label="Email"         value={t.email}      color="#00cc88" />
+          <InfoRow label="Telefón"       value={t.phone}      />
+          <InfoRow label="Adresa"        value={t.address}    />
+          <InfoRow label="Lokalita"      value={[t.city, t.country].filter(Boolean).join(', ')} />
+          <InfoRow label="Segment"       value={t.segmentLabel} />
+          <InfoRow label="Veľkosť"       value={t.estimatedBusinessSize || t.companySize} />
+          <InfoRow label="Hodnotenie"    value={t.rating ? `${t.rating}★` : null} />
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontFamily: mono, fontSize: '3rem', fontWeight: 700, color: scoreColor(t.overallScore ?? 0), lineHeight: 1 }}>{t.overallScore ?? '–'}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.45rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '0.2rem' }}>STRIKER FIT</div>
+          <div style={{ marginTop: '0.75rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.52rem', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', borderRadius: 2, color: priColor, background: `${priColor}18`, border: `1px solid ${priColor}44` }}>
+              🎯 {priority}
+            </span>
+          </div>
+          <div style={{ marginTop: '0.65rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.52rem', color: rec.color }}>{rec.icon} {rec.label}</span>
+          </div>
+        </div>
+      </div>
+
+      <SectionTitle>AI Zhrnutie</SectionTitle>
+      <div style={{ padding: '0.75rem 0.85rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '1rem' }}>
+        <TextBlock value={t.aiReasoning || t.whyFound} placeholder="Spustiť AI analýzu pre zhrnutie" />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '0.75rem' }}>
+        <ScoreGauge label="Striker FIT"    score={t.strikerFitScore}    />
+        <ScoreGauge label="Energ. problém" score={t.energyPainScore}    />
+        <ScoreGauge label="Urgentnosť"     score={t.urgencyScore}       />
+        <ScoreGauge label="Fin. sila"      score={t.financialPowerScore} />
+        <ScoreGauge label="Záujem"         score={t.buyingIntentScore}  />
+      </div>
+    </div>
+  )
+}
+
+function TabEnergy({ t }) {
+  const signalsCats = t.signalsByCategory || {}
+  const hasSignals  = Object.keys(signalsCats).length > 0
+
+  return (
+    <div>
+      <SectionTitle>Detekované energetické problémy</SectionTitle>
+
+      {t.aiAnalysis?.energyProblem ? (
+        <div style={{ padding: '0.75rem 0.85rem', background: '#0d1117', border: '1px solid #ffaa0033', borderLeft: '3px solid #ffaa00', borderRadius: 3, marginBottom: '1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#ffaa00', marginBottom: '0.3rem' }}>⚠ Hlavný energetický problém</div>
+          <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#9ca3af', lineHeight: 1.65 }}>{t.aiAnalysis.energyProblem}</div>
+        </div>
+      ) : (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '1rem', fontStyle: 'italic' }}>
+          Spustiť AI analýzu pre detekciu energetických problémov
+        </div>
+      )}
+
+      {hasSignals && (
+        <div style={{ marginBottom: '1rem' }}>
+          <SectionTitle>Signály podľa kategórie</SectionTitle>
+          {Object.entries(signalsCats).map(([key, data]) => (
+            <div key={key} style={{ marginBottom: '0.65rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.25rem' }}>
+                {data.label || key}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                {(data.found || []).map((kw, i) => (
+                  <span key={i} style={{ fontFamily: mono, fontSize: '0.54rem', padding: '0.1rem 0.4rem', border: '1px solid #818cf844', borderRadius: 2, color: '#818cf8', background: 'rgba(129,140,248,0.08)' }}>{kw}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(t.signals || []).length > 0 && (
+        <div>
+          <SectionTitle>Nájdené signály</SectionTitle>
+          {t.signals.map((s, i) => (
+            <div key={i} style={{ display: 'flex', gap: '0.45rem', marginBottom: '0.3rem', alignItems: 'flex-start' }}>
+              <span style={{ color: '#ff5c00', fontFamily: mono, fontSize: '0.6rem', flexShrink: 0 }}>▸</span>
+              <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.5 }}>{s}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {t.lastGatherSummary && (
+        <div style={{ marginTop: '1rem' }}>
+          <SectionTitle>Firecrawl výsledky</SectionTitle>
+          {t.lastGatherSummary.energyFindings && (
+            <InfoRow label="Energetika"    value={t.lastGatherSummary.energyFindings}        color="#ffaa00" />
+          )}
+          {t.lastGatherSummary.modernizationFindings && (
+            <InfoRow label="Modernizácia"  value={t.lastGatherSummary.modernizationFindings} />
+          )}
+          {t.lastGatherSummary.esgFindings && (
+            <InfoRow label="ESG"           value={t.lastGatherSummary.esgFindings}           color="#00cc88" />
+          )}
+          {t.lastGatherSummary.pressureExplanation && (
+            <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.7rem', background: '#0d1117', border: `1px solid ${t.lastGatherSummary.isRealPressure ? '#ff5c0044' : '#1e2530'}`, borderRadius: 3 }}>
+              <span style={{ fontFamily: mono, fontSize: '0.6rem', color: t.lastGatherSummary.isRealPressure ? '#ff5c00' : '#6b7280' }}>
+                {t.lastGatherSummary.isRealPressure ? '⚡ REÁLNY TLAK: ' : '💬 Marketing: '}
+                {t.lastGatherSummary.pressureExplanation}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TabAI({ t, onGather, gathering, gatherMsg }) {
+  return (
+    <div>
+      {/* Gather button */}
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <button onClick={onGather} disabled={gathering} style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.35rem 0.9rem', border: '1px solid #ffaa0066', background: gathering ? 'rgba(255,170,0,0.05)' : 'rgba(255,170,0,0.1)', color: '#ffaa00', borderRadius: 2, cursor: 'pointer', fontWeight: 600, opacity: gathering ? 0.7 : 1 }}>
+          {gathering ? '⏳ Firecrawl beží...' : '🔍 Spustiť Firecrawl analýzu'}
+        </button>
+        {gatherMsg && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: gatherMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>{gatherMsg}</span>}
+      </div>
+
+      <SectionTitle>AI Reasoning</SectionTitle>
+      <div style={{ padding: '0.75rem 0.85rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '1rem' }}>
+        <TextBlock value={t.aiReasoning} placeholder="Spustiť Firecrawl pre AI reasoning z reálneho webu" />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+        {[
+          { label: 'Čo firmu trápi',          value: t.aiAnalysis?.whatTroubles  },
+          { label: 'Prečo vhodná pre STRIKER', value: t.aiAnalysis?.whyStrikerFit },
+          { label: 'Hlavný obchodný argument', value: t.aiAnalysis?.mainArgument  },
+          { label: 'Obchodná príležitosť',     value: t.businessOpportunity       },
+        ].map(({ label, value }) => (
+          <div key={label} style={{ padding: '0.6rem 0.75rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
+            <TextBlock value={value} placeholder="—" />
+          </div>
+        ))}
+      </div>
+
+      <SectionTitle>Energetická intenzita a tepelná analýza</SectionTitle>
+      <InfoRow label="Tepelná potreba"    value={t.estimatedHeatDemand}      color="#ff5c00" />
+      <InfoRow label="Energetická intenz."value={t.estimatedEnergyIntensity} color="#ffaa00" />
+      <InfoRow label="Veľkosť firmy"      value={t.estimatedBusinessSize}    />
+      <InfoRow label="Timing"             value={t.lastGatherSummary?.timingAssessment} />
+      {t.lastGatherSummary?.strikerArgument && (
+        <div style={{ marginTop: '0.75rem', padding: '0.6rem 0.8rem', background: 'rgba(0,204,136,0.06)', border: '1px solid rgba(0,204,136,0.2)', borderRadius: 3 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#00cc88', lineHeight: 1.5 }}>✦ {t.lastGatherSummary.strikerArgument}</div>
+        </div>
+      )}
+
+      {(t.extractedKeywords || []).length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          <SectionTitle>Extrahované kľúčové slová</SectionTitle>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+            {t.extractedKeywords.map((kw, i) => (
+              <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', padding: '0.08rem 0.38rem', border: '1px solid #1e2530', borderRadius: 2, color: '#6b7280', background: '#0d1117' }}>{kw}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TabSources({ t }) {
+  const sources   = t.sources   || []
+  const evidence  = t.keyEvidence || []
+  const crawlPages = t.scrapedPages || []
+
+  return (
+    <div>
+      <SectionTitle>Kľúčové dôkazy a citácie</SectionTitle>
+      {evidence.length === 0 ? (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '1rem', fontStyle: 'italic' }}>Spustiť Firecrawl pre extrakciu dôkazov</div>
+      ) : (
+        <div style={{ marginBottom: '1rem' }}>
+          {evidence.map((ev, i) => (
+            <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.4rem', padding: '0.5rem 0.7rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+              <span style={{ color: '#ffaa00', fontFamily: mono, fontSize: '0.7rem', flexShrink: 0 }}>„</span>
+              <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.5, fontStyle: 'italic' }}>{ev}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <SectionTitle>Zdroje a URL</SectionTitle>
+      {sources.length === 0 ? (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '1rem', fontStyle: 'italic' }}>Žiadne zdroje — spustiť Firecrawl analýzu</div>
+      ) : (
+        <div style={{ marginBottom: '1rem' }}>
+          {sources.map((s, i) => (
+            <div key={i} style={{ padding: '0.55rem 0.75rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '0.35rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
+                <span style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', background: '#1e2530', padding: '0.06rem 0.3rem', borderRadius: 2 }}>{s.type || 'web'}</span>
+                {s.title && <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#e8eaed', fontWeight: 600 }}>{s.title}</span>}
+              </div>
+              {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ fontFamily: mono, fontSize: '0.58rem', color: '#818cf8', display: 'block', wordBreak: 'break-all' }}>{s.url}</a>}
+              {s.description && <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280', marginTop: '0.15rem' }}>{s.description}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {crawlPages.length > 0 && (
+        <div>
+          <SectionTitle>Naskenované stránky</SectionTitle>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+            {crawlPages.map((p, i) => (
+              <span key={i} style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.12rem 0.45rem', borderRadius: 2,
+                color: p.found ? '#00cc88' : '#374151',
+                background: p.found ? 'rgba(0,204,136,0.08)' : 'transparent',
+                border: `1px solid ${p.found ? '#00cc8833' : '#1e2530'}`,
+              }}>
+                {p.found ? `✓ ${p.categoryLabel || p.category}` : `— ${p.categoryLabel || p.category}`}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TabROI({ t }) {
+  return (
+    <div>
+      <SectionTitle>ROI Analýza</SectionTitle>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        {[
+          { label: '⚡ Odhadovaná tepelná potreba', value: t.estimatedHeatDemand,      color: '#ff5c00' },
+          { label: '🔋 Energetická intenzita',       value: t.estimatedEnergyIntensity, color: '#ffaa00' },
+          { label: '💰 Odhad ROI',                   value: t.estimatedROI,             color: '#00cc88' },
+          { label: '📈 Obchodná príležitosť',         value: t.businessOpportunity,      color: '#818cf8' },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{ padding: '0.75rem 0.85rem', background: '#0d1117', border: `1px solid ${value ? color + '33' : '#1e2530'}`, borderRadius: 3 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
+            {value
+              ? <div style={{ fontFamily: mono, fontSize: '0.68rem', color, lineHeight: 1.5, fontWeight: 600 }}>{value}</div>
+              : <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic' }}>Spustiť AI analýzu</div>
+            }
+          </div>
+        ))}
+      </div>
+
+      <SectionTitle>STRIKER FIT detaily</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '0.75rem' }}>
+        <ScoreGauge label="Striker FIT"    score={t.strikerFitScore}    />
+        <ScoreGauge label="Tepelná potreba" score={t.heatDemandScore}   />
+        <ScoreGauge label="Energ. problém" score={t.energyPainScore}    />
+        <ScoreGauge label="Fin. sila"      score={t.financialPowerScore} />
+        <ScoreGauge label="Urgentnosť"     score={t.urgencyScore}       />
+      </div>
+
+      {t.nextStep && (
+        <div style={{ marginTop: '1.25rem', padding: '0.65rem 0.85rem', background: 'rgba(0,204,136,0.06)', border: '1px solid rgba(0,204,136,0.2)', borderRadius: 3 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#00cc88', marginBottom: '0.2rem' }}>Odporúčaný ďalší krok</div>
+          <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#00cc88' }}>→ {t.nextStep}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TabCRM({ t, onStatusChange, saving }) {
+  const [addCtOpen, setAddCtOpen] = useState(false)
+  const [newCt, setNewCt]         = useState({ role: '', name: '', email: '', phone: '' })
+
+  return (
+    <div>
+      <SectionTitle>Pipeline stav</SectionTitle>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '1.25rem' }}>
+        {INTEL_STATUS_LIST.map(s => (
+          <button key={s.key} onClick={() => onStatusChange(s.key)} disabled={!!saving}
+            style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.6rem', borderRadius: 2, cursor: 'pointer',
+              border: `1px solid ${s.color}44`, background: t.status === s.key ? s.bg : 'transparent',
+              color: t.status === s.key ? s.color : '#374151', fontWeight: t.status === s.key ? 700 : 400 }}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <SectionTitle>Kontaktné osoby</SectionTitle>
+      {(t.contacts || []).length === 0 && !addCtOpen && (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '0.75rem', fontStyle: 'italic' }}>Zatiaľ žiadne kontakty</div>
+      )}
+      {(t.contacts || []).map((c, i) => (
+        <div key={i} style={{ padding: '0.55rem 0.75rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '0.35rem' }}>
+          {c.role && <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.12rem' }}>{c.role}</div>}
+          {c.name && <div style={{ fontFamily: sans, fontSize: '0.85rem', fontWeight: 600, color: '#e8eaed' }}>{c.name}</div>}
+          <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.1rem' }}>
+            {c.email && <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: '#00cc88' }}>✉ {c.email}</a>}
+            {c.phone && <span style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280' }}>📞 {c.phone}</span>}
+          </div>
+        </div>
+      ))}
+
+      {(t.suggestedContacts || []).filter(sg => !(t.contacts||[]).some(c => c.role === sg.role)).length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.5rem' }}>
+          {(t.suggestedContacts||[]).filter(sg => !(t.contacts||[]).some(c => c.role === sg.role)).map((sg, i) => (
+            <button key={i} onClick={() => { setNewCt(p => ({...p, role: sg.role})); setAddCtOpen(true) }}
+              style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.15rem 0.5rem', border: '1px dashed #374151', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' }}>
+              + {sg.role}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {addCtOpen ? (
+        <div style={{ background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, padding: '0.75rem', marginTop: '0.35rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginBottom: '0.4rem' }}>
+            <div>
+              <label style={css.label}>Pozícia</label>
+              <select style={css.input} value={newCt.role} onChange={e => setNewCt(p => ({...p, role: e.target.value}))}>
+                <option value="">—</option>
+                {CONTACT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div><label style={css.label}>Meno</label><input style={css.input} placeholder="Jan Novák" value={newCt.name} onChange={e => setNewCt(p => ({...p, name: e.target.value}))} /></div>
+            <div><label style={css.label}>Email</label><input style={css.input} placeholder="jan@firma.de" value={newCt.email} onChange={e => setNewCt(p => ({...p, email: e.target.value}))} /></div>
+            <div><label style={css.label}>Telefón</label><input style={css.input} placeholder="+49 170 000 0000" value={newCt.phone} onChange={e => setNewCt(p => ({...p, phone: e.target.value}))} /></div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={async () => { await addContact(t.id, newCt); setNewCt({ role:'',name:'',email:'',phone:'' }); setAddCtOpen(false) }} style={css.saveBtn}>✓ Uložiť</button>
+            <button onClick={() => setAddCtOpen(false)} style={css.cancelBtn}>Zrušiť</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAddCtOpen(true)} style={css.ghostBtn}>+ Pridať kontaktnú osobu</button>
+      )}
+    </div>
+  )
+}
+
+function TabEmail({ t }) {
+  return (
+    <div>
+      <SectionTitle>Email</SectionTitle>
+      {t.email ? (
+        <div style={{ marginBottom: '1rem', padding: '0.65rem 0.85rem', background: 'rgba(0,204,136,0.06)', border: '1px solid rgba(0,204,136,0.25)', borderRadius: 3 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#00cc88', marginBottom: '0.2rem' }}>✓ Email nájdený</div>
+          <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.75rem', color: '#00cc88', fontWeight: 600 }}>{t.email}</a>
+        </div>
+      ) : (
+        <div style={{ padding: '0.65rem 0.85rem', background: 'rgba(255,170,0,0.05)', border: '1px solid rgba(255,170,0,0.2)', borderRadius: 3, marginBottom: '1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#ffaa00' }}>⚠ Email nebol nájdený</div>
+          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#4b5563', marginTop: '0.2rem' }}>Skús manuálne alebo cez Firecrawl analýzu</div>
+        </div>
+      )}
+
+      <div style={{ padding: '1.5rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, textAlign: 'center' }}>
+        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#374151', marginBottom: '0.5rem' }}>Email workflow</div>
+        <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#1e2530' }}>→ Bude pridaný v ďalšej fáze</div>
+      </div>
+    </div>
+  )
+}
+
+// ── Hlavný modal ──────────────────────────────────────────────────────────────
+
+export default function IntelCompanyDetail({ target: t, initialTab = 'overview', onClose, onDelete }) {
+  const [activeTab,   setActiveTab]   = useState(initialTab)
   const [saving,      setSaving]      = useState({})
   const [confirmDel,  setConfirmDel]  = useState(false)
-  const [addCtOpen,   setAddCtOpen]   = useState(false)
-  const [newCt,       setNewCt]       = useState({ role: '', name: '', email: '', phone: '', linkedin: '' })
   const [gathering,   setGathering]   = useState(false)
   const [gatherMsg,   setGatherMsg]   = useState('')
 
-  const id     = t.id
-  const rec    = REC_META[t.recommendation] || REC_META.monitor
-  const status = INTEL_STATUSES[t.status]  || INTEL_STATUSES.new
-  const oc     = scoreColor(t.overallScore ?? 0)
+  // Sync tab keď initialTab sa zmení (napr. CRM/EMAIL button na karte)
+  useEffect(() => { setActiveTab(initialTab) }, [initialTab])
 
-  async function withSaving(key, fn) {
-    setSaving(p => ({ ...p, [key]: true }))
-    try { await fn() } catch (e) { console.error('[detail]', e.message) }
-    finally { setSaving(p => ({ ...p, [key]: false })) }
-  }
+  const oc = scoreColor(t.overallScore ?? 0)
 
-  async function handleStatus(s) {
-    await withSaving('status', () => updateTarget(id, { status: s }))
-  }
-
-  async function handleAddContact() {
-    if (!newCt.role && !newCt.name) return
-    await withSaving('ct', () => addContact(id, newCt))
-    setNewCt({ role: '', name: '', email: '', phone: '', linkedin: '' })
-    setAddCtOpen(false)
-  }
-
-  async function handleRemoveContact(idx) {
-    await withSaving(`ct${idx}`, () => removeContact(id, t.contacts || [], idx))
+  async function handleStatusChange(status) {
+    setSaving(p => ({ ...p, status: true }))
+    try { await updateTarget(t.id, { status }) }
+    catch (e) { console.error(e) }
+    finally { setSaving(p => ({ ...p, status: false })) }
   }
 
   async function handleDelete() {
-    await deleteTarget(id)
+    await deleteTarget(t.id)
     onDelete?.(); onClose()
   }
 
   async function handleGather() {
-    if (!t.web) { setGatherMsg('⚠ Zadaj web URL pre Firecrawl analýzu'); return }
+    if (!t.web) { setGatherMsg('⚠ Zadaj web URL'); return }
     setGathering(true); setGatherMsg('')
     try {
-      const res = await fetch('/.netlify/functions/intelligence-gather', {
+      const res  = await fetch('/.netlify/functions/intelligence-gather', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyName: t.name, url: t.web, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, country: t.country, urgencyScore: t.urgencyScore, buyingIntentScore: t.buyingIntentScore || 50, strikerFitScore: t.strikerFitScore, heatDemandScore: t.heatDemandScore || 50, energyPainScore: t.energyPainScore, financialPowerScore: t.financialPowerScore }),
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
-      // Merge signals and update scores
       const mergedSignals = [...new Set([...(t.signals||[]), ...(data.signals||[])])]
-      const update = { signals: mergedSignals, ...(data.updatedScores||{}), lastGatherSummary: data.aiInterpretation }
-      await updateTarget(id, update)
-      setGatherMsg(`✓ ${data.webPagesCount} stránok · ${(data.signals||[]).length} nových signálov`)
+      await updateTarget(t.id, { signals: mergedSignals, ...(data.updatedScores || {}), websiteSummary: data.websiteSummary || '', extractedKeywords: data.extractedKeywords || [], estimatedHeatDemand: data.estimatedHeatDemand || '', estimatedEnergyIntensity: data.estimatedEnergyIntensity || '', estimatedROI: data.estimatedROI || '', aiReasoning: data.aiReasoning || '', businessOpportunity: data.businessOpportunity || '', detectedSignals: data.detectedSignals || [], signalsByCategory: data.signalsByCategory || {}, keyEvidence: data.keyEvidence || [], sources: [...(t.sources||[]), ...(data.sources||[]).map(s=>({...s,addedAt:new Date().toISOString()}))], scrapedPages: data.scrapedPages || [], crawlStatus: data.crawlStatus || '', crawlTimestamp: data.crawlTimestamp || '', lastGatherSummary: data.aiInterpretation || null })
+      setGatherMsg(`✓ ${data.webPagesCount} stránok · ${(data.signals||[]).length} signálov`)
     } catch (e) { setGatherMsg('⚠ ' + e.message) }
     finally { setGathering(false) }
   }
 
-  // Identická overlay štruktúra ako CompanyDetailModal
   return (
-    <div style={css.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={css.modal}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, padding: '1rem', overflowY: 'auto' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#0d1117', border: '1px solid #1e2530', borderTop: `3px solid ${oc}`, borderRadius: 4, width: '100%', maxWidth: 900, margin: '0 auto' }}>
 
-        {/* Hlavička — rovnaká pozícia ako CompanyDetailModal */}
-        <div style={css.mhead}>
+        {/* Modal hlavička */}
+        <div style={{ padding: '1rem 1.4rem', borderBottom: '1px solid #1e2530', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#ff5c00', marginBottom: '0.3rem' }}>◈ INTELLIGENCE KARTA</div>
-            <div style={{ fontFamily: sans, fontSize: '1.2rem', fontWeight: 700, color: '#e8eaed' }}>{t.name}</div>
-            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#6b7280', marginTop: '0.15rem' }}>
-              {[t.city, t.country].filter(Boolean).join(', ')}
+            <div style={{ fontFamily: sans, fontSize: '1.15rem', fontWeight: 700, color: '#e8eaed', marginBottom: '0.2rem' }}>{t.name}</div>
+            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280' }}>
+              {scoreColor(t.overallScore ?? 0) === '#00cc88' ? '🟢' : scoreColor(t.overallScore ?? 0) === '#ffaa00' ? '🟡' : '🔴'}{' '}
+              {t.overallScore ?? '–'}/100 · {[t.city, t.country].filter(Boolean).join(', ')}
               {t.segmentLabel && <span> · {t.segmentLabel}</span>}
-              {t.companySize  && <span> · {t.companySize}</span>}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontFamily: mono, fontSize: '2.2rem', fontWeight: 700, color: oc, lineHeight: 1 }}>{t.overallScore ?? '–'}</div>
-              <div style={{ fontFamily: mono, fontSize: '0.45rem', color: '#6b7280', textTransform: 'uppercase' }}>FIT / 100</div>
-            </div>
-            <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1.2rem', cursor: 'pointer', padding: '0.2rem', lineHeight: 1 }}>✕</button>
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+            <button onClick={() => setConfirmDel(true)} style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', background: 'rgba(239,68,68,0.08)', border: '1px solid #ef444466', color: '#ef4444', padding: '0.28rem 0.65rem', borderRadius: 2, cursor: 'pointer' }}>🗑</button>
+            <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: '0 0.2rem' }}>✕</button>
           </div>
         </div>
 
-        {/* AI akcie */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-          <button onClick={handleGather} disabled={gathering} style={{ ...css.actionBtn, background: gathering ? 'rgba(255,170,0,0.05)' : 'rgba(255,170,0,0.1)', borderColor: '#ffaa0066', color: '#ffaa00', opacity: gathering ? 0.7 : 1 }}>
-            {gathering ? '⏳ Zbierám...' : '🔍 Zbierať signály (Firecrawl)'}
-          </button>
-          <button onClick={() => setConfirmDel(true)} style={{ ...css.actionBtn, background: 'rgba(239,68,68,0.08)', borderColor: '#ef444466', color: '#ef4444' }}>
-            🗑 Odstrániť
-          </button>
-        </div>
-        {gatherMsg && <div style={{ fontFamily: mono, fontSize: '0.62rem', color: gatherMsg.startsWith('✓') ? '#00cc88' : '#ef4444', marginBottom: '0.75rem' }}>{gatherMsg}</div>}
-
-        {/* Scores */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.85rem 1rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
-          {[
-            { label: 'Striker FIT',    score: t.strikerFitScore    },
-            { label: 'Energ. problém', score: t.energyPainScore    },
-            { label: 'Urgentnosť',     score: t.urgencyScore       },
-            { label: 'Fin. sila',      score: t.financialPowerScore },
-            { label: 'Záujem',         score: t.buyingIntentScore  },
-          ].map(({ label, score }) => (
-            <div key={label} style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.2rem' }}>{label}</div>
-              <div style={{ height: 4, background: '#1e2530', borderRadius: 2, overflow: 'hidden', marginBottom: '0.2rem' }}>
-                <div style={{ width: `${score ?? 0}%`, height: '100%', background: scoreColor(score ?? 0), borderRadius: 2 }} />
-              </div>
-              <div style={{ fontFamily: mono, fontSize: '0.75rem', fontWeight: 700, color: scoreColor(score ?? 0) }}>{score ?? '–'}%</div>
-            </div>
+        {/* Tab navigácia */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #1e2530', padding: '0 1.4rem', overflowX: 'auto' }}>
+          {TABS.map(tab => (
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+              fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+              padding: '0.55rem 0.85rem', border: 'none', background: 'transparent', cursor: 'pointer',
+              borderBottom: activeTab === tab.key ? '2px solid #ff5c00' : '2px solid transparent',
+              color: activeTab === tab.key ? '#ff5c00' : '#374151',
+              whiteSpace: 'nowrap', transition: 'color 0.15s',
+            }}>
+              {tab.label}
+            </button>
           ))}
         </div>
 
-        {/* Stav + Odporúčanie */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
-          <div style={css.section}>
-            <div style={css.sectionTitle}>📊 Stav firmy</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-              {INTEL_STATUS_LIST.map(s => (
-                <button key={s.key} onClick={() => handleStatus(s.key)} disabled={!!saving.status}
-                  style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.55rem', borderRadius: 2, cursor: 'pointer', border: `1px solid ${s.color}44`, background: t.status === s.key ? s.bg : 'transparent', color: t.status === s.key ? s.color : '#374151', fontWeight: t.status === s.key ? 700 : 400 }}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div style={css.section}>
-            <div style={css.sectionTitle}>🎯 Odporúčanie AI</div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0.75rem', borderRadius: 3, background: 'rgba(0,204,136,0.1)', border: '1px solid #00cc8844', marginBottom: '0.5rem' }}>
-              <span>{rec.icon}</span>
-              <span style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '2px', textTransform: 'uppercase', color: rec.color, fontWeight: 700 }}>{rec.label}</span>
-            </div>
-            {t.nextStep && <div style={{ fontFamily: mono, fontSize: '0.63rem', color: '#00cc88', lineHeight: 1.5 }}>→ {t.nextStep}</div>}
-          </div>
+        {/* Tab obsah */}
+        <div style={{ padding: '1.25rem 1.4rem' }}>
+          {activeTab === 'overview' && <TabOverview t={t} />}
+          {activeTab === 'energy'   && <TabEnergy   t={t} />}
+          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} />}
+          {activeTab === 'sources'  && <TabSources  t={t} />}
+          {activeTab === 'roi'      && <TabROI      t={t} />}
+          {activeTab === 'crm'      && <TabCRM      t={t} onStatusChange={handleStatusChange} saving={saving} />}
+          {activeTab === 'email'    && <TabEmail    t={t} />}
         </div>
 
-        {/* Prečo nájdená + signály */}
-        <div style={css.section}>
-          <div style={css.sectionTitle}>🔍 Prečo bola firma nájdená</div>
-          {t.whyFound && <div style={{ fontFamily: mono, fontSize: '0.63rem', color: '#9ca3af', lineHeight: 1.7, marginBottom: '0.75rem', fontStyle: 'italic' }}>✦ {t.whyFound}</div>}
-          {(t.signals || []).length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-              {t.signals.map((s, i) => (
-                <div key={i} style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#ff5c00', fontFamily: mono, fontSize: '0.62rem', flexShrink: 0 }}>▸</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.5 }}>{s}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {t.lastGatherSummary?.strikerArgument && (
-            <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#00cc88', marginTop: '0.65rem', lineHeight: 1.5 }}>💡 {t.lastGatherSummary.strikerArgument}</div>
-          )}
-        </div>
-
-        {/* AI Analýza */}
-        {t.aiAnalysis && Object.values(t.aiAnalysis).some(Boolean) && (
-          <div style={css.section}>
-            <div style={css.sectionTitle}>🤖 AI Analýza</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
-              {[
-                { label: 'Čo firmu trápi',          value: t.aiAnalysis.whatTroubles  },
-                { label: 'Energetický problém',      value: t.aiAnalysis.energyProblem },
-                { label: 'Prečo vhodná pre STRIKER', value: t.aiAnalysis.whyStrikerFit },
-                { label: 'Hlavný argument',          value: t.aiAnalysis.mainArgument  },
-              ].map(({ label, value }) => value ? (
-                <div key={label}>
-                  <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.2rem' }}>{label}</div>
-                  <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.6, padding: '0.45rem 0.6rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2 }}>{value}</div>
-                </div>
-              ) : null)}
-            </div>
-          </div>
-        )}
-
-        {/* AI INTELLIGENCE — real web analysis data */}
-        {(t.websiteSummary || t.estimatedHeatDemand || t.aiReasoning || (t.extractedKeywords||[]).length > 0) && (
-          <div style={css.section}>
-            <div style={css.sectionTitle}>💡 AI Intelligence</div>
-
-            {t.websiteSummary && (
-              <div style={{ marginBottom: '0.75rem' }}>
-                <div style={css.intelLabel}>Web summary</div>
-                <div style={css.intelText}>{t.websiteSummary}</div>
-              </div>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.75rem' }}>
-              {t.estimatedHeatDemand && (
-                <div>
-                  <div style={css.intelLabel}>⚡ Odhadovaná tepelná potreba</div>
-                  <div style={{ ...css.intelText, color: '#ff5c00' }}>{t.estimatedHeatDemand}</div>
-                </div>
-              )}
-              {t.estimatedEnergyIntensity && (
-                <div>
-                  <div style={css.intelLabel}>🔋 Energetická intenzita</div>
-                  <div style={{ ...css.intelText, color: '#ffaa00' }}>{t.estimatedEnergyIntensity}</div>
-                </div>
-              )}
-              {t.estimatedROI && (
-                <div>
-                  <div style={css.intelLabel}>💰 Odhad ROI</div>
-                  <div style={{ ...css.intelText, color: '#00cc88' }}>{t.estimatedROI}</div>
-                </div>
-              )}
-              {t.estimatedBusinessSize && (
-                <div>
-                  <div style={css.intelLabel}>🏢 Veľkosť firmy</div>
-                  <div style={css.intelText}>{t.estimatedBusinessSize}</div>
-                </div>
-              )}
-            </div>
-
-            {t.aiReasoning && (
-              <div style={{ marginBottom: '0.65rem' }}>
-                <div style={css.intelLabel}>🧠 AI reasoning</div>
-                <div style={css.intelText}>{t.aiReasoning}</div>
-              </div>
-            )}
-
-            {t.businessOpportunity && (
-              <div style={{ marginBottom: '0.65rem' }}>
-                <div style={css.intelLabel}>📈 Obchodná príležitosť</div>
-                <div style={{ ...css.intelText, color: '#818cf8' }}>{t.businessOpportunity}</div>
-              </div>
-            )}
-
-            {(t.extractedKeywords || []).length > 0 && (
-              <div style={{ marginBottom: '0.65rem' }}>
-                <div style={css.intelLabel}>🔑 Extrahované kľúčové slová</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.3rem' }}>
-                  {t.extractedKeywords.map((kw, i) => (
-                    <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', padding: '0.08rem 0.38rem', border: '1px solid #1e2530', borderRadius: 2, color: '#6b7280', background: '#0d1117' }}>{kw}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {t.crawlStatus && (
-              <div style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151', marginTop: '0.5rem' }}>
-                Crawl: {t.crawlStatus} · {t.crawlTimestamp ? new Date(t.crawlTimestamp).toLocaleString('sk-SK') : '–'}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Kontaktné osoby */}
-        <div style={css.section}>
-          <div style={css.sectionTitle}>👤 Kontaktné osoby</div>
-          {(t.contacts || []).length === 0 && !addCtOpen && (
-            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#374151', marginBottom: '0.5rem' }}>Zatiaľ žiadne kontakty</div>
-          )}
-          {(t.contacts || []).map((c, i) => (
-            <div key={i} style={{ background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2, padding: '0.55rem 0.75rem', marginBottom: '0.35rem', display: 'flex', justifyContent: 'space-between' }}>
-              <div>
-                {c.role && <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.15rem' }}>{c.role}</div>}
-                {c.name && <div style={{ fontFamily: sans, fontSize: '0.85rem', fontWeight: 600, color: '#e8eaed' }}>{c.name}</div>}
-                <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.1rem' }}>
-                  {c.email && <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: '#00cc88' }}>✉ {c.email}</a>}
-                  {c.phone && <span style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280' }}>📞 {c.phone}</span>}
-                </div>
-              </div>
-              <button onClick={() => handleRemoveContact(i)} style={{ background: 'transparent', border: 'none', color: '#374151', cursor: 'pointer', fontFamily: mono }}>✕</button>
-            </div>
-          ))}
-          {(t.suggestedContacts || []).filter(sg => !(t.contacts||[]).some(c => c.role === sg.role)).length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.5rem' }}>
-              {(t.suggestedContacts||[]).filter(sg => !(t.contacts||[]).some(c => c.role === sg.role)).map((sg, i) => (
-                <button key={i} onClick={() => { setNewCt(p => ({...p, role: sg.role})); setAddCtOpen(true) }}
-                  style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.15rem 0.5rem', border: '1px dashed #374151', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' }}>
-                  + {sg.role}
-                </button>
-              ))}
-            </div>
-          )}
-          {addCtOpen ? (
-            <div style={{ background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2, padding: '0.75rem', marginTop: '0.35rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginBottom: '0.4rem' }}>
-                <div>
-                  <label style={css.label}>Pozícia</label>
-                  <select style={css.input} value={newCt.role} onChange={e => setNewCt(p => ({...p, role: e.target.value}))}>
-                    <option value="">—</option>
-                    {CONTACT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={css.label}>Meno</label>
-                  <input style={css.input} placeholder="Jan Novák" value={newCt.name} onChange={e => setNewCt(p => ({...p, name: e.target.value}))} />
-                </div>
-                <div>
-                  <label style={css.label}>Email</label>
-                  <input style={css.input} placeholder="jan@firma.de" value={newCt.email} onChange={e => setNewCt(p => ({...p, email: e.target.value}))} />
-                </div>
-                <div>
-                  <label style={css.label}>Telefón</label>
-                  <input style={css.input} placeholder="+49 170 000 0000" value={newCt.phone} onChange={e => setNewCt(p => ({...p, phone: e.target.value}))} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={handleAddContact} disabled={saving.ct} style={css.saveBtn}>{saving.ct ? '⏳' : '✓ Uložiť'}</button>
-                <button onClick={() => setAddCtOpen(false)} style={css.cancelBtn}>Zrušiť</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setAddCtOpen(true)} style={css.ghostBtn}>+ Pridať kontaktnú osobu</button>
-          )}
-        </div>
-
-        {/* Potvrdenie vymazania */}
+        {/* Confirm delete */}
         {confirmDel && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '1rem' }}>
-            <div style={{ background: '#111418', border: '1px solid #ef444466', borderRadius: 4, padding: '1.5rem', maxWidth: 380, width: '100%' }}>
+            <div style={{ background: '#111418', border: '1px solid #ef444466', borderRadius: 4, padding: '1.5rem', maxWidth: 360, width: '100%' }}>
               <div style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#ef4444', marginBottom: '0.65rem' }}>⚠ Odstrániť kartu</div>
               <div style={{ fontFamily: sans, fontSize: '0.95rem', fontWeight: 700, color: '#e8eaed', marginBottom: '0.35rem' }}>{t.name}</div>
               <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#6b7280', marginBottom: '1.1rem' }}>Táto akcia je nevratná.</div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button style={{ ...css.saveBtn, background: '#ef4444' }} onClick={handleDelete}>🗑 Odstrániť</button>
-                <button style={css.cancelBtn} onClick={() => setConfirmDel(false)}>Zrušiť</button>
+                <button onClick={handleDelete} style={{ ...css.saveBtn, background: '#ef4444' }}>🗑 Odstrániť</button>
+                <button onClick={() => setConfirmDel(false)} style={css.cancelBtn}>Zrušiť</button>
               </div>
             </div>
           </div>
@@ -336,19 +539,10 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
   )
 }
 
-// Identické CSS ako CompanyDetailModal
 const css = {
-  overlay:      { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, padding: '1rem', overflowY: 'auto' },
-  modal:        { background: '#111418', border: '1px solid #1e2530', borderRadius: 4, padding: '1.5rem', width: '100%', maxWidth: 960, margin: '0 auto' },
-  mhead:        { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' },
-  section:      { background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.85rem' },
-  sectionTitle: { fontFamily: mono, fontSize: '0.52rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#ff5c00', marginBottom: '0.75rem' },
-  actionBtn:    { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.3rem 0.85rem', border: '1px solid', borderRadius: 2, cursor: 'pointer', fontWeight: 600 },
-  label:        { display: 'block', fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.2rem' },
-  input:        { width: '100%', background: '#111418', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: mono, fontSize: '0.72rem', padding: '0.42rem 0.6rem', borderRadius: 2, outline: 'none', boxSizing: 'border-box' },
-  saveBtn:      { fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', background: '#00cc88', border: 'none', color: '#0a0c0f', padding: '0.38rem 0.85rem', borderRadius: 2, cursor: 'pointer', fontWeight: 700 },
-  cancelBtn:    { fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', background: 'transparent', border: '1px solid #1e2530', color: '#6b7280', padding: '0.38rem 0.7rem', borderRadius: 2, cursor: 'pointer' },
-  ghostBtn:     { fontFamily: mono, fontSize: '0.56rem', letterSpacing: '1px', textTransform: 'uppercase', background: 'transparent', border: '1px dashed #1e2530', color: '#374151', padding: '0.28rem 0.7rem', borderRadius: 2, cursor: 'pointer', marginTop: '0.2rem' },
-  intelLabel:   { fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.2rem' },
-  intelText:    { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.65, padding: '0.45rem 0.6rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2 },
+  label:     { display: 'block', fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.2rem' },
+  input:     { width: '100%', background: '#111418', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: mono, fontSize: '0.72rem', padding: '0.42rem 0.6rem', borderRadius: 2, outline: 'none', boxSizing: 'border-box' },
+  saveBtn:   { fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', background: '#00cc88', border: 'none', color: '#0a0c0f', padding: '0.38rem 0.85rem', borderRadius: 2, cursor: 'pointer', fontWeight: 700 },
+  cancelBtn: { fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', background: 'transparent', border: '1px solid #1e2530', color: '#6b7280', padding: '0.38rem 0.7rem', borderRadius: 2, cursor: 'pointer' },
+  ghostBtn:  { fontFamily: mono, fontSize: '0.56rem', letterSpacing: '1px', textTransform: 'uppercase', background: 'transparent', border: '1px dashed #1e2530', color: '#374151', padding: '0.28rem 0.7rem', borderRadius: 2, cursor: 'pointer', marginTop: '0.2rem' },
 }
