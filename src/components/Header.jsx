@@ -3,6 +3,13 @@ import { useState, useEffect } from 'react'
 
 const mono = "'IBM Plex Mono', monospace"
 
+const btn = {
+  fontFamily: mono, fontSize: '0.63rem', letterSpacing: '1px',
+  textTransform: 'uppercase', padding: '0.28rem 0.7rem',
+  border: '1px solid #1e2530', background: 'transparent',
+  borderRadius: '2px', cursor: 'pointer', transition: 'all 0.15s',
+}
+
 export default function Header({ view, setView, currentUser, division, setDivision }) {
   const [userEmail, setUserEmail] = useState(null)
 
@@ -15,41 +22,47 @@ export default function Header({ view, setView, currentUser, division, setDivisi
 
   return (
     <header style={{ background: '#0a0c0f', borderBottom: '1px solid #1e2530', position: 'sticky', top: 0, zIndex: 100 }}>
-
-      {/* Prepínač oddelení — iba Staubert */}
-      {currentUser === 'Staubert' && (
-        <div style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: '#070a0d', borderBottom: '1px solid #0f1318', gap: '0.25rem' }}>
-          {['A', 'B'].map(d => (
-            <button key={d} onClick={() => setDivision(d)} style={{
-              fontFamily: mono, fontSize: '0.55rem', letterSpacing: '2px', textTransform: 'uppercase',
-              padding: '0.3rem 0.75rem', border: 'none', background: 'transparent', cursor: 'pointer',
-              borderBottom: division === d ? '2px solid #ff5c00' : '2px solid transparent',
-              color: division === d ? '#ff5c00' : '#374151',
-            }}>
-              ODDELENIE {d}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Logo + nav */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 1.25rem' }}>
-        <div>
-          <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.55rem', letterSpacing: '3px', color: '#ff5c00', lineHeight: 1 }}>
-            STRIKER <span style={{ color: '#ffaa00' }}>AI</span>
+
+        {/* Ľavá strana: logo + division switcher (ak Staubert) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+          <div>
+            <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: '1.55rem', letterSpacing: '3px', color: '#ff5c00', lineHeight: 1 }}>
+              STRIKER <span style={{ color: '#ffaa00' }}>AI</span>
+            </div>
+            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280', letterSpacing: '2px', marginTop: '0.1rem' }}>
+              Sales Intelligence Platform
+            </div>
           </div>
-          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280', letterSpacing: '2px', marginTop: '0.1rem' }}>
-            Sales Intelligence Platform
-          </div>
+
+          {/* Prepínač — iba Staubert, inline s logom */}
+          {currentUser === 'Staubert' && (
+            <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center', borderLeft: '1px solid #1e2530', paddingLeft: '1.25rem' }}>
+              {['A', 'B'].map(d => (
+                <button key={d} onClick={() => setDivision(d)} style={{
+                  fontFamily: mono, fontSize: '0.55rem', letterSpacing: '2px', textTransform: 'uppercase',
+                  padding: '0.22rem 0.65rem', border: '1px solid',
+                  borderColor: division === d ? '#ff5c00' : '#1e2530',
+                  background: division === d ? 'rgba(255,92,0,0.08)' : 'transparent',
+                  color: division === d ? '#ff5c00' : '#374151',
+                  borderRadius: '2px', cursor: 'pointer', transition: 'all 0.15s',
+                }}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Pravá strana: nav tlačidlá */}
         <nav style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button
-            style={{ fontFamily: mono, fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.7rem', border: '1px solid #1e2530', background: 'transparent', borderRadius: '2px', cursor: 'pointer', transition: 'all 0.15s', ...(view === 'dashboard' ? { borderColor: '#ff5c00', color: '#ff5c00' } : { color: '#6b7280' }) }}
+            style={{ ...btn, ...(view === 'dashboard' ? { borderColor: '#ff5c00', color: '#ff5c00' } : { color: '#6b7280' }) }}
             onClick={() => setView('dashboard')}>
             Dashboard
           </button>
           <button
-            style={{ fontFamily: mono, fontSize: '0.63rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.7rem', border: '1px solid #1e2530', background: 'transparent', borderRadius: '2px', cursor: 'pointer', transition: 'all 0.15s', ...(view === 'search' ? { borderColor: '#ffaa00', color: '#ffaa00' } : { color: '#6b7280' }) }}
+            style={{ ...btn, ...(view === 'search' ? { borderColor: '#ffaa00', color: '#ffaa00' } : { color: '#6b7280' }) }}
             onClick={() => setView('search')}>
             + Hľadať firmy
           </button>
