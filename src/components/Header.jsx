@@ -12,25 +12,6 @@ const s = {
     top: 0,
     zIndex: 100,
   },
-  moduleRow: {
-    display: 'flex',
-    alignItems: 'stretch',
-    borderBottom: '1px solid #0f1318',
-    padding: '0 1.25rem',
-  },
-  moduleBtn: {
-    fontFamily: mono,
-    fontSize: '0.6rem',
-    letterSpacing: '2px',
-    textTransform: 'uppercase',
-    padding: '0.5rem 1rem',
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
-    borderBottom: '2px solid transparent',
-    transition: 'all 0.15s',
-    whiteSpace: 'nowrap',
-  },
   navRow: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -44,7 +25,6 @@ const s = {
     color: '#ff5c00',
     lineHeight: 1,
   },
-  logoSpan: { color: '#ffaa00' },
   sub: {
     fontFamily: mono,
     fontSize: '0.52rem',
@@ -68,37 +48,29 @@ const s = {
   },
 }
 
-export default function Header({ view, setView, module, setModule, currentUser, division, setDivision }) {
+export default function Header({ view, setView, currentUser, division, setDivision }) {
   const [userEmail, setUserEmail] = useState(null)
 
   useEffect(() => {
     try {
       const auth = getAuth()
-      return onAuthStateChanged(auth, u => setUserEmail(u ? (u.email || u.uid) : 'anonymous / no auth'))
+      return onAuthStateChanged(auth, u => setUserEmail(u ? (u.email || u.uid) : null))
     } catch {
-      setUserEmail('auth unavailable')
+      setUserEmail(null)
     }
   }, [])
 
-  const isIntelligence = module === 'intelligence'
-  const isSales        = !isIntelligence
-  const isIntelB       = isIntelligence && division === 'B'
-
-  function switchModule(m) {
-    setModule(m)
-    setView('dashboard')
-  }
+  const isB = division === 'B'
 
   function switchDivision(d) {
     setDivision(d)
-    setModule('sales')
     setView('dashboard')
   }
 
   return (
     <header style={s.header}>
 
-      {/* ── Division switcher — iba Staubert ── */}
+      {/* Prepínač oddelení — iba Staubert */}
       {currentUser === 'Staubert' && (
         <div style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: '#070a0d', borderBottom: '1px solid #0f1318', gap: '0.25rem' }}>
           {['A', 'B'].map(d => (
@@ -111,83 +83,45 @@ export default function Header({ view, setView, module, setModule, currentUser, 
               ODDELENIE {d}
             </button>
           ))}
-        </div>
-      )}
-
-      {/* ── Module switcher ── */}
-      <div style={s.moduleRow}>
-        <button
-          style={{ ...s.moduleBtn, color: isSales ? '#ff5c00' : '#374151', borderBottom: isSales ? '2px solid #ff5c00' : '2px solid transparent' }}
-          onClick={() => switchModule('sales')}>
-          SALES OPS
-        </button>
-        <button
-          style={{ ...s.moduleBtn, color: isIntelligence ? '#ffaa00' : '#374151', borderBottom: isIntelligence ? '2px solid #ffaa00' : '2px solid transparent' }}
-          onClick={() => switchModule('intelligence')}>
-          INTELLIGENCE
-        </button>
-        <div style={{ flex: 1 }} />
-        <div style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151', alignSelf: 'center', letterSpacing: '0.5px' }}>
-          Logged in as: <span style={{ color: '#6b7280' }}>{userEmail ?? '…'}</span>
-        </div>
-      </div>
-
-      {/* ── SALES OPS: logo + nav ── */}
-      {isSales && (
-        <div style={s.navRow}>
-          <div>
-            <div style={s.logo}>STRIKER <span style={s.logoSpan}>AI</span></div>
-            <div style={s.sub}>Sales Intelligence Platform</div>
-          </div>
-          <nav className="header-nav" style={s.nav}>
-            <button
-              style={{ ...s.btn, ...(view === 'dashboard' ? { borderColor: '#ff5c00', color: '#ff5c00' } : {}) }}
-              onClick={() => setView('dashboard')}>
-              Dashboard
-            </button>
-            <button
-              style={{ ...s.btn, ...(view === 'search' ? { borderColor: '#ffaa00', color: '#ffaa00' } : {}) }}
-              onClick={() => setView('search')}>
-              + Hľadať firmy
-            </button>
-          </nav>
-        </div>
-      )}
-
-      {/* ── INTELLIGENCE: logo + nav ── */}
-      {isIntelligence && (
-        <div style={{ ...s.navRow, paddingTop: '0.55rem', paddingBottom: '0.55rem' }}>
-          <div>
-            <div style={s.logo}>
-              STRIKER <span style={{ color: '#ffaa00' }}>INTELLIGENCE</span>
-            </div>
-            <div style={{ ...s.sub, color: isIntelB ? '#6b7280' : '#ff5c0066' }}>
-              {isIntelB ? 'Energy Target Acquisition AI' : 'AI Lead Scoring · Pain Signal Detection · Intent Engine'}
-            </div>
-          </div>
-
-          {/* Division B — plnohodnotná navigácia rovnaká ako SALES OPS */}
-          {isIntelB ? (
-            <nav className="header-nav" style={s.nav}>
-              <button
-                style={{ ...s.btn, ...(view === 'dashboard' ? { borderColor: '#ff5c00', color: '#ff5c00' } : {}) }}
-                onClick={() => setView('dashboard')}>
-                Dashboard
-              </button>
-              <button
-                style={{ ...s.btn, ...(view === 'search' ? { borderColor: '#ffaa00', color: '#ffaa00' } : {}) }}
-                onClick={() => setView('search')}>
-                + Pridať target
-              </button>
-            </nav>
-          ) : (
-            /* Division A — pôvodný DEMO MODE badge */
-            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', border: '1px solid #1e2530', padding: '0.25rem 0.6rem', borderRadius: 2 }}>
-              DEMO MODE · Fáza 1
+          {userEmail && (
+            <div style={{ marginLeft: 'auto', fontFamily: mono, fontSize: '0.46rem', color: '#374151', letterSpacing: '0.5px' }}>
+              {userEmail}
             </div>
           )}
         </div>
       )}
+
+      {/* Logo + navigácia podľa aktívneho oddelenia */}
+      <div style={s.navRow}>
+        <div>
+          {isB ? (
+            <>
+              <div style={{ ...s.logo, fontSize: '1.4rem' }}>
+                STRIKER <span style={{ color: '#ffaa00' }}>INTELLIGENCE</span>
+              </div>
+              <div style={{ ...s.sub, color: '#ff5c0066' }}>Energy Target Acquisition AI</div>
+            </>
+          ) : (
+            <>
+              <div style={s.logo}>STRIKER <span style={{ color: '#ffaa00' }}>AI</span></div>
+              <div style={s.sub}>Sales Intelligence Platform</div>
+            </>
+          )}
+        </div>
+
+        <nav className="header-nav" style={s.nav}>
+          <button
+            style={{ ...s.btn, ...(view === 'dashboard' ? { borderColor: '#ff5c00', color: '#ff5c00' } : {}) }}
+            onClick={() => setView('dashboard')}>
+            Dashboard
+          </button>
+          <button
+            style={{ ...s.btn, ...(view === 'search' ? { borderColor: '#ffaa00', color: '#ffaa00' } : {}) }}
+            onClick={() => setView('search')}>
+            {isB ? '+ Pridať target' : '+ Hľadať firmy'}
+          </button>
+        </nav>
+      </div>
     </header>
   )
 }
