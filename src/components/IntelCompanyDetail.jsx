@@ -183,6 +183,78 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
           </div>
         )}
 
+        {/* AI INTELLIGENCE — real web analysis data */}
+        {(t.websiteSummary || t.estimatedHeatDemand || t.aiReasoning || (t.extractedKeywords||[]).length > 0) && (
+          <div style={css.section}>
+            <div style={css.sectionTitle}>💡 AI Intelligence</div>
+
+            {t.websiteSummary && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <div style={css.intelLabel}>Web summary</div>
+                <div style={css.intelText}>{t.websiteSummary}</div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.75rem' }}>
+              {t.estimatedHeatDemand && (
+                <div>
+                  <div style={css.intelLabel}>⚡ Odhadovaná tepelná potreba</div>
+                  <div style={{ ...css.intelText, color: '#ff5c00' }}>{t.estimatedHeatDemand}</div>
+                </div>
+              )}
+              {t.estimatedEnergyIntensity && (
+                <div>
+                  <div style={css.intelLabel}>🔋 Energetická intenzita</div>
+                  <div style={{ ...css.intelText, color: '#ffaa00' }}>{t.estimatedEnergyIntensity}</div>
+                </div>
+              )}
+              {t.estimatedROI && (
+                <div>
+                  <div style={css.intelLabel}>💰 Odhad ROI</div>
+                  <div style={{ ...css.intelText, color: '#00cc88' }}>{t.estimatedROI}</div>
+                </div>
+              )}
+              {t.estimatedBusinessSize && (
+                <div>
+                  <div style={css.intelLabel}>🏢 Veľkosť firmy</div>
+                  <div style={css.intelText}>{t.estimatedBusinessSize}</div>
+                </div>
+              )}
+            </div>
+
+            {t.aiReasoning && (
+              <div style={{ marginBottom: '0.65rem' }}>
+                <div style={css.intelLabel}>🧠 AI reasoning</div>
+                <div style={css.intelText}>{t.aiReasoning}</div>
+              </div>
+            )}
+
+            {t.businessOpportunity && (
+              <div style={{ marginBottom: '0.65rem' }}>
+                <div style={css.intelLabel}>📈 Obchodná príležitosť</div>
+                <div style={{ ...css.intelText, color: '#818cf8' }}>{t.businessOpportunity}</div>
+              </div>
+            )}
+
+            {(t.extractedKeywords || []).length > 0 && (
+              <div style={{ marginBottom: '0.65rem' }}>
+                <div style={css.intelLabel}>🔑 Extrahované kľúčové slová</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.3rem' }}>
+                  {t.extractedKeywords.map((kw, i) => (
+                    <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', padding: '0.08rem 0.38rem', border: '1px solid #1e2530', borderRadius: 2, color: '#6b7280', background: '#0d1117' }}>{kw}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {t.crawlStatus && (
+              <div style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151', marginTop: '0.5rem' }}>
+                Crawl: {t.crawlStatus} · {t.crawlTimestamp ? new Date(t.crawlTimestamp).toLocaleString('sk-SK') : '–'}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Kontaktné osoby */}
         <div style={css.section}>
           <div style={css.sectionTitle}>👤 Kontaktné osoby</div>
@@ -277,4 +349,6 @@ const css = {
   saveBtn:      { fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', background: '#00cc88', border: 'none', color: '#0a0c0f', padding: '0.38rem 0.85rem', borderRadius: 2, cursor: 'pointer', fontWeight: 700 },
   cancelBtn:    { fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', background: 'transparent', border: '1px solid #1e2530', color: '#6b7280', padding: '0.38rem 0.7rem', borderRadius: 2, cursor: 'pointer' },
   ghostBtn:     { fontFamily: mono, fontSize: '0.56rem', letterSpacing: '1px', textTransform: 'uppercase', background: 'transparent', border: '1px dashed #1e2530', color: '#374151', padding: '0.28rem 0.7rem', borderRadius: 2, cursor: 'pointer', marginTop: '0.2rem' },
+  intelLabel:   { fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.2rem' },
+  intelText:    { fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.65, padding: '0.45rem 0.6rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2 },
 }

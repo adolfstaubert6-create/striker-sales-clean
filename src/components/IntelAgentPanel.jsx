@@ -8,7 +8,10 @@ const mono = "'IBM Plex Mono',monospace"
 const STEPS = [
   { key: 'score',   icon: '✦',  label: 'AI Scoring'  },
   { key: 'crawl',   icon: '🌐', label: 'Web Scan'    },
-  { key: 'analyze', icon: '🧠', label: 'Analýza'     },
+  { key: 'signals', icon: '📡', label: 'Signály'     },
+  { key: 'analyze', icon: '🧠', label: 'AI Analýza'  },
+  { key: 'heat',    icon: '🔥', label: 'Teplo/ROI'   },
+  { key: 'intel',   icon: '💡', label: 'Intelligence' },
   { key: 'save',    icon: '💾', label: 'Uloženie'    },
 ]
 
@@ -47,21 +50,32 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
       addLog(`✓ FIT: ${r.overallScore}/100 · ${r.recommendation}`)
 
       setActiveStep('crawl')
-      addLog('Spúšťam Firecrawl web scan...')
+      addLog('AI načítava web firmy (Firecrawl)...')
       const gatherRes = await fetch('/.netlify/functions/intelligence-gather', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, companyName: form.companyName, segmentLabel: SEGMENT_LABELS[form.segment], urgencyScore: r.urgencyScore, buyingIntentScore: r.buyingIntentScore || 50, strikerFitScore: r.strikerFitScore, heatDemandScore: r.heatDemandScore, energyPainScore: r.energyPainScore, financialPowerScore: r.financialPowerScore }),
+        body: JSON.stringify({ ...form, companyName: form.companyName, segmentLabel: SEGMENT_LABELS[form.segment], urgencyScore: r.urgencyScore, buyingIntentScore: r.buyingIntentScore || 50, strikerFitScore: r.strikerFitScore, heatDemandScore: r.heatDemandScore || 50, energyPainScore: r.energyPainScore, financialPowerScore: r.financialPowerScore }),
       })
       const gatherData = await gatherRes.json()
 
-      setActiveStep('analyze')
+      setActiveStep('signals')
       if (gatherData.ok) {
-        addLog(`✓ Web: ${gatherData.webPagesCount} stránok · ${(gatherData.signals || []).length} signálov`)
-        if ((gatherData.jobSignals || []).length > 0)
-          addLog(`✦ Job signály: ${gatherData.jobSignals.map(j => j.role).join(', ')}`)
+        addLog(`AI extrahuje dáta — ${gatherData.webPagesCount} stránok naskenovaných`)
+        const sigCats = Object.keys(gatherData.signalsByCategory || {})
+        if (sigCats.length > 0) addLog(`AI detekuje signály: ${sigCats.join(', ')}`)
       } else {
-        addLog('⚠ Firecrawl nedostupný')
+        addLog('⚠ Firecrawl nedostupný — pokračujem bez web dát')
       }
+
+      setActiveStep('analyze')
+      addLog('AI analyzuje business príležitosť...')
+      if (gatherData.estimatedHeatDemand) addLog(`⚡ Tepelná potreba: ${gatherData.estimatedHeatDemand}`)
+
+      setActiveStep('heat')
+      addLog('AI vyhodnocuje spotrebu tepla a energetickú intenzitu...')
+      if (gatherData.estimatedROI) addLog(`💰 Odhad ROI: ${gatherData.estimatedROI}`)
+
+      setActiveStep('intel')
+      addLog('AI generuje intelligence report...')
 
       setActiveStep('save')
       const updated = gatherData.ok ? (gatherData.updatedScores || {}) : {}
@@ -87,12 +101,31 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
         nextStep:            r.nextStep,
         whyFound:            r.whyFound || '',
         signals:             [...new Set([...(r.signals||[]), ...(gatherData.signals||[])])],
-        aiAnalysis: { whatTroubles: r.aiAnalysis?.whatTroubles||'', energyProblem: gatherData.ok ? (gatherData.aiInterpretation?.energyFindings||r.aiAnalysis?.energyProblem||'') : (r.aiAnalysis?.energyProblem||''), whyStrikerFit: r.aiAnalysis?.whyStrikerFit||'', mainArgument: gatherData.ok ? (gatherData.aiInterpretation?.strikerArgument||r.aiAnalysis?.mainArgument||'') : (r.aiAnalysis?.mainArgument||'') },
+        aiAnalysis: {
+          whatTroubles:  r.aiAnalysis?.whatTroubles  || '',
+          energyProblem: gatherData.ok ? (gatherData.aiInterpretation?.energyFindings || r.aiAnalysis?.energyProblem || '') : (r.aiAnalysis?.energyProblem || ''),
+          whyStrikerFit: r.aiAnalysis?.whyStrikerFit || '',
+          mainArgument:  gatherData.ok ? (gatherData.aiInterpretation?.strikerArgument || r.aiAnalysis?.mainArgument || '') : (r.aiAnalysis?.mainArgument || ''),
+        },
         suggestedContacts:   r.suggestedContacts || [],
-        sources: (gatherData.sources||[]).map(s => ({...s, addedAt: new Date().toISOString()})),
+        sources: (gatherData.sources || []).map(s => ({ ...s, addedAt: new Date().toISOString() })),
         contacts: [],
+        // Nové intelligence polia z real web analýzy
+        websiteSummary:           gatherData.websiteSummary           || '',
+        extractedKeywords:        gatherData.extractedKeywords        || [],
+        estimatedHeatDemand:      gatherData.estimatedHeatDemand      || '',
+        estimatedBusinessSize:    gatherData.estimatedBusinessSize    || r.estimatedSize || '',
+        estimatedEnergyIntensity: gatherData.estimatedEnergyIntensity || '',
+        estimatedROI:             gatherData.estimatedROI             || '',
+        aiReasoning:              gatherData.aiReasoning              || '',
+        businessOpportunity:      gatherData.businessOpportunity      || '',
+        detectedSignals:          gatherData.detectedSignals          || [],
+        signalsByCategory:        gatherData.signalsByCategory        || {},
+        crawlStatus:              gatherData.crawlStatus              || 'unknown',
+        crawlTimestamp:           gatherData.crawlTimestamp           || new Date().toISOString(),
+        lastGatherSummary:        gatherData.aiInterpretation         || null,
       }
-      addLog(`Hotovo · FIT ${combined.strikerFitScore}% · ${combined.signals.length} signálov`)
+      addLog(`✓ Hotovo · FIT ${combined.strikerFitScore}% · ${combined.signals.length} signálov · ${Object.keys(combined.signalsByCategory).length} kategórií`)
       setResult(combined)
       setActiveStep(null)
     } catch (e) {
