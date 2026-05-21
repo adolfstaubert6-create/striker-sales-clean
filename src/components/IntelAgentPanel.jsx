@@ -1,28 +1,27 @@
-// Vizuálny klon AgentPanel.jsx — rovnaké CSS, AI Target Hunter logika
+// Vizuálny klon AgentPanel.jsx — rovnaké CSS, Division B AI Multi-Company Hunter
 import { useState } from 'react'
-import { SEGMENTS, COUNTRIES, SEGMENT_LABELS, scoreColor, REC_META } from '../constants/intelMeta.js'
-import { addTarget } from '../services/intelTargetService.js'
+import { SEGMENTS, COUNTRIES, scoreColor, REC_META } from '../constants/intelMeta.js'
 
 const mono = "'IBM Plex Mono',monospace"
 
+// 6 krokov — analogické Agent.js krokom v Division A
 const STEPS = [
-  { key: 'score',   icon: '✦',  label: 'AI Scoring'  },
-  { key: 'crawl',   icon: '🌐', label: 'Web Scan'    },
-  { key: 'signals', icon: '📡', label: 'Signály'     },
-  { key: 'analyze', icon: '🧠', label: 'AI Analýza'  },
-  { key: 'heat',    icon: '🔥', label: 'Teplo/ROI'   },
-  { key: 'intel',   icon: '💡', label: 'Intelligence' },
-  { key: 'save',    icon: '💾', label: 'Uloženie'    },
+  { key: 'search',  icon: '🔍', label: 'Hľadanie'   },
+  { key: 'enrich',  icon: '📊', label: 'Obohacovanie'},
+  { key: 'score',   icon: '✦',  label: 'Scoring'    },
+  { key: 'analyze', icon: '🧠', label: 'Analýza'    },
+  { key: 'save',    icon: '💾', label: 'Uloženie'   },
 ]
 
+const COUNTS = [1, 2, 3, 5, 8, 10, 15]
+
 export default function IntelAgentPanel({ onDone, onAdded }) {
-  const [form, setForm]             = useState({ companyName: '', url: '', segment: 'hotel', country: 'DE', city: '' })
+  const [form, setForm]             = useState({ segment: 'hotel', locality: '', country: 'DE', count: 5 })
   const [running, setRunning]       = useState(false)
   const [activeStep, setActiveStep] = useState(null)
   const [log, setLog]               = useState([])
-  const [result, setResult]         = useState(null)
+  const [report, setReport]         = useState(null)
   const [error, setError]           = useState(null)
-  const [cardStatus, setCardStatus] = useState(null)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -32,146 +31,73 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
   }
 
   async function handleRun() {
-    if (!form.companyName.trim()) { setError('Zadaj názov firmy'); return }
-    setError(null); setResult(null); setLog([]); setCardStatus(null)
-    setRunning(true); setActiveStep('score')
-    addLog(`Spúšťam AI analýzu — ${form.companyName}`)
+    if (!form.locality.trim()) { setError('Zadaj mesto alebo región'); return }
+    setError(null); setReport(null); setLog([])
+    setRunning(true)
+
+    addLog(`Spúšťam AI hľadanie — ${form.locality}, ${form.count} firiem`)
+
+    // Simulácia krokov počas čakania na výsledok (ako v agent.js)
+    const timers = [
+      setTimeout(() => { setActiveStep('search');  addLog('AI hľadá firmy (Google Places)...') },     200),
+      setTimeout(() => { setActiveStep('enrich');  addLog('AI zbiera weby a kontakty...') },          4000),
+      setTimeout(() => { setActiveStep('score');   addLog('AI vyhodnocuje STRIKER FIT skóre...') },  10000),
+      setTimeout(() => { setActiveStep('analyze'); addLog('AI analyzuje potenciál targetov...') },   16000),
+      setTimeout(() => { setActiveStep('save');    addLog('AI ukladá targety do B oddelenia...') }, 21000),
+    ]
 
     try {
-      setActiveStep('score')
-      addLog('Volám AI scoring engine...')
-      const scoreRes = await fetch('/.netlify/functions/energy-intel', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+      const res  = await fetch('/.netlify/functions/intel-hunt', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(form),
       })
-      const scoreData = await scoreRes.json()
-      if (!scoreData.ok) throw new Error(scoreData.error)
-      const r = scoreData.report
-      addLog(`✓ FIT: ${r.overallScore}/100 · ${r.recommendation}`)
-
-      setActiveStep('crawl')
-      addLog('AI načítava web firmy (Firecrawl)...')
-      const gatherRes = await fetch('/.netlify/functions/intelligence-gather', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, companyName: form.companyName, segmentLabel: SEGMENT_LABELS[form.segment], urgencyScore: r.urgencyScore, buyingIntentScore: r.buyingIntentScore || 50, strikerFitScore: r.strikerFitScore, heatDemandScore: r.heatDemandScore || 50, energyPainScore: r.energyPainScore, financialPowerScore: r.financialPowerScore }),
-      })
-      const gatherData = await gatherRes.json()
-
-      setActiveStep('signals')
-      if (gatherData.ok) {
-        addLog(`AI extrahuje dáta — ${gatherData.webPagesCount} stránok naskenovaných`)
-        const sigCats = Object.keys(gatherData.signalsByCategory || {})
-        if (sigCats.length > 0) addLog(`AI detekuje signály: ${sigCats.join(', ')}`)
-      } else {
-        addLog('⚠ Firecrawl nedostupný — pokračujem bez web dát')
-      }
-
-      setActiveStep('analyze')
-      addLog('AI analyzuje business príležitosť...')
-      if (gatherData.estimatedHeatDemand) addLog(`⚡ Tepelná potreba: ${gatherData.estimatedHeatDemand}`)
-
-      setActiveStep('heat')
-      addLog('AI vyhodnocuje spotrebu tepla a energetickú intenzitu...')
-      if (gatherData.estimatedROI) addLog(`💰 Odhad ROI: ${gatherData.estimatedROI}`)
-
-      setActiveStep('intel')
-      addLog('AI generuje intelligence report...')
-
-      setActiveStep('save')
-      const updated = gatherData.ok ? (gatherData.updatedScores || {}) : {}
-      const combined = {
-        name: form.companyName.trim(), web: form.url.trim(),
-        country: form.country, city: form.city.trim(),
-        segment: form.segment, segmentLabel: SEGMENT_LABELS[form.segment],
-        status: 'analyzed',
-        strikerFitScore:     updated.strikerFitScore    ?? r.strikerFitScore,
-        strikerFitReason:    r.strikerFitReason,
-        energyPainScore:     r.energyPainScore,
-        energyPainReason:    r.energyPainReason,
-        urgencyScore:        updated.urgencyScore       ?? r.urgencyScore,
-        urgencyReason:       r.urgencyReason,
-        financialPowerScore: r.financialPowerScore,
-        financialPowerReason:r.financialPowerReason,
-        buyingIntentScore:   updated.buyingIntentScore  ?? (r.buyingIntentScore || 50),
-        buyingIntent:        updated.buyingIntent       ?? r.buyingIntent,
-        buyingIntentReason:  r.buyingIntentReason,
-        overallScore:        r.overallScore,
-        recommendation:      r.recommendation,
-        recommendationReason:r.recommendationReason || r.reasoning || '',
-        nextStep:            r.nextStep,
-        whyFound:            r.whyFound || '',
-        signals:             [...new Set([...(r.signals||[]), ...(gatherData.signals||[])])],
-        aiAnalysis: {
-          whatTroubles:  r.aiAnalysis?.whatTroubles  || '',
-          energyProblem: gatherData.ok ? (gatherData.aiInterpretation?.energyFindings || r.aiAnalysis?.energyProblem || '') : (r.aiAnalysis?.energyProblem || ''),
-          whyStrikerFit: r.aiAnalysis?.whyStrikerFit || '',
-          mainArgument:  gatherData.ok ? (gatherData.aiInterpretation?.strikerArgument || r.aiAnalysis?.mainArgument || '') : (r.aiAnalysis?.mainArgument || ''),
-        },
-        suggestedContacts:   r.suggestedContacts || [],
-        sources: (gatherData.sources || []).map(s => ({ ...s, addedAt: new Date().toISOString() })),
-        contacts: [],
-        // Nové intelligence polia z real web analýzy
-        websiteSummary:           gatherData.websiteSummary           || '',
-        extractedKeywords:        gatherData.extractedKeywords        || [],
-        estimatedHeatDemand:      gatherData.estimatedHeatDemand      || '',
-        estimatedBusinessSize:    gatherData.estimatedBusinessSize    || r.estimatedSize || '',
-        estimatedEnergyIntensity: gatherData.estimatedEnergyIntensity || '',
-        estimatedROI:             gatherData.estimatedROI             || '',
-        aiReasoning:              gatherData.aiReasoning              || '',
-        businessOpportunity:      gatherData.businessOpportunity      || '',
-        detectedSignals:          gatherData.detectedSignals          || [],
-        signalsByCategory:        gatherData.signalsByCategory        || {},
-        crawlStatus:              gatherData.crawlStatus              || 'unknown',
-        crawlTimestamp:           gatherData.crawlTimestamp           || new Date().toISOString(),
-        lastGatherSummary:        gatherData.aiInterpretation         || null,
-      }
-      addLog(`✓ Hotovo · FIT ${combined.strikerFitScore}% · ${combined.signals.length} signálov · ${Object.keys(combined.signalsByCategory).length} kategórií`)
-      setResult(combined)
+      const data = await res.json()
+      timers.forEach(clearTimeout)
       setActiveStep(null)
+
+      if (!data.ok) throw new Error(data.error)
+
+      addLog(`✓ Hotovo: ${data.done} uložených · ${data.dups || 0} duplikátov · ${data.elapsed}`)
+      if (data.done > 0 && onDone) onDone()
+      setReport(data)
+
     } catch (e) {
-      setActiveStep(null); setError(e.message); addLog(`❌ ${e.message}`)
-    } finally { setRunning(false) }
+      timers.forEach(clearTimeout)
+      setActiveStep(null)
+      setError(e.message)
+      addLog(`❌ Chyba: ${e.message}`)
+    } finally {
+      setRunning(false)
+    }
   }
 
-  async function handleSave() {
-    if (!result) return
-    setCardStatus('saving')
-    try {
-      const res = await addTarget(result)
-      setCardStatus(res.duplicate ? 'dup' : 'saved')
-      if (!res.duplicate && onAdded) onAdded({ id: res.id, ...result })
-      if (!res.duplicate && onDone) onDone()
-    } catch (e) { setCardStatus(null); setError('Chyba: ' + e.message) }
-  }
+  function handleReset() { setReport(null); setLog([]); setError(null); setActiveStep(null) }
 
-  function handleReset() { setResult(null); setLog([]); setError(null); setActiveStep(null); setCardStatus(null) }
-
-  // Identický vizuálny štýl ako AgentPanel
+  // Identický vizuálny štýl ako AgentPanel v Division A
   return (
     <div style={css.panel}>
       <div style={css.header}>
         <div style={css.title}>🤖 STRIKER Intelligence Agent</div>
-        <div style={css.subtitle}>AI vyhľadá, ohodnotí a naskenuje firmu automaticky</div>
+        <div style={css.subtitle}>AI automaticky nájde firmy, ohodnotí STRIKER FIT a uloží targety do B oddelenia</div>
       </div>
 
+      {/* Formulár — segment + región + krajina + počet (rovnaký vzor ako AgentPanel) */}
       <div style={css.form}>
         <div style={{ ...css.formRow, flexWrap: 'wrap' }}>
-          <div style={{ ...css.field, flex: 2, minWidth: 180 }}>
-            <label style={css.label}>Názov firmy</label>
-            <input style={css.input} placeholder="napr. Hotel Alpenhof GmbH" value={form.companyName}
-              onChange={e => set('companyName', e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !running && handleRun()} disabled={running} />
-          </div>
-          <div style={{ ...css.field, flex: 2, minWidth: 160 }}>
-            <label style={css.label}>Web / URL</label>
-            <input style={css.input} placeholder="hotel-alpenhof.de" value={form.url}
-              onChange={e => set('url', e.target.value)} disabled={running} />
-          </div>
-          <div style={{ ...css.field, flex: 1, minWidth: 130 }}>
+          <div style={{ ...css.field, flex: 2, minWidth: 140 }}>
             <label style={css.label}>Segment</label>
             <select style={css.select} value={form.segment} onChange={e => set('segment', e.target.value)} disabled={running}>
               {SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
+          </div>
+          <div style={{ ...css.field, flex: 2, minWidth: 160 }}>
+            <label style={css.label}>Mesto / Región *</label>
+            <input style={css.input} placeholder="napr. München, Bayern, Hamburg"
+              value={form.locality}
+              onChange={e => { set('locality', e.target.value); setError(null) }}
+              onKeyDown={e => e.key === 'Enter' && !running && handleRun()}
+              disabled={running} />
           </div>
           <div style={{ ...css.field, minWidth: 80 }}>
             <label style={css.label}>Krajina</label>
@@ -179,24 +105,34 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
               {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </div>
+          <div style={{ ...css.field, minWidth: 80 }}>
+            <label style={css.label}>Počet firiem</label>
+            <select style={css.select} value={form.count} onChange={e => set('count', Number(e.target.value))} disabled={running}>
+              {COUNTS.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
         </div>
-        {error && <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ef4444', marginTop: '0.3rem' }}>⚠ {error}</div>}
+
+        {error && (
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ef4444', marginTop: '0.35rem' }}>⚠ {error}</div>
+        )}
+
         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
           <button style={{ ...css.runBtn, opacity: running ? 0.6 : 1 }} onClick={handleRun} disabled={running}>
-            {running ? '⏳ Agent pracuje...' : '▶ Spustiť agenta'}
+            {running ? '⏳ Agent pracuje...' : '▶ Spustiť AI hľadanie firiem'}
           </button>
-          {(result || log.length > 0) && !running && (
+          {(report || log.length > 0) && !running && (
             <button style={css.resetBtn} onClick={handleReset}>↺ Resetovať</button>
           )}
         </div>
       </div>
 
       {/* Progress steps — identický vzor ako AgentPanel */}
-      {(running || result) && (
+      {(running || report) && (
         <div style={css.stepsRow}>
           {STEPS.map((s, i) => {
             const stepIdx = STEPS.findIndex(x => x.key === activeStep)
-            const isDone  = result ? true : stepIdx > i
+            const isDone  = report ? true : stepIdx > i
             const isActive = s.key === activeStep
             return (
               <div key={s.key} style={{ ...css.step, opacity: isDone || isActive ? 1 : 0.3 }}>
@@ -204,14 +140,16 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
                   {isDone ? '✓' : s.icon}
                 </div>
                 <div style={{ ...css.stepLabel, color: isActive ? '#ff5c00' : isDone ? '#00cc88' : '#4b5563' }}>{s.label}</div>
-                {i < STEPS.length - 1 && <div style={{ ...css.stepLine, background: isDone ? '#00cc8844' : '#1e2530' }} />}
+                {i < STEPS.length - 1 && (
+                  <div style={{ ...css.stepLine, background: isDone ? '#00cc8844' : '#1e2530' }} />
+                )}
               </div>
             )
           })}
         </div>
       )}
 
-      {/* Live log — identický vzor */}
+      {/* Live log — identický vzor ako AgentPanel */}
       {log.length > 0 && (
         <div style={css.logBox}>
           {log.map((e, i) => (
@@ -224,43 +162,48 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
         </div>
       )}
 
-      {/* Result card */}
-      {result && !running && (() => {
-        const rec = REC_META[result.recommendation] || REC_META.monitor
-        const oc  = scoreColor(result.overallScore)
-        return (
-          <div style={{ ...css.resultCard, borderLeftColor: oc }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <span style={css.resultName}>{result.name}</span>
-              </div>
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <span style={{ ...css.chip, color: oc, borderColor: oc + '44' }}>FIT {result.overallScore}</span>
-                <span style={{ ...css.chip, color: rec.color, borderColor: rec.color + '44' }}>{rec.icon} {rec.label}</span>
-              </div>
-            </div>
-            {result.whyFound && <div style={css.resultEmail}>{result.whyFound}</div>}
-            {result.nextStep  && <div style={css.resultNext}>→ {result.nextStep}</div>}
-            <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.6rem', paddingTop: '0.55rem', borderTop: '1px solid #1e2530' }}>
-              {cardStatus === 'saved' ? (
-                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#00cc88' }}>✓ ULOŽENÉ · karta sa otvorila</div>
-              ) : cardStatus === 'dup' ? (
-                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00' }}>⚠ Duplikát — firma už existuje</div>
-              ) : (
-                <button style={{ ...css.approveBtn, opacity: cardStatus === 'saving' ? 0.6 : 1 }}
-                  onClick={handleSave} disabled={cardStatus === 'saving'}>
-                  {cardStatus === 'saving' ? '⏳' : '✅ Uložiť do B oddelenia'}
-                </button>
-              )}
-            </div>
+      {/* Výsledky — zoznam nájdených firiem s ich skóre */}
+      {report && !running && report.report?.length > 0 && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#00cc88', marginBottom: '0.5rem' }}>
+            ✅ {report.done}/{report.total} · {report.elapsed} · kliknite na karte pre detail
           </div>
-        )
-      })()}
+          {report.report.map((r, i) => {
+            if (r.status === 'error') return (
+              <div key={i} style={{ ...css.resultCard, borderLeftColor: '#ef4444' }}>
+                <span style={{ fontFamily: mono, fontSize: '0.78rem', color: '#e8eaed' }}>{r.name}</span>
+                <span style={{ fontFamily: mono, fontSize: '0.58rem', color: '#ef4444', marginLeft: '0.5rem' }}>⚠ {r.error}</span>
+              </div>
+            )
+            const oc  = scoreColor(r.overallScore || 0)
+            const rec = REC_META[r.recommendation] || REC_META.monitor
+            return (
+              <div key={i} style={{ ...css.resultCard, borderLeftColor: oc }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <span style={css.resultName}>{r.name}</span>
+                    {r.duplicate && <span style={css.dupTag}>DUPLIKÁT</span>}
+                    <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280', marginTop: '0.15rem' }}>
+                      {r.city}
+                      {r.email && <span style={{ color: '#00cc88', marginLeft: '0.5rem' }}>✉ {r.email}</span>}
+                      {r.web   && <span style={{ color: '#818cf8', marginLeft: '0.5rem' }}>🌐 {r.web}</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                    <span style={{ ...css.chip, color: oc, borderColor: oc + '44' }}>FIT {r.overallScore}</span>
+                    <span style={{ ...css.chip, color: rec.color, borderColor: rec.color + '44' }}>{rec.icon} {rec.label}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
-// Identické CSS ako AgentPanel
+// Identické CSS ako AgentPanel.jsx
 const css = {
   panel:      { background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #ff5c00', borderRadius: 4, padding: '1.25rem 1.4rem', marginBottom: '1.25rem' },
   header:     { marginBottom: '1rem' },
@@ -284,10 +227,8 @@ const css = {
   logTs:      { fontSize: '0.52rem', color: '#4b5563', flexShrink: 0 },
   logMsg:     { fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.4 },
   logCursor:  { fontFamily: mono, fontSize: '0.72rem', color: '#ff5c00' },
-  resultCard: { background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid #00cc88', borderRadius: 3, padding: '0.65rem 0.8rem', marginTop: '0.75rem' },
+  resultCard: { background: '#0d1117', border: '1px solid #21262d', borderLeft: '3px solid', borderRadius: 3, padding: '0.6rem 0.8rem', marginBottom: '0.35rem' },
   resultName: { fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.85rem', fontWeight: 600, color: '#e8eaed' },
-  resultEmail:{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', marginTop: '0.3rem', fontStyle: 'italic' },
-  resultNext: { fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00', marginTop: '0.2rem' },
+  dupTag:     { fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#6b7280', background: '#1e2530', padding: '0.06rem 0.3rem', borderRadius: 2, marginLeft: '0.4rem' },
   chip:       { fontFamily: mono, fontSize: '0.52rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.08rem 0.35rem', border: '1px solid', borderRadius: 2 },
-  approveBtn: { fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.75rem', border: 'none', background: '#00cc88', color: '#0d1117', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
 }

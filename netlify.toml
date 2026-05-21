@@ -28,6 +28,9 @@
 [functions.energy-intel]
   timeout = 26
 
+[functions.intel-hunt]
+  timeout = 26
+
 [functions.intelligence-gather]
   timeout = 26
 
