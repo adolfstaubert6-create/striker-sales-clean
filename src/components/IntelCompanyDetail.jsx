@@ -151,12 +151,13 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
 
       // Uložiť výsledky do Firestore
       await updateIntelligence(id, {
-        newSignals:       data.signals || [],
-        newSources:       data.sources || [],
+        newSignals:       data.signals      || [],
+        newSources:       data.sources      || [],
         updatedScores:    data.updatedScores,
         aiInterpretation: data.aiInterpretation,
-        jobSignals:       data.jobSignals || [],
-        keyEvidence:      data.keyEvidence || [],
+        jobSignals:       data.jobSignals   || [],
+        keyEvidence:      data.keyEvidence  || [],
+        scrapedPages:     data.scrapedPages || [],
         existingSignals:  t.signals  || [],
         existingSources:  t.sources  || [],
       })
@@ -226,20 +227,28 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
                 : <span style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151' }}>— Brave (API kľúč chýba)</span>}
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#9ca3af' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.57rem', color: '#9ca3af' }}>
+              <span style={{ color: '#00cc88' }}>▸</span> {gatherResult.webPagesCount} stránok nájdených
+            </div>
+            <div style={{ fontFamily: mono, fontSize: '0.57rem', color: '#9ca3af' }}>
               <span style={{ color: '#ffaa00' }}>▸</span> {(gatherResult.signals || []).length} nových signálov
             </div>
-            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#9ca3af' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.57rem', color: '#9ca3af' }}>
               <span style={{ color: '#818cf8' }}>▸</span> {(gatherResult.jobSignals || []).length} job signálov
             </div>
-            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#9ca3af' }}>
-              <span style={{ color: '#ff5c00' }}>▸</span> {gatherResult.aiInterpretation?.isRealPressure ? 'REÁLNY TLAK !' : 'Skôr marketing'}
+            <div style={{ fontFamily: mono, fontSize: '0.57rem', color: gatherResult.aiInterpretation?.isRealPressure ? '#ff5c00' : '#6b7280' }}>
+              <span>▸</span> {gatherResult.aiInterpretation?.pressureLevel ? `Tlak: ${gatherResult.aiInterpretation.pressureLevel}` : (gatherResult.aiInterpretation?.isRealPressure ? 'REÁLNY TLAK' : 'Skôr marketing')}
             </div>
           </div>
+          {gatherResult.aiInterpretation?.strikerArgument && (
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#00cc88', lineHeight: 1.5, marginBottom: '0.4rem' }}>
+              ✦ {gatherResult.aiInterpretation.strikerArgument}
+            </div>
+          )}
           {gatherResult.aiInterpretation?.timingAssessment && (
-            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2530', lineHeight: 1.5 }}>
-              {gatherResult.aiInterpretation.timingAssessment}
+            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280', lineHeight: 1.5, paddingTop: '0.4rem', borderTop: '1px solid #1e2530' }}>
+              🕐 {gatherResult.aiInterpretation.timingAssessment}
             </div>
           )}
           <button style={{ ...css.ghostBtn, marginTop: '0.5rem' }} onClick={() => setGatherResult(null)}>Skryť</button>
@@ -345,29 +354,84 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
             {t.whyFound}
           </div>
         )}
-        {/* AI zhrnutie z posledného zbierania */}
+        {/* AI zhrnutie z posledného zbierania — Firecrawl výsledky */}
         {t.lastGatherSummary && (
-          <div style={{ background: '#0a0c0f', border: '1px solid #1e2530', borderRadius: 3, padding: '0.75rem 0.85rem', marginBottom: '1rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.5rem' }}>
-              Výsledok posledného zbierania signálov
+          <div style={{ background: '#0a0c0f', border: '1px solid #1e2530', borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151' }}>
+                Výsledok Firecrawl analýzy
+              </div>
+              {t.lastGatherSummary.pressureLevel && (
+                <span style={{
+                  fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+                  padding: '0.12rem 0.45rem', borderRadius: 2, fontWeight: 700,
+                  color:       t.lastGatherSummary.pressureLevel === 'kritický' ? '#ff5c00' : t.lastGatherSummary.pressureLevel === 'vysoký' ? '#ffaa00' : '#6b7280',
+                  background:  t.lastGatherSummary.pressureLevel === 'kritický' ? 'rgba(255,92,0,0.12)' : t.lastGatherSummary.pressureLevel === 'vysoký' ? 'rgba(255,170,0,0.12)' : 'rgba(107,114,128,0.1)',
+                  border:      `1px solid ${t.lastGatherSummary.pressureLevel === 'kritický' ? '#ff5c0044' : t.lastGatherSummary.pressureLevel === 'vysoký' ? '#ffaa0044' : '#6b728044'}`,
+                }}>
+                  TLAK: {t.lastGatherSummary.pressureLevel?.toUpperCase()}
+                </span>
+              )}
             </div>
-            {t.lastGatherSummary.webSummary && (
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.6, marginBottom: '0.35rem' }}>
-                <span style={{ color: '#6b7280' }}>🌐 Web: </span>{t.lastGatherSummary.webSummary}
+
+            {/* Tematické nálezy */}
+            {[
+              { icon: '⚡', label: 'Energetické náklady', field: 'energyFindings' },
+              { icon: '🔧', label: 'Modernizácia / Rekonštrukcia', field: 'modernizationFindings' },
+              { icon: '🌱', label: 'ESG / Udržateľnosť', field: 'esgFindings' },
+            ].map(({ icon, label, field }) => t.lastGatherSummary[field] && (
+              <div key={field} style={{ marginBottom: '0.5rem' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#4b5563', marginBottom: '0.18rem' }}>
+                  {icon} {label}
+                </div>
+                <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.6 }}>
+                  {t.lastGatherSummary[field]}
+                </div>
               </div>
-            )}
-            {t.lastGatherSummary.searchSummary && (
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.6, marginBottom: '0.35rem' }}>
-                <span style={{ color: '#6b7280' }}>🔎 Vyhľadávanie: </span>{t.lastGatherSummary.searchSummary}
-              </div>
-            )}
+            ))}
+
+            {/* Hodnotenie tlaku */}
             {t.lastGatherSummary.pressureExplanation && (
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', lineHeight: 1.6, marginTop: '0.35rem', paddingTop: '0.35rem', borderTop: '1px solid #1e2530',
+              <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2530', fontFamily: mono, fontSize: '0.6rem', lineHeight: 1.6,
                 color: t.lastGatherSummary.isRealPressure ? '#ff5c00' : '#6b7280' }}>
                 {t.lastGatherSummary.isRealPressure ? '⚡ REÁLNY TLAK: ' : '💬 Marketing: '}
                 {t.lastGatherSummary.pressureExplanation}
               </div>
             )}
+
+            {/* Vhodný čas? */}
+            {t.lastGatherSummary.timingAssessment && (
+              <div style={{ marginTop: '0.35rem', fontFamily: mono, fontSize: '0.6rem', color: '#6b7280', lineHeight: 1.5 }}>
+                🕐 {t.lastGatherSummary.timingAssessment}
+              </div>
+            )}
+
+            {/* STRIKER argument */}
+            {t.lastGatherSummary.strikerArgument && (
+              <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2530', fontFamily: mono, fontSize: '0.62rem', color: '#00cc88', lineHeight: 1.6 }}>
+                ✦ {t.lastGatherSummary.strikerArgument}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Naskenované stránky */}
+        {(t.scrapedPages || []).length > 0 && (
+          <div style={{ marginBottom: '1rem' }}>
+            <FieldLabel>Naskenované stránky webu</FieldLabel>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+              {t.scrapedPages.map((p, i) => (
+                <span key={i} style={{
+                  fontFamily: mono, fontSize: '0.5rem', padding: '0.15rem 0.5rem', borderRadius: 2,
+                  color:      p.found ? (p.energyHits > 0 ? '#ffaa00' : '#00cc88') : '#374151',
+                  background: p.found ? (p.energyHits > 0 ? 'rgba(255,170,0,0.08)' : 'rgba(0,204,136,0.08)') : 'transparent',
+                  border:     `1px solid ${p.found ? (p.energyHits > 0 ? '#ffaa0033' : '#00cc8833') : '#1e2530'}`,
+                  title:      p.url,
+                }}>
+                  {p.found ? (p.energyHits > 0 ? `⚡ ${p.categoryLabel}` : `✓ ${p.categoryLabel}`) : `— ${p.categoryLabel}`}
+                </span>
+              ))}
+            </div>
           </div>
         )}
 
