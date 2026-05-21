@@ -12,7 +12,6 @@ const s = {
     top: 0,
     zIndex: 100,
   },
-  // ── Module switcher row (top) ──
   moduleRow: {
     display: 'flex',
     alignItems: 'stretch',
@@ -32,7 +31,6 @@ const s = {
     transition: 'all 0.15s',
     whiteSpace: 'nowrap',
   },
-  // ── Nav row (bottom) ──
   navRow: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -81,16 +79,30 @@ export default function Header({ view, setView, module, setModule, currentUser, 
       setUserEmail('auth unavailable')
     }
   }, [])
+
   const isIntelligence = module === 'intelligence'
   const isSales        = !isIntelligence
+  const isIntelB       = isIntelligence && division === 'B'
+
+  function switchModule(m) {
+    setModule(m)
+    setView('dashboard')
+  }
+
+  function switchDivision(d) {
+    setDivision(d)
+    setModule('sales')
+    setView('dashboard')
+  }
 
   return (
     <header style={s.header}>
-      {/* ── Division switcher (Staubert only) ── */}
+
+      {/* ── Division switcher — iba Staubert ── */}
       {currentUser === 'Staubert' && (
         <div style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: '#070a0d', borderBottom: '1px solid #0f1318', gap: '0.25rem' }}>
           {['A', 'B'].map(d => (
-            <button key={d} onClick={() => { setDivision(d); setModule('sales') }} style={{
+            <button key={d} onClick={() => switchDivision(d)} style={{
               fontFamily: mono, fontSize: '0.55rem', letterSpacing: '2px', textTransform: 'uppercase',
               padding: '0.3rem 0.75rem', border: 'none', background: 'transparent', cursor: 'pointer',
               borderBottom: division === d ? '2px solid #ff5c00' : '2px solid transparent',
@@ -105,27 +117,14 @@ export default function Header({ view, setView, module, setModule, currentUser, 
       {/* ── Module switcher ── */}
       <div style={s.moduleRow}>
         <button
-          style={{
-            ...s.moduleBtn,
-            color:        isSales ? '#ff5c00' : '#374151',
-            borderBottom: isSales ? '2px solid #ff5c00' : '2px solid transparent',
-          }}
-          onClick={() => setModule('sales')}>
+          style={{ ...s.moduleBtn, color: isSales ? '#ff5c00' : '#374151', borderBottom: isSales ? '2px solid #ff5c00' : '2px solid transparent' }}
+          onClick={() => switchModule('sales')}>
           SALES OPS
         </button>
         <button
-          style={{
-            ...s.moduleBtn,
-            color:        isIntelligence ? '#ffaa00' : '#374151',
-            borderBottom: isIntelligence ? '2px solid #ffaa00' : '2px solid transparent',
-          }}
-          onClick={() => setModule('intelligence')}>
+          style={{ ...s.moduleBtn, color: isIntelligence ? '#ffaa00' : '#374151', borderBottom: isIntelligence ? '2px solid #ffaa00' : '2px solid transparent' }}
+          onClick={() => switchModule('intelligence')}>
           INTELLIGENCE
-          {isIntelligence && (
-            <span style={{ fontFamily: mono, fontSize: '0.42rem', color: '#ff5c00', background: 'rgba(255,92,0,0.12)', border: '1px solid rgba(255,92,0,0.3)', padding: '0.05rem 0.3rem', borderRadius: 2, marginLeft: '0.4rem', letterSpacing: '1px' }}>
-              BETA
-            </span>
-          )}
         </button>
         <div style={{ flex: 1 }} />
         <div style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151', alignSelf: 'center', letterSpacing: '0.5px' }}>
@@ -133,7 +132,7 @@ export default function Header({ view, setView, module, setModule, currentUser, 
         </div>
       </div>
 
-      {/* ── Logo + nav (only in SALES module) ── */}
+      {/* ── SALES OPS: logo + nav ── */}
       {isSales && (
         <div style={s.navRow}>
           <div>
@@ -155,16 +154,38 @@ export default function Header({ view, setView, module, setModule, currentUser, 
         </div>
       )}
 
-      {/* ── Intelligence module compact header ── */}
+      {/* ── INTELLIGENCE: logo + nav ── */}
       {isIntelligence && (
         <div style={{ ...s.navRow, paddingTop: '0.55rem', paddingBottom: '0.55rem' }}>
           <div>
-            <div style={s.logo}>STRIKER <span style={{ color: '#ffaa00' }}>INTELLIGENCE</span></div>
-            <div style={{ ...s.sub, color: '#ff5c0066' }}>AI Lead Scoring · Pain Signal Detection · Intent Engine</div>
+            <div style={s.logo}>
+              STRIKER <span style={{ color: '#ffaa00' }}>INTELLIGENCE</span>
+            </div>
+            <div style={{ ...s.sub, color: isIntelB ? '#6b7280' : '#ff5c0066' }}>
+              {isIntelB ? 'Energy Target Acquisition AI' : 'AI Lead Scoring · Pain Signal Detection · Intent Engine'}
+            </div>
           </div>
-          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', border: '1px solid #1e2530', padding: '0.25rem 0.6rem', borderRadius: 2 }}>
-            DEMO MODE · Fáza 1
-          </div>
+
+          {/* Division B — plnohodnotná navigácia rovnaká ako SALES OPS */}
+          {isIntelB ? (
+            <nav className="header-nav" style={s.nav}>
+              <button
+                style={{ ...s.btn, ...(view === 'dashboard' ? { borderColor: '#ff5c00', color: '#ff5c00' } : {}) }}
+                onClick={() => setView('dashboard')}>
+                Dashboard
+              </button>
+              <button
+                style={{ ...s.btn, ...(view === 'add' ? { borderColor: '#ffaa00', color: '#ffaa00' } : {}) }}
+                onClick={() => setView('add')}>
+                + Pridať target
+              </button>
+            </nav>
+          ) : (
+            /* Division A — pôvodný DEMO MODE badge */
+            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', border: '1px solid #1e2530', padding: '0.25rem 0.6rem', borderRadius: 2 }}>
+              DEMO MODE · Fáza 1
+            </div>
+          )}
         </div>
       )}
     </header>

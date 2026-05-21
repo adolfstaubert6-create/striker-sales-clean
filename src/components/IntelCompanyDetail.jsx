@@ -175,21 +175,27 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
   const status = STATUS_MAP[t.status]        || INTEL_STATUSES[0]
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem' }}>
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', overflowY: 'auto', zIndex: 200, padding: '1.5rem 1rem' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ maxWidth: 960, margin: '0 auto', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 4, position: 'relative' }}>
 
-      {/* Navigačný riadok */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <button onClick={onClose} style={css.backBtn}>← Späť na zoznam</button>
+      {/* Modal hlavička — akcie */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.4rem', borderBottom: '1px solid #1e2530' }}>
+        <button
+          onClick={handleGatherIntelligence}
+          disabled={gathering}
+          style={{ ...css.gatherBtn, opacity: gathering ? 0.7 : 1 }}>
+          {gathering ? '⏳ Zbierám signály...' : '🔍 Zbierať signály z internetu'}
+        </button>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button
-            onClick={handleGatherIntelligence}
-            disabled={gathering}
-            style={{ ...css.gatherBtn, opacity: gathering ? 0.7 : 1 }}>
-            {gathering ? '⏳ Zbierám signály...' : '🔍 Zbierať signály z internetu'}
-          </button>
-          <button onClick={() => setConfirmDel(true)} style={css.deleteBtn}>🗑</button>
+          <button onClick={() => setConfirmDel(true)} style={css.deleteBtn}>🗑 Odstrániť</button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1.1rem', cursor: 'pointer', padding: '0 0.25rem', lineHeight: 1 }}>✕</button>
         </div>
       </div>
+
+      {/* Vnútorný obsah — s paddingom */}
+      <div style={{ padding: '1.4rem' }}>
 
       {/* Progress overlay zbierania */}
       {gathering && (
@@ -656,10 +662,10 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
 
       {/* Potvrdenie vymazania */}
       {confirmDel && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }}>
-          <div style={{ background: '#111418', border: '1px solid #ef444466', borderRadius: 4, padding: '1.5rem', maxWidth: 380, width: '100%' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}>
+          <div style={{ background: '#111418', border: '1px solid #ef444466', borderRadius: 4, padding: '1.5rem', maxWidth: 380, width: '100%', margin: '1rem' }}>
             <div style={{ fontFamily: mono, fontSize: '0.65rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#ef4444', marginBottom: '0.75rem' }}>⚠ Odstrániť kartu firmy</div>
-            <div style={{ fontFamily: mono, fontSize: '0.82rem', color: '#e8eaed', marginBottom: '0.4rem' }}>{t.name}</div>
+            <div style={{ fontFamily: sans, fontSize: '0.95rem', fontWeight: 700, color: '#e8eaed', marginBottom: '0.4rem' }}>{t.name}</div>
             <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#6b7280', marginBottom: '1.25rem' }}>Táto akcia je nevratná. Všetky dáta, kontakty a zdroje budú zmazané.</div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button style={{ ...css.saveBtn, background: '#ef4444' }} onClick={handleDelete}>🗑 Áno, odstrániť</button>
@@ -668,14 +674,16 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
           </div>
         </div>
       )}
+
+      </div>
+      </div>
     </div>
   )
 }
 
 const css = {
-  backBtn:   { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1px', background: 'transparent', border: '1px solid #1e2530', color: '#6b7280', padding: '0.3rem 0.75rem', borderRadius: 2, cursor: 'pointer' },
   gatherBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1.5px', textTransform: 'uppercase', background: 'rgba(255,170,0,0.1)', border: '1px solid #ffaa0066', color: '#ffaa00', padding: '0.3rem 0.9rem', borderRadius: 2, cursor: 'pointer', fontWeight: 600 },
-  deleteBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', letterSpacing: '1px', background: 'rgba(239,68,68,0.08)', border: '1px solid #ef444466', color: '#ef4444', padding: '0.3rem 0.55rem', borderRadius: 2, cursor: 'pointer' },
+  deleteBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', letterSpacing: '1px', background: 'rgba(239,68,68,0.08)', border: '1px solid #ef444466', color: '#ef4444', padding: '0.3rem 0.75rem', borderRadius: 2, cursor: 'pointer' },
   ghostBtn:  { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', background: 'transparent', border: '1px dashed #1e2530', color: '#374151', padding: '0.3rem 0.75rem', borderRadius: 2, cursor: 'pointer', marginTop: '0.25rem' },
   saveBtn:   { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', background: '#00cc88', border: 'none', color: '#0a0c0f', padding: '0.38rem 0.9rem', borderRadius: 2, cursor: 'pointer', fontWeight: 700 },
   cancelBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '1px', background: 'transparent', border: '1px solid #1e2530', color: '#6b7280', padding: '0.38rem 0.75rem', borderRadius: 2, cursor: 'pointer' },

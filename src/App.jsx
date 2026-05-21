@@ -46,7 +46,7 @@ export default function App() {
       <main className="app-main" style={{ flex: 1 }}>
         {module === 'intelligence' ? (
           division === 'B'
-            ? <EnergyTargetPanel />
+            ? <EnergyTargetPanel view={view} setView={setView} />
             : <IntelligenceDashboard />
         ) : view === 'search' ? (
           <SearchPanel

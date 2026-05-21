@@ -312,9 +312,8 @@ function AddCompanyModal({ onClose, onAdded }) {
 
 // ── Hlavný panel ──────────────────────────────────────────────────────────────
 
-export default function EnergyTargetPanel() {
+export default function EnergyTargetPanel({ view = 'dashboard', setView }) {
   const [targets, setTargets]   = useState([])
-  const [view, setView]         = useState('list')   // 'list' | 'detail'
   const [selected, setSelected] = useState(null)
   const [addOpen, setAddOpen]   = useState(false)
   const [filterStatus, setFilterStatus] = useState('all')
@@ -322,12 +321,27 @@ export default function EnergyTargetPanel() {
 
   useEffect(() => subscribeTargets(setTargets), [])
 
-  // Synchronizuj selected s live dátami
+  // Sync s App-level view: Header "+ Pridať target" → otvoriť modal
+  useEffect(() => {
+    if (view === 'add') setAddOpen(true)
+  }, [view])
+
+  // Udržiavaj selected v sync s live dátami
   useEffect(() => {
     if (!selected) return
     const fresh = targets.find(t => t.id === selected.id)
     if (fresh) setSelected(fresh)
   }, [targets])
+
+  function openAdd() {
+    setAddOpen(true)
+    setView?.('add')
+  }
+
+  function closeAdd() {
+    setAddOpen(false)
+    setView?.('dashboard')
+  }
 
   const filtered = targets.filter(t => {
     if (filterStatus !== 'all' && t.status !== filterStatus) return false
@@ -338,10 +352,6 @@ export default function EnergyTargetPanel() {
     return true
   })
 
-  function openDetail(target) { setSelected(target); setView('detail') }
-  function backToList()       { setView('list'); setSelected(null) }
-
-  // Štatistiky
   const counts = {
     total:     targets.length,
     immediate: targets.filter(t => t.recommendation === 'immediate').length,
@@ -349,51 +359,29 @@ export default function EnergyTargetPanel() {
     unsuitable:targets.filter(t => t.recommendation === 'unsuitable').length,
   }
 
-  if (view === 'detail' && selected) {
-    return (
-      <IntelCompanyDetail
-        target={selected}
-        onClose={backToList}
-        onDelete={backToList}
-      />
-    )
-  }
-
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem' }}>
+    <div style={{ padding: '1.25rem', maxWidth: 1100, margin: '0 auto', width: '100%' }}>
 
-      {/* Hlavička */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-          <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '4px', textTransform: 'uppercase', color: '#ff5c00' }}>
-            ◈ ENERGY TARGET ACQUISITION AI
-          </div>
-          <div style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151' }}>
-            Karty firiem · AI scoring · Division B
-          </div>
-        </div>
-        <div style={{ height: 1, background: 'linear-gradient(90deg, #ff5c0033 0%, transparent 60%)' }} />
-      </div>
-
-      {/* Štatistiky */}
+      {/* Štatistiky — rovnaký panel ako AiSummaryPanel v Division A */}
       {targets.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.65rem', marginBottom: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.65rem', marginBottom: '1rem', background: '#111418', border: '1px solid #1e2530', borderLeft: '3px solid #ffaa00', borderRadius: 2, padding: '0.85rem 1rem' }}>
           {[
-            { label: 'Celkom targetov', value: counts.total,     color: '#6b7280' },
+            { label: 'Celkom targetov', value: counts.total,     color: '#ffaa00' },
             { label: 'Kontaktovať',     value: counts.immediate, color: '#00cc88' },
             { label: 'Sledovať',        value: counts.monitor,   color: '#ffaa00' },
             { label: 'Nevhodné',        value: counts.unsuitable,color: '#ef4444' },
           ].map(({ label, value, color }) => (
-            <div key={label} style={{ background: '#111418', border: '1px solid #1e2530', borderRadius: 3, padding: '0.65rem 0.85rem', textAlign: 'center' }}>
-              <div style={{ fontFamily: mono, fontSize: '1.4rem', fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
-              <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginTop: '0.2rem' }}>{label}</div>
+            <div key={label} style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: mono, fontSize: '1.5rem', fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+              <div style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#6b7280', marginTop: '0.25rem' }}>{label}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Filter + vyhľadávanie + pridať */}
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
+      {/* Toolbar — rovnaká štruktúra ako Dashboard toolbar */}
+      <div className="dashboard-toolbar" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem', alignItems: 'center' }}>
+        <button style={css.addBtn} onClick={openAdd}>+ Pridať target</button>
         <button
           style={{ ...css.filterBtn, ...(filterStatus === 'all' ? css.filterBtnOn : {}) }}
           onClick={() => setFilterStatus('all')}>
@@ -416,20 +404,18 @@ export default function EnergyTargetPanel() {
           value={searchQ}
           onChange={e => setSearchQ(e.target.value)}
         />
-        <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať firmu</button>
       </div>
+
+      {filtered.length > 0 && (
+        <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280', letterSpacing: '1px', marginBottom: '0.6rem' }}>
+          {filtered.length} targetov
+        </div>
+      )}
 
       {/* Prázdny stav */}
       {targets.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '4rem 2rem', background: '#111418', border: '1px solid #1e2530', borderRadius: 4 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.65rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#374151', marginBottom: '1rem' }}>
-            ◈ Žiadne cieľové firmy
-          </div>
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '1.5rem', lineHeight: 1.8 }}>
-            Pridaj prvú firmu a AI ju okamžite vyhodnotí<br />
-            podľa 5 kritérií — STRIKER FIT, energia, urgentnosť a záujem o kúpu.
-          </div>
-          <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať prvú cieľovú firmu</button>
+        <div style={{ textAlign: 'center', padding: '3.5rem', fontFamily: mono, fontSize: '0.75rem', color: '#6b7280', lineHeight: 2 }}>
+          → Pridaj firmy cez "+ Pridať target" v hlavičke
         </div>
       )}
 
@@ -437,7 +423,7 @@ export default function EnergyTargetPanel() {
       {filtered.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '0.75rem' }}>
           {filtered.map(t => (
-            <TargetCard key={t.id} target={t} onClick={() => openDetail(t)} />
+            <TargetCard key={t.id} target={t} onClick={() => setSelected(t)} />
           ))}
         </div>
       )}
@@ -448,11 +434,20 @@ export default function EnergyTargetPanel() {
         </div>
       )}
 
-      {/* Modal pridania */}
+      {/* Detail modal — rovnaký vzor ako CompanyDetailModal v Division A */}
+      {selected && (
+        <IntelCompanyDetail
+          target={selected}
+          onClose={() => setSelected(null)}
+          onDelete={() => setSelected(null)}
+        />
+      )}
+
+      {/* Add modal */}
       {addOpen && (
         <AddCompanyModal
-          onClose={() => setAddOpen(false)}
-          onAdded={newTarget => { setSelected(newTarget); setView('detail') }}
+          onClose={closeAdd}
+          onAdded={newTarget => { closeAdd(); setSelected(newTarget) }}
         />
       )}
     </div>
