@@ -21,7 +21,7 @@ const STEPS = [
   { key: 'save',       icon: '💾', label: 'Uloženie' },
 ]
 
-export default function AgentPanel({ onDone }) {
+export default function AgentPanel({ division = 'A', onDone }) {
   const [form, setForm]       = useState({ segment: 'hotel', locality: '', count: 5 })
   const [running, setRunning] = useState(false)
   const [activeStep, setActiveStep] = useState(null)   // current step key
@@ -95,7 +95,7 @@ export default function AgentPanel({ onDone }) {
       const res = await fetch('/.netlify/functions/agent', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ segment: form.segment, locality: form.locality.trim(), count: form.count }),
+        body:    JSON.stringify({ segment: form.segment, locality: form.locality.trim(), count: form.count, division }),
       })
 
       clearTimeout(stepTimer); clearTimeout(stepTimer2)

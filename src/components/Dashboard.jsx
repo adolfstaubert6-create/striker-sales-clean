@@ -225,7 +225,7 @@ export default function Dashboard({ division = 'A' }) {
   return (
     <div>
       <AiSummaryPanel companies={companies} />
-      <AgentPanel onDone={() => {}} />
+      <AgentPanel division={division} onDone={() => {}} />
 
       <div className="dashboard-toolbar" style={css.toolbar}>
         <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať kontakt</button>

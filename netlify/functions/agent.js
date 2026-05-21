@@ -425,14 +425,14 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) }
   }
 
-  const { segment = 'hotel', locality, count = 3 } = body
+  const { segment = 'hotel', locality, count = 3, division = 'A' } = body
   if (!locality) return { statusCode: 400, body: JSON.stringify({ error: 'locality is required' }) }
   if (!CATEGORY_QUERIES[segment]) return { statusCode: 400, body: JSON.stringify({ error: `Unknown segment: ${segment}` }) }
 
   // Cap at 5 to stay within 26s Netlify timeout
   const safeCount = Math.min(Number(count) || 3, 5)
 
-  console.log(`[agent] ═══ START | segment=${segment} locality=${locality} count=${safeCount} ═══`)
+  console.log(`[agent] ═══ START | segment=${segment} locality=${locality} count=${safeCount} division=${division} ═══`)
   const t0 = Date.now()
 
   // Outer try-catch guarantees JSON is always returned — never HTML
@@ -445,6 +445,7 @@ exports.handler = async (event) => {
 
     // ─ Steps 2–5: Process ALL companies in PARALLEL ────────────────────────
     const results = await Promise.allSettled(places.map(async (place) => {
+      place = { ...place, division }
       console.log(`[agent] ── Processing: ${place.name} ──`)
       const entry = { name: place.name, status: 'processing' }
 
