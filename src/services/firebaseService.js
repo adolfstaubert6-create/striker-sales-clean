@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore'
 import { normalizeCompanyData } from '../utils/normalizeCompanyData.js'
 
-export async function saveCompany(raw, category, city, country = 'DE') {
+export async function saveCompany(raw, category, city, country = 'DE', division = 'A') {
   const data = normalizeCompanyData(raw, category, city, country)
   const ref  = collection(db, 'companies')
 
@@ -18,11 +18,11 @@ export async function saveCompany(raw, category, city, country = 'DE') {
     if (!snap.empty) return { id: snap.docs[0].id, duplicate: true }
   }
 
-  const docRef = await addDoc(ref, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  const docRef = await addDoc(ref, { ...data, division, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
   return { id: docRef.id, duplicate: false }
 }
 
-export async function saveCompanies(companies, category, city, country = 'DE') {
+export async function saveCompanies(companies, category, city, country = 'DE', division = 'A') {
   console.log('[saveCompanies] start — count:', companies.length, '| db:', !!db, '| projectId:', db?.app?.options?.projectId)
 
   const ref     = collection(db, 'companies')
@@ -63,7 +63,7 @@ export async function saveCompanies(companies, category, city, country = 'DE') {
   await Promise.all(
     toWrite.map(async ({ key, data }) => {
       try {
-        const docRef = await addDoc(ref, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+        const docRef = await addDoc(ref, { ...data, division, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
         console.log('[saveCompanies] saved:', data.name, '| docId:', docRef.id)
         results[key] = 'saved'
       } catch (err) {
@@ -77,9 +77,12 @@ export async function saveCompanies(companies, category, city, country = 'DE') {
   return results
 }
 
-export function subscribeCompanies(callback) {
+export function subscribeCompanies(callback, division = 'A') {
   const q = query(collection(db, 'companies'), orderBy('createdAt', 'desc'))
-  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+  return onSnapshot(q, snap => {
+    const all = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    callback(division === 'B' ? all.filter(d => d.division === 'B') : all.filter(d => d.division !== 'B'))
+  })
 }
 
 export async function updateCompanyScore(id, score, reason, factors) {

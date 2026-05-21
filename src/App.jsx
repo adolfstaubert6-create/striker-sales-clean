@@ -13,6 +13,7 @@ export default function App() {
   const [view,          setView]          = useState('dashboard')
   const [searchResults, setSearchResults] = useState([])
   const [searching,     setSearching]     = useState(false)
+  const [division,      setDivision]      = useState('A')
   const [currentUser,   setCurrentUser]   = useState(() => {
     const saved = localStorage.getItem('striker-user')
     return (saved && VALID_USERS[saved]) ? saved : null
@@ -36,6 +37,9 @@ export default function App() {
         setView={setView}
         module={module}
         setModule={setModule}
+        currentUser={currentUser}
+        division={division}
+        setDivision={setDivision}
       />
 
       <main className="app-main" style={{ flex: 1 }}>
@@ -46,11 +50,12 @@ export default function App() {
             onResults={setSearchResults}
             searching={searching}
             setSearching={setSearching}
+            division={division}
             style={{ padding: '1.25rem', maxWidth: 1100, margin: '0 auto', width: '100%' }}
           />
         ) : (
           <div style={{ padding: '1.25rem', maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-            <Dashboard />
+            <Dashboard division={division} />
           </div>
         )}
       </main>

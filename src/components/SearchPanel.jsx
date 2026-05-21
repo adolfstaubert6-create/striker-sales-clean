@@ -28,7 +28,7 @@ function scoreLabel(s) {
   return 'Nízky'
 }
 
-export default function SearchPanel({ searching, setSearching }) {
+export default function SearchPanel({ searching, setSearching, division = 'A' }) {
   const [form, setForm] = useState({
     country: 'DE', city: '', category: 'hotel',
     radius: '15', limit: '10', aiCriteria: 'no_filter',
@@ -72,7 +72,7 @@ export default function SearchPanel({ searching, setSearching }) {
     if (saved[key]) return
     setSaved(p => ({ ...p, [key]: 'saving' }))
     try {
-      const result = await saveCompany(company, form.category, form.city, form.country)
+      const result = await saveCompany(company, form.category, form.city, form.country, division)
       setSaved(p => ({ ...p, [key]: result.duplicate ? 'dup' : 'saved' }))
     } catch (e) {
       setSaved(p => ({ ...p, [key]: null }))
@@ -92,7 +92,7 @@ export default function SearchPanel({ searching, setSearching }) {
     })
 
     try {
-      const batchResults = await saveCompanies(unsaved, form.category, form.city, form.country)
+      const batchResults = await saveCompanies(unsaved, form.category, form.city, form.country, division)
       console.log('[handleSaveAll] batchResults:', batchResults)
       setSaved(p => {
         const next = { ...p }

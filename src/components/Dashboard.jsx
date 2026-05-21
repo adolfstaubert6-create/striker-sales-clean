@@ -12,7 +12,7 @@ import AgentPanel from './AgentPanel.jsx'
 
 const FILTERS = [{ key: 'all', label: 'Všetky' }, ...STATUS_LIST.map(s => ({ key: s.key, label: s.label }))]
 
-export default function Dashboard() {
+export default function Dashboard({ division = 'A' }) {
   const [companies, setCompanies]   = useState([])
   const [filter, setFilter]         = useState('all')
   const [search, setSearch]         = useState('')
@@ -21,7 +21,7 @@ export default function Dashboard() {
   const [saving, setSaving]         = useState(false)
   const [selected, setSelected]     = useState(null)
 
-  useEffect(() => subscribeCompanies(setCompanies), [])
+  useEffect(() => subscribeCompanies(setCompanies, division), [division])
 
   // Keep selected in sync with live data
   useEffect(() => {
@@ -178,6 +178,7 @@ export default function Dashboard() {
         city:      addForm.city.trim(),
         category:  addForm.category,
         status:    'new',
+        division,
         createdAt: serverTimestamp(),
       })
       setAddForm({ name: '', email: '', phone: '', website: '', city: '', category: 'hotel' })
@@ -206,6 +207,7 @@ export default function Dashboard() {
         rating: 5,
         aiScore: 90,
         aiReason: 'Testovací kontakt pre overenie email workflow',
+        division,
         createdAt: serverTimestamp(),
       })
       setSeeded('done')

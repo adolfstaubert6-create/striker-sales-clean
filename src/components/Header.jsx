@@ -70,7 +70,7 @@ const s = {
   },
 }
 
-export default function Header({ view, setView, module, setModule }) {
+export default function Header({ view, setView, module, setModule, currentUser, division, setDivision }) {
   const [userEmail, setUserEmail] = useState(null)
 
   useEffect(() => {
@@ -86,6 +86,22 @@ export default function Header({ view, setView, module, setModule }) {
 
   return (
     <header style={s.header}>
+      {/* ── Division switcher (Staubert only) ── */}
+      {currentUser === 'Staubert' && (
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 1.25rem', background: '#070a0d', borderBottom: '1px solid #0f1318', gap: '0.25rem' }}>
+          {['A', 'B'].map(d => (
+            <button key={d} onClick={() => setDivision(d)} style={{
+              fontFamily: mono, fontSize: '0.55rem', letterSpacing: '2px', textTransform: 'uppercase',
+              padding: '0.3rem 0.75rem', border: 'none', background: 'transparent', cursor: 'pointer',
+              borderBottom: division === d ? '2px solid #ff5c00' : '2px solid transparent',
+              color: division === d ? '#ff5c00' : '#374151',
+            }}>
+              ODDELENIE {d}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Module switcher ── */}
       <div style={s.moduleRow}>
         <button
