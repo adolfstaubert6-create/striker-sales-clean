@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const USERS = { Staubert: 'Staubert2026', Szabo: 'Szabo2026' }
+const USERS = { Staubert: 'staubert2026', Szabo: 'Szabo2026' }
 
 export default function LoginScreen({ onLogin }) {
   const [username, setUsername] = useState('')
