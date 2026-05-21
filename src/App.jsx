@@ -3,17 +3,31 @@ import Header from './components/Header.jsx'
 import SearchPanel from './components/SearchPanel.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import IntelligenceDashboard from './components/IntelligenceDashboard.jsx'
+import LoginScreen from './components/LoginScreen.jsx'
 import { seedKnowledgeBase } from './services/firebaseService.js'
 
+const VALID_USERS = { Staubert: true, Szabo: true }
+
 export default function App() {
-  const [module,        setModule]        = useState('sales')       // 'sales' | 'intelligence'
+  const [module,        setModule]        = useState('sales')
   const [view,          setView]          = useState('dashboard')
   const [searchResults, setSearchResults] = useState([])
   const [searching,     setSearching]     = useState(false)
+  const [currentUser,   setCurrentUser]   = useState(() => {
+    const saved = localStorage.getItem('striker-user')
+    return (saved && VALID_USERS[saved]) ? saved : null
+  })
 
   useEffect(() => {
-    seedKnowledgeBase().catch(err => console.warn('[seed]', err.message))
-  }, [])
+    if (currentUser) seedKnowledgeBase().catch(err => console.warn('[seed]', err.message))
+  }, [currentUser])
+
+  function handleLogin(name) {
+    localStorage.setItem('striker-user', name)
+    setCurrentUser(name)
+  }
+
+  if (!currentUser) return <LoginScreen onLogin={handleLogin} />
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
