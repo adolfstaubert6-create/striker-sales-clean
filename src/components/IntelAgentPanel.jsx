@@ -16,7 +16,7 @@ const STEPS = [
   { key: 'save',    icon: '💾', label: 'Uloženie' },
 ]
 
-export default function IntelAgentPanel({ onDone }) {
+export default function IntelAgentPanel({ onDone, onAdded }) {
   const [form, setForm]               = useState({ url: '', segment: 'hotel', country: 'DE', city: '' })
   const [running, setRunning]         = useState(false)
   const [activeStep, setActiveStep]   = useState(null)
@@ -168,9 +168,16 @@ export default function IntelAgentPanel({ onDone }) {
     setCardStatus('saving')
     try {
       const res = await addTarget(result)
-      setCardStatus(res.duplicate ? 'dup' : 'saved')
-      if (res.duplicate) addLog('⚠ Duplikát — firma už existuje v B oddelení')
-      else addLog(`✓ Uložené do B oddelenia`)
+      if (res.duplicate) {
+        setCardStatus('dup')
+        addLog('⚠ Duplikát — firma už existuje v B oddelení')
+      } else {
+        setCardStatus('saved')
+        addLog(`✓ Uložené do B oddelenia`)
+        // Callback pre EnergyTargetPanel — otvorí kartu firmy
+        if (onAdded) onAdded({ id: res.id, ...result })
+        if (onDone) onDone()
+      }
     } catch (e) {
       setCardStatus(null)
       setError('Chyba uloženia: ' + e.message)
@@ -289,7 +296,7 @@ export default function IntelAgentPanel({ onDone }) {
           </div>
           <div style={{ display: 'flex', gap: '0.45rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2530' }}>
             {cardStatus === 'saved' ? (
-              <div style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#00cc88' }}>✓ ULOŽENÉ</div>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#00cc88' }}>✓ Uložené v B oddelení · karta sa otvorila automaticky</div>
             ) : cardStatus === 'dup' ? (
               <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ffaa00' }}>⚠ Duplikát</div>
             ) : (

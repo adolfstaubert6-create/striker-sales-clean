@@ -19,16 +19,27 @@ function ScoreBar({ score, label }) {
   )
 }
 
-export default function IntelTargetCard({ target: t, onOpen, checked, onCheck }) {
+export default function IntelTargetCard({ target: t, onOpen, checked, onCheck, onGather }) {
   const [hovered, setHovered] = useState(false)
+  const [copied, setCopied]   = useState(false)
 
   const rec    = REC_META[t.recommendation] || REC_META.monitor
   const status = STATUS_MAP[t.status]       || { label: 'Nový target', color: '#818cf8', bg: 'rgba(129,140,248,0.1)', border: 'rgba(129,140,248,0.3)' }
   const oc     = scoreColor(t.overallScore ?? 0)
 
+  function copyUrl(e) {
+    e.stopPropagation()
+    if (!t.web) return
+    navigator.clipboard.writeText(t.web).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.45rem' }}>
-      {/* Checkbox — rovnaký vzor ako v Dashboard */}
+
+      {/* Checkbox */}
       <div style={{ paddingTop: '0.95rem', flexShrink: 0 }}>
         <input
           type="checkbox"
@@ -39,19 +50,20 @@ export default function IntelTargetCard({ target: t, onOpen, checked, onCheck })
         />
       </div>
 
-      {/* Karta */}
+      {/* Karta — celá je klikateľná */}
       <div
         style={{
           flex: 1,
           background: '#111418',
-          border: '1px solid #1e2530',
-          borderLeft: `3px solid ${oc}`,
-          borderColor: hovered ? '#2d3748' : '#1e2530',
+          borderTop: '1px solid #1e2530',
+          borderRight: '1px solid #1e2530',
+          borderBottom: '1px solid #1e2530',
+          borderLeft: `3px solid ${hovered ? '#ff5c00' : oc}`,
           borderRadius: 2,
           padding: '0.85rem 1rem',
           cursor: 'pointer',
-          boxShadow: hovered ? '0 0 12px rgba(255,92,0,0.1)' : undefined,
-          transition: 'border-color 0.2s ease',
+          boxShadow: hovered ? '0 0 12px rgba(255,92,0,0.12)' : undefined,
+          transition: 'box-shadow 0.2s ease',
         }}
         onClick={onOpen}
         onMouseEnter={() => setHovered(true)}
@@ -70,25 +82,65 @@ export default function IntelTargetCard({ target: t, onOpen, checked, onCheck })
             </div>
           </div>
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <span style={{ fontFamily: mono, fontSize: '1.05rem', fontWeight: 700, color: oc, border: `1px solid ${oc}66`, borderRadius: 2, padding: '0.08rem 0.4rem', lineHeight: 1.2 }}>
+            <span style={{
+              fontFamily: mono, fontSize: '1.05rem', fontWeight: 700, color: oc,
+              border: `1px solid ${oc}44`, borderRadius: 2, padding: '0.08rem 0.4rem', lineHeight: 1.2,
+            }}>
               {t.overallScore ?? '–'}<span style={{ fontSize: '0.52rem' }}>/100</span>
             </span>
             <div style={{ fontFamily: mono, fontSize: '0.42rem', color: '#4b5563', letterSpacing: 1, marginTop: 2, textAlign: 'right' }}>FIT</div>
           </div>
         </div>
 
-        {/* Web / URL */}
-        {t.web && (
-          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#374151', marginBottom: '0.5rem' }}>
-            🌐 {t.web}
+        {/* Web block — rovnaký vzor ako email block v CompanyCard */}
+        <div style={{
+          background: t.web ? 'rgba(129,140,248,0.05)' : 'rgba(255,170,0,0.05)',
+          border: `1px solid ${t.web ? 'rgba(129,140,248,0.2)' : 'rgba(255,170,0,0.2)'}`,
+          borderRadius: 2, padding: '0.45rem 0.7rem', marginBottom: '0.55rem',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }}>
+            <span style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase',
+              color: t.web ? '#818cf8' : '#ffaa00',
+              background: t.web ? 'rgba(129,140,248,0.12)' : 'rgba(255,170,0,0.1)',
+              border: `1px solid ${t.web ? 'rgba(129,140,248,0.3)' : 'rgba(255,170,0,0.3)'}`,
+              padding: '0.1rem 0.4rem', borderRadius: 2, whiteSpace: 'nowrap',
+            }}>
+              {t.web ? '✓ Web' : '⚠ Bez webu'}
+            </span>
+            {t.web && (
+              <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {t.web}
+              </span>
+            )}
           </div>
-        )}
+          <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+            {t.web && (
+              <button
+                style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.55rem', border: '1px solid rgba(129,140,248,0.4)', background: 'transparent', color: '#818cf8', borderRadius: 2, cursor: 'pointer' }}
+                onClick={copyUrl}
+                onMouseOver={e => e.currentTarget.style.opacity = '0.75'}
+                onMouseOut={e => e.currentTarget.style.opacity = '1'}>
+                {copied ? '✓' : '⎘ Kopírovať'}
+              </button>
+            )}
+            {onGather && (
+              <button
+                style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: 'none', background: '#ffaa00', color: '#0a0c0f', borderRadius: 2, fontWeight: 700, cursor: 'pointer' }}
+                onClick={e => { e.stopPropagation(); onGather(t) }}
+                onMouseOver={e => e.currentTarget.style.filter = 'brightness(1.12)'}
+                onMouseOut={e => e.currentTarget.style.filter = ''}>
+                🔍 Signály
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Score bary */}
         <div style={{ marginBottom: '0.5rem' }}>
-          <ScoreBar score={t.strikerFitScore}    label="Striker Fit"      />
-          <ScoreBar score={t.energyPainScore}    label="Energ. problém"   />
-          <ScoreBar score={t.buyingIntentScore}  label="Záujem o kúpu"    />
+          <ScoreBar score={t.strikerFitScore}   label="Striker Fit"     />
+          <ScoreBar score={t.energyPainScore}   label="Energ. problém"  />
+          <ScoreBar score={t.buyingIntentScore} label="Záujem o kúpu"   />
         </div>
 
         {/* Odporúčanie + stav */}
@@ -112,6 +164,11 @@ export default function IntelTargetCard({ target: t, onOpen, checked, onCheck })
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.signals[0]}</span>
           </div>
         )}
+
+        {/* Expand hint */}
+        <div style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151', marginTop: '0.5rem', textAlign: 'right' }}>
+          ▼ Otvoriť detail
+        </div>
       </div>
     </div>
   )

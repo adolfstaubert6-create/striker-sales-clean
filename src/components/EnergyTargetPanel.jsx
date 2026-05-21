@@ -79,7 +79,10 @@ export default function EnergyTargetPanel({ view = 'dashboard', setView }) {
       <IntelSummaryPanel targets={targets} />
 
       {/* IntelAgentPanel — rovnaký vzor ako AgentPanel v Dashboard */}
-      <IntelAgentPanel onDone={() => {}} />
+      <IntelAgentPanel
+        onDone={() => {}}
+        onAdded={newTarget => setSelected(newTarget)}
+      />
 
       {/* Toolbar — rovnaká štruktúra ako Dashboard toolbar */}
       <div className="dashboard-toolbar" style={css.toolbar}>
@@ -134,6 +137,7 @@ export default function EnergyTargetPanel({ view = 'dashboard', setView }) {
             checked={checkedIds.has(t.id)}
             onCheck={() => toggleCheck(t.id)}
             onOpen={() => setSelected(t)}
+            onGather={t.web ? () => setSelected(t) : null}
           />
         ))
       )}
