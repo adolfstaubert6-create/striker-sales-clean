@@ -4,6 +4,7 @@ import SearchPanel from './components/SearchPanel.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import IntelligenceDashboard from './components/IntelligenceDashboard.jsx'
 import EnergyTargetPanel from './components/EnergyTargetPanel.jsx'
+import AddTargetPanel from './components/AddTargetPanel.jsx'
 import LoginScreen from './components/LoginScreen.jsx'
 import { seedKnowledgeBase } from './services/firebaseService.js'
 
@@ -45,9 +46,11 @@ export default function App() {
 
       <main className="app-main" style={{ flex: 1 }}>
         {module === 'intelligence' ? (
-          division === 'B'
-            ? <EnergyTargetPanel view={view} setView={setView} />
-            : <IntelligenceDashboard />
+          division === 'B' ? (
+            view === 'search'
+              ? <AddTargetPanel setView={setView} />
+              : <EnergyTargetPanel view={view} setView={setView} />
+          ) : <IntelligenceDashboard />
         ) : view === 'search' ? (
           <SearchPanel
             onResults={setSearchResults}

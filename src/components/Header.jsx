@@ -175,8 +175,8 @@ export default function Header({ view, setView, module, setModule, currentUser, 
                 Dashboard
               </button>
               <button
-                style={{ ...s.btn, ...(view === 'add' ? { borderColor: '#ffaa00', color: '#ffaa00' } : {}) }}
-                onClick={() => setView('add')}>
+                style={{ ...s.btn, ...(view === 'search' ? { borderColor: '#ffaa00', color: '#ffaa00' } : {}) }}
+                onClick={() => setView('search')}>
                 + Pridať target
               </button>
             </nav>

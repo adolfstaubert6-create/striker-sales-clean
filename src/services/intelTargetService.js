@@ -1,7 +1,7 @@
 import { db } from '../firebase.js'
 import {
-  collection, addDoc, updateDoc, deleteDoc,
-  doc, serverTimestamp, query, orderBy, onSnapshot, arrayUnion,
+  collection, addDoc, updateDoc, deleteDoc, getDocs,
+  doc, serverTimestamp, query, orderBy, where, onSnapshot, arrayUnion,
 } from 'firebase/firestore'
 
 export function subscribeTargets(callback) {
@@ -14,7 +14,17 @@ export function subscribeTargets(callback) {
 }
 
 export async function addTarget(data) {
-  return addDoc(collection(db, 'intelligence_targets'), {
+  // Duplicate check — rovnaký vzor ako saveCompany v firebaseService.js
+  if (data.web) {
+    const snap = await getDocs(query(collection(db, 'intelligence_targets'), where('web', '==', data.web), where('division', '==', 'B')))
+    if (!snap.empty) return { id: snap.docs[0].id, duplicate: true }
+  }
+  if (data.name) {
+    const snap = await getDocs(query(collection(db, 'intelligence_targets'), where('name', '==', data.name), where('division', '==', 'B')))
+    if (!snap.empty) return { id: snap.docs[0].id, duplicate: true }
+  }
+
+  const ref = await addDoc(collection(db, 'intelligence_targets'), {
     ...data,
     division:  'B',
     sources:   data.sources  || [],
@@ -23,6 +33,7 @@ export async function addTarget(data) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
+  return { id: ref.id, duplicate: false }
 }
 
 export async function updateTarget(id, patch) {
