@@ -1,211 +1,110 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import {
+  SEGMENTS, SEGMENT_LABELS, SEGMENT_ICON, COUNTRIES,
+  INTEL_STATUSES, STATUS_MAP, REC_META, scoreColor,
+} from '../constants/intelMeta.js'
+import { subscribeTargets, addTarget } from '../services/intelTargetService.js'
+import IntelCompanyDetail from './IntelCompanyDetail.jsx'
 
 const mono = "'IBM Plex Mono', monospace"
+const sans = "'IBM Plex Sans', sans-serif"
 
-const SEGMENTS = [
-  { value: 'hotel',      label: '🏨 Hotel / Ubytovanie' },
-  { value: 'wellness',   label: '💆 Wellness / Spa / Kúpele' },
-  { value: 'laundry',    label: '🧺 Priemyselná práčovňa' },
-  { value: 'hospital',   label: '🏥 Nemocnica / Klinika' },
-  { value: 'restaurant', label: '🍽️ Reštaurácia / Gastro' },
-  { value: 'food',       label: '🏭 Potravinárstvo / Výroba' },
-  { value: 'brewery',    label: '🍺 Pivovar' },
-  { value: 'dryer',      label: '🌾 Sušiareň / Agrárna prevádzka' },
-  { value: 'industrial', label: '⚙️ Priemysel / Iné' },
-]
+// ── Pomocné komponenty ────────────────────────────────────────────────────────
 
-const COUNTRIES = [
-  { value: 'DE', label: '🇩🇪 DE' },
-  { value: 'AT', label: '🇦🇹 AT' },
-  { value: 'CH', label: '🇨🇭 CH' },
-  { value: 'SK', label: '🇸🇰 SK' },
-  { value: 'CZ', label: '🇨🇿 CZ' },
-]
-
-const INTENT_META = {
-  weak:   { label: 'WEAK',   color: '#6b7280', bg: 'rgba(107,114,128,0.12)', border: '#6b728055' },
-  medium: { label: 'MEDIUM', color: '#ffaa00', bg: 'rgba(255,170,0,0.12)',   border: '#ffaa0055' },
-  strong: { label: 'STRONG', color: '#00cc88', bg: 'rgba(0,204,136,0.12)',   border: '#00cc8855' },
-}
-
-const REC_META = {
-  immediate:  { label: 'KONTAKTOVAŤ OKAMŽITE', color: '#00cc88', bg: 'rgba(0,204,136,0.1)',  border: '#00cc8866', icon: '✅' },
-  monitor:    { label: 'SLEDOVAŤ',             color: '#ffaa00', bg: 'rgba(255,170,0,0.1)',   border: '#ffaa0066', icon: '◉'  },
-  unsuitable: { label: 'NEVHODNÉ',             color: '#ef4444', bg: 'rgba(239,68,68,0.1)',   border: '#ef444466', icon: '✗'  },
-}
-
-function scoreColor(s) {
-  return s >= 70 ? '#00cc88' : s >= 50 ? '#ffaa00' : '#ef4444'
-}
-
-function ScoreBar({ score, label, reason }) {
+function ScoreBar({ score, label }) {
   const color = scoreColor(score)
   return (
-    <div style={{ marginBottom: '0.75rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.18rem' }}>
-        <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#6b7280' }}>{label}</span>
-        <span style={{ fontFamily: mono, fontSize: '0.88rem', fontWeight: 700, color }}>{score}%</span>
+    <div style={{ marginBottom: '0.3rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.1rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#6b7280' }}>{label}</span>
+        <span style={{ fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, color }}>{score ?? '–'}%</span>
       </div>
-      <div style={{ height: 5, background: '#1e2530', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: 3 }} />
+      <div style={{ height: 3, background: '#1e2530', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ width: `${score ?? 0}%`, height: '100%', background: color, borderRadius: 2 }} />
       </div>
-      {reason && (
-        <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#4b5563', marginTop: '0.18rem', lineHeight: 1.4 }}>
-          {reason}
+    </div>
+  )
+}
+
+function TargetCard({ target: t, onClick }) {
+  const rec    = REC_META[t.recommendation] || REC_META.monitor
+  const status = STATUS_MAP[t.status]       || INTEL_STATUSES[0]
+  const oc     = scoreColor(t.overallScore)
+  const icon   = SEGMENT_ICON[t.segment] || '🏢'
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: '#111418', border: '1px solid #1e2530', borderLeft: `3px solid ${oc}`,
+        borderRadius: 4, padding: '1rem 1.1rem', cursor: 'pointer',
+        transition: 'border-color 0.15s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = oc}
+      onMouseLeave={e => e.currentTarget.style.borderColor = '#1e2530'}
+    >
+      {/* Hlavička karty */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.65rem' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.2rem' }}>
+            {icon} {t.segmentLabel || SEGMENT_LABELS[t.segment] || t.segment}
+          </div>
+          <div style={{ fontFamily: sans, fontSize: '0.95rem', fontWeight: 700, color: '#e8eaed', marginBottom: '0.15rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {t.name}
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#6b7280' }}>
+            {[t.city, t.country].filter(Boolean).join(', ')}
+            {t.companySize && ` · ${t.companySize}`}
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontFamily: mono, fontSize: '1.5rem', fontWeight: 700, color: oc, lineHeight: 1 }}>{t.overallScore ?? '–'}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.4rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px' }}>fit</div>
+        </div>
+      </div>
+
+      {/* Skóre bary */}
+      <ScoreBar score={t.strikerFitScore}    label="Striker Fit"  />
+      <ScoreBar score={t.energyPainScore}    label="Energ. problém" />
+      <ScoreBar score={t.buyingIntentScore}  label="Záujem o kúpu" />
+
+      {/* Odporúčanie + stav */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.7rem', paddingTop: '0.6rem', borderTop: '1px solid #1e2530' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '0.5px', color: rec.color }}>
+          {rec.icon} {rec.label}
+        </span>
+        <span style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.1rem 0.38rem', borderRadius: 2, color: status.color, background: status.bg, border: `1px solid ${status.border}` }}>
+          {status.label}
+        </span>
+      </div>
+
+      {/* Prvý signál */}
+      {(t.signals || [])[0] && (
+        <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#4b5563', marginTop: '0.5rem', display: 'flex', gap: '0.35rem', alignItems: 'flex-start' }}>
+          <span style={{ color: '#ff5c00', flexShrink: 0 }}>▸</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.signals[0]}</span>
         </div>
       )}
     </div>
   )
 }
 
-function ReportCard({ result }) {
-  const { companyName, segment, city, country, report } = result
-  const rec    = REC_META[report.recommendation]  || REC_META.monitor
-  const intent = INTENT_META[report.buyingIntent] || INTENT_META.medium
-  const oc     = scoreColor(report.overallScore)
+// ── Modal pridania firmy ──────────────────────────────────────────────────────
 
-  return (
-    <div style={{ background: '#0d1117', border: '1px solid #1e2530', borderLeft: `3px solid ${oc}`, borderRadius: 4, overflow: 'hidden' }}>
-
-      {/* Header */}
-      <div style={{ background: '#111418', borderBottom: '1px solid #1e2530', padding: '1rem 1.4rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#ff5c00', marginBottom: '0.35rem' }}>
-              ◈ STRIKER INTELLIGENCE REPORT
-            </div>
-            <div style={{ fontFamily: "'IBM Plex Sans', sans-serif", fontSize: '1.2rem', fontWeight: 700, color: '#e8eaed', letterSpacing: '0.3px' }}>
-              {companyName}
-            </div>
-            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#6b7280', marginTop: '0.2rem' }}>
-              {segment}{city || country ? ` · ${[city, country].filter(Boolean).join(', ')}` : ''}
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontFamily: mono, fontSize: '2.5rem', fontWeight: 700, color: oc, lineHeight: 1 }}>
-              {report.overallScore}
-            </div>
-            <div style={{ fontFamily: mono, fontSize: '0.45rem', color: '#6b7280', letterSpacing: '1.5px', textTransform: 'uppercase', marginTop: '0.1rem' }}>
-              OVERALL FIT / 100
-            </div>
-          </div>
-        </div>
-
-        {/* Recommendation badge */}
-        <div style={{ marginTop: '0.85rem' }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: '0.45rem',
-            background: rec.bg, border: `1px solid ${rec.border}`,
-            borderRadius: 3, padding: '0.35rem 0.85rem',
-          }}>
-            <span style={{ fontSize: '0.75rem' }}>{rec.icon}</span>
-            <span style={{ fontFamily: mono, fontSize: '0.6rem', letterSpacing: '2px', textTransform: 'uppercase', color: rec.color, fontWeight: 700 }}>
-              {rec.label}
-            </span>
-          </span>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div style={{ padding: '1.4rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-
-        {/* Left: score bars */}
-        <div>
-          <div style={css.sectionLabel}>Scoring</div>
-          <ScoreBar score={report.strikerFitScore}     label="STRIKER FIT"     reason={report.strikerFitReason} />
-          <ScoreBar score={report.heatDemandScore}     label="HEAT DEMAND"     reason={report.heatDemandReason} />
-          <ScoreBar score={report.energyPainScore}     label="ENERGY PAIN"     reason={report.energyPainReason} />
-          <ScoreBar score={report.financialPowerScore} label="FINANCIAL POWER" reason={report.financialPowerReason} />
-          <ScoreBar score={report.urgencyScore}        label="URGENCY"         reason={report.urgencyReason} />
-
-          <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid #1e2530' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <span style={css.sectionLabel}>Buying Intent</span>
-              <span style={{
-                fontFamily: mono, fontSize: '0.6rem', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 700,
-                padding: '0.2rem 0.65rem', borderRadius: 2,
-                color: intent.color, background: intent.bg, border: `1px solid ${intent.border}`,
-              }}>
-                ● {intent.label}
-              </span>
-            </div>
-            {report.buyingIntentReason && (
-              <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#4b5563', marginTop: '0.25rem', lineHeight: 1.4 }}>
-                {report.buyingIntentReason}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right: decision makers, signals, reasoning, next step */}
-        <div>
-          {report.decisionMakers?.length > 0 && (
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={css.sectionLabel}>Decision Makers</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                {report.decisionMakers.map((dm, i) => (
-                  <span key={i} style={{
-                    fontFamily: mono, fontSize: '0.58rem',
-                    color: '#818cf8', background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.25)',
-                    padding: '0.15rem 0.5rem', borderRadius: 2,
-                  }}>
-                    {dm}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {report.signals?.length > 0 && (
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={css.sectionLabel}>Nájdené signály</div>
-              {report.signals.map((s, i) => (
-                <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.3rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: '#ff5c00', flexShrink: 0, fontFamily: mono, fontSize: '0.65rem', lineHeight: 1.5 }}>▸</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.5 }}>{s}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {report.reasoning && (
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={css.sectionLabel}>Zdôvodnenie</div>
-              <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.65 }}>
-                {report.reasoning}
-              </div>
-            </div>
-          )}
-
-          {report.nextStep && (
-            <div style={{ borderTop: '1px solid #1e2530', paddingTop: '0.85rem' }}>
-              <div style={css.sectionLabel}>Ďalší krok</div>
-              <div style={{ fontFamily: mono, fontSize: '0.68rem', color: '#00cc88', lineHeight: 1.5 }}>
-                → {report.nextStep}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function EnergyTargetPanel() {
-  const [form, setForm]           = useState({ companyName: '', url: '', segment: 'hotel', country: 'DE', city: '', extraContext: '' })
-  const [loading, setLoading]     = useState(false)
-  const [result, setResult]       = useState(null)
-  const [error, setError]         = useState(null)
-  const [history, setHistory]     = useState([])
-  const [showContext, setShowContext] = useState(false)
+function AddCompanyModal({ onClose, onAdded }) {
+  const [form, setForm]         = useState({ companyName: '', url: '', segment: 'hotel', country: 'DE', city: '', companySize: '', employees: '', extraContext: '' })
+  const [phase, setPhase]       = useState('form')   // 'form' | 'analyzing' | 'preview'
+  const [aiResult, setAiResult] = useState(null)
+  const [error, setError]       = useState(null)
+  const [saving, setSaving]     = useState(false)
+  const [showCtx, setShowCtx]   = useState(false)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   async function handleAnalyze() {
     if (!form.companyName.trim()) { setError('Zadaj názov firmy'); return }
     setError(null)
-    setResult(null)
-    setLoading(true)
+    setPhase('analyzing')
     try {
       const res  = await fetch('/.netlify/functions/energy-intel', {
         method:  'POST',
@@ -214,168 +113,364 @@ export default function EnergyTargetPanel() {
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
-      const entry = { ...data, id: Date.now() }
-      setResult(entry)
-      setHistory(prev => [entry, ...prev.filter(h => h.companyName !== data.companyName)].slice(0, 8))
+      setAiResult(data)
+      setPhase('preview')
+    } catch (e) {
+      setError(e.message)
+      setPhase('form')
+    }
+  }
+
+  async function handleSave() {
+    if (!aiResult) return
+    setSaving(true)
+    try {
+      const r   = aiResult.report
+      const doc = {
+        name:             form.companyName.trim(),
+        web:              form.url.trim(),
+        country:          form.country,
+        city:             form.city.trim(),
+        segment:          form.segment,
+        segmentLabel:     SEGMENT_LABELS[form.segment] || form.segment,
+        companySize:      r.estimatedSize   || form.companySize || '',
+        employees:        r.estimatedEmployees || form.employees || '',
+        status:           'analyzed',
+        strikerFitScore:     r.strikerFitScore,
+        strikerFitReason:    r.strikerFitReason,
+        energyPainScore:     r.energyPainScore,
+        energyPainReason:    r.energyPainReason,
+        urgencyScore:        r.urgencyScore,
+        urgencyReason:       r.urgencyReason,
+        financialPowerScore: r.financialPowerScore,
+        financialPowerReason:r.financialPowerReason,
+        buyingIntentScore:   r.buyingIntentScore  || (r.buyingIntent === 'strong' ? 80 : r.buyingIntent === 'medium' ? 55 : 25),
+        buyingIntent:        r.buyingIntent,
+        buyingIntentReason:  r.buyingIntentReason,
+        overallScore:        r.overallScore,
+        recommendation:      r.recommendation,
+        recommendationReason:r.recommendationReason || r.reasoning || '',
+        nextStep:            r.nextStep,
+        whyFound:            r.whyFound || '',
+        signals:             r.signals  || [],
+        aiAnalysis: {
+          whatTroubles:  r.aiAnalysis?.whatTroubles  || '',
+          energyProblem: r.aiAnalysis?.energyProblem || '',
+          whyStrikerFit: r.aiAnalysis?.whyStrikerFit || '',
+          mainArgument:  r.aiAnalysis?.mainArgument  || '',
+        },
+        suggestedContacts: r.suggestedContacts || [],
+        sources:  [],
+        contacts: [],
+      }
+      const ref = await addTarget(doc)
+      onAdded({ id: ref.id, ...doc })
+      onClose()
     } catch (e) {
       setError(e.message)
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
+  }
+
+  const rec = aiResult ? (REC_META[aiResult.report?.recommendation] || REC_META.monitor) : null
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '1rem' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#111418', border: '1px solid #1e2530', borderRadius: 4, width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto' }}>
+
+        {/* Hlavička modalu */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.1rem 1.4rem', borderBottom: '1px solid #1e2530' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#ff5c00' }}>
+            + Nová karta firmy
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1rem', cursor: 'pointer' }}>✕</button>
+        </div>
+
+        <div style={{ padding: '1.4rem' }}>
+
+          {phase === 'form' && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.65rem' }}>
+                <div>
+                  <label style={mCss.label}>Názov firmy *</label>
+                  <input style={mCss.input} placeholder="napr. Hotel Alpenhof GmbH" autoFocus
+                    value={form.companyName} onChange={e => { set('companyName', e.target.value); setError(null) }}
+                    onKeyDown={e => e.key === 'Enter' && handleAnalyze()} />
+                </div>
+                <div>
+                  <label style={mCss.label}>Web / URL</label>
+                  <input style={mCss.input} placeholder="hotel-alpenhof.de" value={form.url} onChange={e => set('url', e.target.value)} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '0.65rem', marginBottom: '0.65rem' }}>
+                <div>
+                  <label style={mCss.label}>Segment</label>
+                  <select style={mCss.select} value={form.segment} onChange={e => set('segment', e.target.value)}>
+                    {SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={mCss.label}>Krajina</label>
+                  <select style={mCss.select} value={form.country} onChange={e => set('country', e.target.value)}>
+                    {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={mCss.label}>Mesto</label>
+                  <input style={mCss.input} placeholder="München" value={form.city} onChange={e => set('city', e.target.value)} />
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.65rem' }}>
+                <div>
+                  <label style={mCss.label}>Veľkosť firmy (voliteľné)</label>
+                  <select style={mCss.select} value={form.companySize} onChange={e => set('companySize', e.target.value)}>
+                    <option value="">— Neznáma —</option>
+                    <option value="Malá firma">Malá firma (do 50 zam.)</option>
+                    <option value="Stredná firma">Stredná firma (50–250 zam.)</option>
+                    <option value="Veľká firma">Veľká firma (250–1 000 zam.)</option>
+                    <option value="Korporácia">Korporácia (1 000+ zam.)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={mCss.label}>Odhad počtu zamestnancov</label>
+                  <input style={mCss.input} placeholder="napr. 50–200" value={form.employees} onChange={e => set('employees', e.target.value)} />
+                </div>
+              </div>
+              <button style={{ background: 'transparent', border: 'none', color: '#374151', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', cursor: 'pointer', padding: 0, marginBottom: '0.65rem' }}
+                onClick={() => setShowCtx(v => !v)}>
+                {showCtx ? '▲' : '▼'} Dodatočný kontext pre AI (voliteľné)
+              </button>
+              {showCtx && (
+                <textarea style={{ ...mCss.input, display: 'block', minHeight: 80, resize: 'vertical', lineHeight: 1.6, marginBottom: '0.65rem' }}
+                  placeholder="Vlož popis firmy, LinkedIn post, novinový článok, výročnú správu..."
+                  value={form.extraContext} onChange={e => set('extraContext', e.target.value)} />
+              )}
+              {error && <div style={mCss.errBox}>⚠ {error}</div>}
+              <button style={mCss.analyzeBtn} onClick={handleAnalyze}>▶ Analyzovať s AI</button>
+            </>
+          )}
+
+          {phase === 'analyzing' && (
+            <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ff5c00', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '1.25rem' }}>
+                ◈ STRIKER AI ANALYZUJE...
+              </div>
+              {[
+                'Vyhodnocujem tepelnú potrebu...',
+                'Skórujem energetický problém...',
+                'Hľadám signály záujmu o kúpu...',
+                'Posudzujem finančnú silu...',
+                'Identifikujem kontaktné osoby...',
+                'Kalkulujem STRIKER FIT...',
+              ].map((l, i) => (
+                <div key={i} style={{ fontFamily: mono, fontSize: '0.58rem', color: '#374151', marginBottom: '0.3rem' }}>✦ {l}</div>
+              ))}
+            </div>
+          )}
+
+          {phase === 'preview' && aiResult && (() => {
+            const r = aiResult.report
+            const recMeta = REC_META[r.recommendation] || REC_META.monitor
+            return (
+              <>
+                <div style={{ background: '#0d1117', border: `1px solid ${recMeta.border}`, borderRadius: 3, padding: '1rem 1.1rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                    <div>
+                      <div style={{ fontFamily: sans, fontSize: '1rem', fontWeight: 700, color: '#e8eaed' }}>{form.companyName}</div>
+                      <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280' }}>{[form.city, form.country].filter(Boolean).join(', ')} · {SEGMENT_LABELS[form.segment]}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: mono, fontSize: '2rem', fontWeight: 700, color: scoreColor(r.overallScore), lineHeight: 1 }}>{r.overallScore}</div>
+                      <div style={{ fontFamily: mono, fontSize: '0.42rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px' }}>fit / 100</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0.75rem', borderRadius: 2, background: recMeta.bg, border: `1px solid ${recMeta.border}`, marginBottom: '0.75rem' }}>
+                    <span>{recMeta.icon}</span>
+                    <span style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: recMeta.color, fontWeight: 700 }}>{recMeta.label}</span>
+                  </div>
+                  {r.whyFound && (
+                    <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.65 }}>{r.whyFound}</div>
+                  )}
+                </div>
+                {error && <div style={mCss.errBox}>⚠ {error}</div>}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button style={mCss.analyzeBtn} onClick={handleSave} disabled={saving}>
+                    {saving ? '⏳ Ukladám...' : '✓ Uložiť kartu firmy'}
+                  </button>
+                  <button style={{ ...mCss.cancelBtn }} onClick={() => setPhase('form')}>← Späť</button>
+                </div>
+              </>
+            )
+          })()}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Hlavný panel ──────────────────────────────────────────────────────────────
+
+export default function EnergyTargetPanel() {
+  const [targets, setTargets]   = useState([])
+  const [view, setView]         = useState('list')   // 'list' | 'detail'
+  const [selected, setSelected] = useState(null)
+  const [addOpen, setAddOpen]   = useState(false)
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [searchQ, setSearchQ]   = useState('')
+
+  useEffect(() => subscribeTargets(setTargets), [])
+
+  // Synchronizuj selected s live dátami
+  useEffect(() => {
+    if (!selected) return
+    const fresh = targets.find(t => t.id === selected.id)
+    if (fresh) setSelected(fresh)
+  }, [targets])
+
+  const filtered = targets.filter(t => {
+    if (filterStatus !== 'all' && t.status !== filterStatus) return false
+    if (searchQ) {
+      const q = searchQ.toLowerCase()
+      return t.name?.toLowerCase().includes(q) || t.city?.toLowerCase().includes(q)
+    }
+    return true
+  })
+
+  function openDetail(target) { setSelected(target); setView('detail') }
+  function backToList()       { setView('list'); setSelected(null) }
+
+  // Štatistiky
+  const counts = {
+    total:     targets.length,
+    immediate: targets.filter(t => t.recommendation === 'immediate').length,
+    monitor:   targets.filter(t => t.recommendation === 'monitor').length,
+    unsuitable:targets.filter(t => t.recommendation === 'unsuitable').length,
+  }
+
+  if (view === 'detail' && selected) {
+    return (
+      <IntelCompanyDetail
+        target={selected}
+        onClose={backToList}
+        onDelete={backToList}
+      />
+    )
   }
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem' }}>
 
-      {/* Page header */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap' }}>
+      {/* Hlavička */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
           <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '4px', textTransform: 'uppercase', color: '#ff5c00' }}>
             ◈ ENERGY TARGET ACQUISITION AI
           </div>
           <div style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151' }}>
-            AI-driven scoring · heat demand · buying intent · striker fit
+            Karty firiem · AI scoring · Division B
           </div>
         </div>
-        <div style={{ height: 1, background: 'linear-gradient(90deg, #ff5c0033 0%, transparent 60%)', marginTop: '0.5rem' }} />
+        <div style={{ height: 1, background: 'linear-gradient(90deg, #ff5c0033 0%, transparent 60%)' }} />
       </div>
 
-      {/* History chips */}
-      {history.length > 0 && (
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-          {history.map(h => {
-            const rec   = REC_META[h.report?.recommendation] || REC_META.monitor
-            const isActive = result?.id === h.id
-            return (
-              <button key={h.id} onClick={() => setResult(h)} style={{
-                fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase',
-                padding: '0.22rem 0.65rem',
-                border: `1px solid ${rec.border}`,
-                background: isActive ? rec.bg : 'transparent',
-                color: isActive ? rec.color : '#6b7280',
-                borderRadius: 2, cursor: 'pointer',
-              }}>
-                {h.companyName} · {h.report?.overallScore}%
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Input form */}
-      <div style={{ background: '#111418', border: '1px solid #1e2530', borderRadius: 4, padding: '1.4rem', marginBottom: result || loading ? '1.5rem' : 0 }}>
-        <div style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '1.1rem' }}>
-          Zadaj firmu pre analýzu
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-          <div>
-            <label style={css.label}>Firma *</label>
-            <input
-              style={css.input}
-              placeholder="napr. Hotel Alpenhof GmbH"
-              value={form.companyName}
-              onChange={e => { set('companyName', e.target.value); setError(null) }}
-              onKeyDown={e => e.key === 'Enter' && handleAnalyze()}
-              autoFocus
-            />
-          </div>
-          <div>
-            <label style={css.label}>Web / URL (voliteľné)</label>
-            <input
-              style={css.input}
-              placeholder="napr. hotel-alpenhof.de"
-              value={form.url}
-              onChange={e => set('url', e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-          <div>
-            <label style={css.label}>Segment</label>
-            <select style={css.select} value={form.segment} onChange={e => set('segment', e.target.value)}>
-              {SEGMENTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={css.label}>Krajina</label>
-            <select style={css.select} value={form.country} onChange={e => set('country', e.target.value)}>
-              {COUNTRIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={css.label}>Mesto</label>
-            <input
-              style={css.input}
-              placeholder="napr. München"
-              value={form.city}
-              onChange={e => set('city', e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '0.85rem' }}>
-          <button style={css.toggleBtn} onClick={() => setShowContext(v => !v)}>
-            {showContext ? '▲ Skryť' : '▼ Dodatočný kontext'} — vlož info o firme, LinkedIn, novinky...
-          </button>
-          {showContext && (
-            <textarea
-              style={{ ...css.input, display: 'block', marginTop: '0.5rem', minHeight: 90, resize: 'vertical', lineHeight: 1.6 }}
-              placeholder="Napr. popis firmy, výročná správa, LinkedIn post, news článok, interná pozícia..."
-              value={form.extraContext}
-              onChange={e => set('extraContext', e.target.value)}
-            />
-          )}
-        </div>
-
-        {error && (
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#ef4444', background: 'rgba(239,68,68,0.08)', padding: '0.4rem 0.65rem', borderRadius: 2, marginBottom: '0.75rem' }}>
-            ⚠ {error}
-          </div>
-        )}
-
-        <button
-          style={{ ...css.analyzeBtn, opacity: loading ? 0.7 : 1 }}
-          onClick={handleAnalyze}
-          disabled={loading}
-        >
-          {loading ? '⏳ Analyzujem...' : '▶ STRIKER INTELLIGENCE REPORT'}
-        </button>
-      </div>
-
-      {/* Loading state */}
-      {loading && (
-        <div style={{ background: '#111418', border: '1px solid #1e2530', borderRadius: 4, padding: '2rem 1.4rem' }}>
-          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#ff5c00', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '1.25rem' }}>
-            ◈ STRIKER AI ANALYZUJE...
-          </div>
+      {/* Štatistiky */}
+      {targets.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.65rem', marginBottom: '1rem' }}>
           {[
-            'Vyhodnocujem tepelnú potrebu (Heat Demand)...',
-            'Skórujem energetickú bolesť (Energy Pain)...',
-            'Hľadám Buying Intent signály...',
-            'Posudzujem finančnú silu...',
-            'Identifikujem Decision Makers...',
-            'Kalkulujem STRIKER FIT skóre...',
-          ].map((line, i) => (
-            <div key={i} style={{ fontFamily: mono, fontSize: '0.58rem', color: '#374151', marginBottom: '0.3rem' }}>
-              ✦ {line}
+            { label: 'Celkom targetov', value: counts.total,     color: '#6b7280' },
+            { label: 'Kontaktovať',     value: counts.immediate, color: '#00cc88' },
+            { label: 'Sledovať',        value: counts.monitor,   color: '#ffaa00' },
+            { label: 'Nevhodné',        value: counts.unsuitable,color: '#ef4444' },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{ background: '#111418', border: '1px solid #1e2530', borderRadius: 3, padding: '0.65rem 0.85rem', textAlign: 'center' }}>
+              <div style={{ fontFamily: mono, fontSize: '1.4rem', fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+              <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginTop: '0.2rem' }}>{label}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Result */}
-      {result && !loading && <ReportCard result={result} />}
+      {/* Filter + vyhľadávanie + pridať */}
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
+        <button
+          style={{ ...css.filterBtn, ...(filterStatus === 'all' ? css.filterBtnOn : {}) }}
+          onClick={() => setFilterStatus('all')}>
+          Všetky ({targets.length})
+        </button>
+        {INTEL_STATUSES.map(s => {
+          const count = targets.filter(t => t.status === s.key).length
+          if (count === 0) return null
+          return (
+            <button key={s.key}
+              style={{ ...css.filterBtn, ...(filterStatus === s.key ? { borderColor: s.color, color: s.color } : {}) }}
+              onClick={() => setFilterStatus(s.key)}>
+              {s.label} ({count})
+            </button>
+          )
+        })}
+        <input
+          style={css.search}
+          placeholder="Hľadať firmu alebo mesto..."
+          value={searchQ}
+          onChange={e => setSearchQ(e.target.value)}
+        />
+        <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať firmu</button>
+      </div>
+
+      {/* Prázdny stav */}
+      {targets.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '4rem 2rem', background: '#111418', border: '1px solid #1e2530', borderRadius: 4 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.65rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#374151', marginBottom: '1rem' }}>
+            ◈ Žiadne cieľové firmy
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '1.5rem', lineHeight: 1.8 }}>
+            Pridaj prvú firmu a AI ju okamžite vyhodnotí<br />
+            podľa 5 kritérií — STRIKER FIT, energia, urgentnosť a záujem o kúpu.
+          </div>
+          <button style={css.addBtn} onClick={() => setAddOpen(true)}>+ Pridať prvú cieľovú firmu</button>
+        </div>
+      )}
+
+      {/* Grid kariet */}
+      {filtered.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '0.75rem' }}>
+          {filtered.map(t => (
+            <TargetCard key={t.id} target={t} onClick={() => openDetail(t)} />
+          ))}
+        </div>
+      )}
+
+      {filtered.length === 0 && targets.length > 0 && (
+        <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#374151', textAlign: 'center', padding: '2rem' }}>
+          Žiadne výsledky pre daný filter.
+        </div>
+      )}
+
+      {/* Modal pridania */}
+      {addOpen && (
+        <AddCompanyModal
+          onClose={() => setAddOpen(false)}
+          onAdded={newTarget => { setSelected(newTarget); setView('detail') }}
+        />
+      )}
     </div>
   )
 }
 
 const css = {
+  filterBtn:   { fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.25rem 0.65rem', border: '1px solid #1e2530', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' },
+  filterBtnOn: { borderColor: '#ff5c00', color: '#ff5c00' },
+  search:      { flex: 1, minWidth: 160, background: '#111418', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: mono, fontSize: '0.72rem', padding: '0.28rem 0.6rem', borderRadius: 2, outline: 'none' },
+  addBtn:      { fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.85rem', border: '1px solid #ff5c00', background: 'rgba(255,92,0,0.1)', color: '#ff5c00', borderRadius: 2, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' },
+}
+
+const mCss = {
   label:      { display: 'block', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.28rem' },
   input:      { width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: mono, fontSize: '0.8rem', padding: '0.5rem 0.65rem', borderRadius: 2, outline: 'none', boxSizing: 'border-box' },
   select:     { width: '100%', background: '#0a0c0f', border: '1px solid #1e2530', color: '#e8eaed', fontFamily: mono, fontSize: '0.8rem', padding: '0.5rem 0.65rem', borderRadius: 2, outline: 'none', cursor: 'pointer' },
   analyzeBtn: { width: '100%', background: '#ff5c00', border: 'none', color: '#fff', fontFamily: mono, fontSize: '0.72rem', letterSpacing: '3px', textTransform: 'uppercase', padding: '0.78rem', borderRadius: 2, fontWeight: 700, cursor: 'pointer' },
-  toggleBtn:  { background: 'transparent', border: 'none', color: '#374151', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', cursor: 'pointer', padding: 0, textDecoration: 'none' },
-  sectionLabel: { fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.65rem', display: 'block' },
+  cancelBtn:  { background: 'transparent', border: '1px solid #1e2530', color: '#6b7280', fontFamily: mono, fontSize: '0.65rem', padding: '0.5rem 1rem', borderRadius: 2, cursor: 'pointer' },
+  errBox:     { fontFamily: mono, fontSize: '0.62rem', color: '#ef4444', background: 'rgba(239,68,68,0.08)', padding: '0.4rem 0.65rem', borderRadius: 2, marginBottom: '0.75rem' },
 }
