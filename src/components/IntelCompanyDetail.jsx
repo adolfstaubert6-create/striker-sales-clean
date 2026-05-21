@@ -5,6 +5,7 @@ import {
 } from '../constants/intelMeta.js'
 import {
   updateTarget, deleteTarget, addSource, removeSource, addContact, removeContact,
+  updateIntelligence,
 } from '../services/intelTargetService.js'
 
 const mono = "'IBM Plex Mono', monospace"
@@ -65,6 +66,9 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
   const [prefillRole, setPrefillRole]     = useState('')
   const [saving, setSaving]               = useState({})
   const [confirmDel, setConfirmDel]       = useState(false)
+  const [gathering, setGathering]         = useState(false)
+  const [gatherResult, setGatherResult]   = useState(null)
+  const [gatherError, setGatherError]     = useState(null)
 
   const id = t.id
 
@@ -119,6 +123,52 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
     onClose()
   }
 
+  async function handleGatherIntelligence() {
+    setGathering(true)
+    setGatherError(null)
+    setGatherResult(null)
+    try {
+      const res  = await fetch('/.netlify/functions/intelligence-gather', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          companyName:        t.name,
+          url:                t.web,
+          segment:            t.segment,
+          segmentLabel:       t.segmentLabel,
+          city:               t.city,
+          country:            t.country,
+          urgencyScore:       t.urgencyScore,
+          buyingIntentScore:  t.buyingIntentScore,
+          strikerFitScore:    t.strikerFitScore,
+          heatDemandScore:    t.heatDemandScore,
+          energyPainScore:    t.energyPainScore,
+          financialPowerScore:t.financialPowerScore,
+        }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+
+      // Uložiť výsledky do Firestore
+      await updateIntelligence(id, {
+        newSignals:       data.signals || [],
+        newSources:       data.sources || [],
+        updatedScores:    data.updatedScores,
+        aiInterpretation: data.aiInterpretation,
+        jobSignals:       data.jobSignals || [],
+        keyEvidence:      data.keyEvidence || [],
+        existingSignals:  t.signals  || [],
+        existingSources:  t.sources  || [],
+      })
+
+      setGatherResult(data)
+    } catch (e) {
+      setGatherError(e.message)
+    } finally {
+      setGathering(false)
+    }
+  }
+
   const rec    = REC_META[t.recommendation]  || REC_META.monitor
   const intent = INTENT_META[t.buyingIntent] || INTENT_META.medium
   const status = STATUS_MAP[t.status]        || INTEL_STATUSES[0]
@@ -127,10 +177,81 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '1.25rem' }}>
 
       {/* Navigačný riadok */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <button onClick={onClose} style={css.backBtn}>← Späť na zoznam</button>
-        <button onClick={() => setConfirmDel(true)} style={css.deleteBtn}>🗑 Odstrániť</button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            onClick={handleGatherIntelligence}
+            disabled={gathering}
+            style={{ ...css.gatherBtn, opacity: gathering ? 0.7 : 1 }}>
+            {gathering ? '⏳ Zbierám signály...' : '🔍 Zbierať signály z internetu'}
+          </button>
+          <button onClick={() => setConfirmDel(true)} style={css.deleteBtn}>🗑</button>
+        </div>
       </div>
+
+      {/* Progress overlay zbierania */}
+      {gathering && (
+        <div style={{ background: '#0d1117', border: '1px solid #ff5c0033', borderLeft: '3px solid #ff5c00', borderRadius: 4, padding: '1.1rem 1.4rem', marginBottom: '1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '3px', textTransform: 'uppercase', color: '#ff5c00', marginBottom: '0.85rem' }}>
+            ◈ ZBIERANIE REÁLNYCH SIGNÁLOV...
+          </div>
+          {[
+            '🌐 Načítavam web firmy (Firecrawl)...',
+            '🔎 Vyhľadávam externé správy a signály (Brave Search)...',
+            '💼 Hľadám pracovné ponuky (Energy Manager, Facility Manager)...',
+            '🤖 AI interpretuje nájdené dáta — reálny tlak vs. marketing...',
+            '💾 Aktualizujem kartu firmy...',
+          ].map((step, i) => (
+            <div key={i} style={{ fontFamily: mono, fontSize: '0.58rem', color: '#374151', marginBottom: '0.25rem' }}>
+              ✦ {step}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Výsledok zbierania — rýchle zhrnutie */}
+      {gatherResult && !gathering && (
+        <div style={{ background: '#0d1117', border: '1px solid #00cc8844', borderLeft: '3px solid #00cc88', borderRadius: 4, padding: '1rem 1.4rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#00cc88' }}>
+              ✓ Signály zozbierané · {gatherResult.elapsed}
+            </div>
+            <div style={{ display: 'flex', gap: '0.65rem' }}>
+              {gatherResult.capabilities?.firecrawl
+                ? <span style={{ fontFamily: mono, fontSize: '0.48rem', color: '#00cc88' }}>✓ Firecrawl ({gatherResult.webPagesCount} str.)</span>
+                : <span style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151' }}>— Firecrawl (API kľúč chýba)</span>}
+              {gatherResult.capabilities?.brave
+                ? <span style={{ fontFamily: mono, fontSize: '0.48rem', color: '#00cc88' }}>✓ Brave ({gatherResult.searchCount} výsl.)</span>
+                : <span style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151' }}>— Brave (API kľúč chýba)</span>}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#9ca3af' }}>
+              <span style={{ color: '#ffaa00' }}>▸</span> {(gatherResult.signals || []).length} nových signálov
+            </div>
+            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#9ca3af' }}>
+              <span style={{ color: '#818cf8' }}>▸</span> {(gatherResult.jobSignals || []).length} job signálov
+            </div>
+            <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#9ca3af' }}>
+              <span style={{ color: '#ff5c00' }}>▸</span> {gatherResult.aiInterpretation?.isRealPressure ? 'REÁLNY TLAK !' : 'Skôr marketing'}
+            </div>
+          </div>
+          {gatherResult.aiInterpretation?.timingAssessment && (
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2530', lineHeight: 1.5 }}>
+              {gatherResult.aiInterpretation.timingAssessment}
+            </div>
+          )}
+          <button style={{ ...css.ghostBtn, marginTop: '0.5rem' }} onClick={() => setGatherResult(null)}>Skryť</button>
+        </div>
+      )}
+
+      {/* Chyba zbierania */}
+      {gatherError && !gathering && (
+        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid #ef444466', borderRadius: 3, padding: '0.6rem 0.85rem', marginBottom: '1rem', fontFamily: mono, fontSize: '0.62rem', color: '#ef4444' }}>
+          ⚠ Chyba zbierania signálov: {gatherError}
+        </div>
+      )}
 
       {/* Hlavička firmy */}
       <div style={{ background: '#0d1117', border: '1px solid #1e2530', borderLeft: `3px solid ${scoreColor(t.overallScore)}`, borderRadius: 4, padding: '1.25rem 1.4rem', marginBottom: '1rem' }}>
@@ -224,11 +345,64 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
             {t.whyFound}
           </div>
         )}
+        {/* AI zhrnutie z posledného zbierania */}
+        {t.lastGatherSummary && (
+          <div style={{ background: '#0a0c0f', border: '1px solid #1e2530', borderRadius: 3, padding: '0.75rem 0.85rem', marginBottom: '1rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.5rem' }}>
+              Výsledok posledného zbierania signálov
+            </div>
+            {t.lastGatherSummary.webSummary && (
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.6, marginBottom: '0.35rem' }}>
+                <span style={{ color: '#6b7280' }}>🌐 Web: </span>{t.lastGatherSummary.webSummary}
+              </div>
+            )}
+            {t.lastGatherSummary.searchSummary && (
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.6, marginBottom: '0.35rem' }}>
+                <span style={{ color: '#6b7280' }}>🔎 Vyhľadávanie: </span>{t.lastGatherSummary.searchSummary}
+              </div>
+            )}
+            {t.lastGatherSummary.pressureExplanation && (
+              <div style={{ fontFamily: mono, fontSize: '0.6rem', lineHeight: 1.6, marginTop: '0.35rem', paddingTop: '0.35rem', borderTop: '1px solid #1e2530',
+                color: t.lastGatherSummary.isRealPressure ? '#ff5c00' : '#6b7280' }}>
+                {t.lastGatherSummary.isRealPressure ? '⚡ REÁLNY TLAK: ' : '💬 Marketing: '}
+                {t.lastGatherSummary.pressureExplanation}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Kľúčové dôkazy z webu */}
+        {(t.keyEvidence || []).length > 0 && (
+          <div style={{ marginBottom: '1rem' }}>
+            <FieldLabel>Kľúčové dôkazy a citácie</FieldLabel>
+            {t.keyEvidence.map((ev, i) => (
+              <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.3rem', alignItems: 'flex-start' }}>
+                <span style={{ color: '#ffaa00', fontFamily: mono, fontSize: '0.65rem', flexShrink: 0 }}>„</span>
+                <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.5, fontStyle: 'italic' }}>{ev}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Job signály z internetu */}
+        {(t.jobSignals || []).length > 0 && (
+          <div style={{ marginBottom: '1rem' }}>
+            <FieldLabel>Detekované pracovné signály</FieldLabel>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+              {t.jobSignals.map((j, i) => (
+                <div key={i} title={j.context} style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.15rem 0.55rem', borderRadius: 2, color: '#818cf8', background: 'rgba(129,140,248,0.12)', border: '1px solid rgba(129,140,248,0.3)' }}>
+                  💼 {j.role}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <FieldLabel>Problémové signály a dôvody výberu</FieldLabel>
         {!editSignals ? (
           <div>
             {(t.signals || []).length === 0
-              ? <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#374151' }}>Žiadne signály</div>
+              ? <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#374151' }}>Žiadne signály — zbieraj signály z internetu</div>
               : (t.signals || []).map((s, i) => (
                   <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.3rem', alignItems: 'flex-start' }}>
                     <span style={{ color: '#ff5c00', fontFamily: mono, fontSize: '0.65rem', flexShrink: 0 }}>▸</span>
@@ -436,7 +610,8 @@ export default function IntelCompanyDetail({ target: t, onClose, onDelete }) {
 
 const css = {
   backBtn:   { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1px', background: 'transparent', border: '1px solid #1e2530', color: '#6b7280', padding: '0.3rem 0.75rem', borderRadius: 2, cursor: 'pointer' },
-  deleteBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', letterSpacing: '1px', background: 'rgba(239,68,68,0.08)', border: '1px solid #ef444466', color: '#ef4444', padding: '0.3rem 0.75rem', borderRadius: 2, cursor: 'pointer' },
+  gatherBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.6rem', letterSpacing: '1.5px', textTransform: 'uppercase', background: 'rgba(255,170,0,0.1)', border: '1px solid #ffaa0066', color: '#ffaa00', padding: '0.3rem 0.9rem', borderRadius: 2, cursor: 'pointer', fontWeight: 600 },
+  deleteBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', letterSpacing: '1px', background: 'rgba(239,68,68,0.08)', border: '1px solid #ef444466', color: '#ef4444', padding: '0.3rem 0.55rem', borderRadius: 2, cursor: 'pointer' },
   ghostBtn:  { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.58rem', letterSpacing: '1px', textTransform: 'uppercase', background: 'transparent', border: '1px dashed #1e2530', color: '#374151', padding: '0.3rem 0.75rem', borderRadius: 2, cursor: 'pointer', marginTop: '0.25rem' },
   saveBtn:   { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '1px', textTransform: 'uppercase', background: '#00cc88', border: 'none', color: '#0a0c0f', padding: '0.38rem 0.9rem', borderRadius: 2, cursor: 'pointer', fontWeight: 700 },
   cancelBtn: { fontFamily: "'IBM Plex Mono',monospace", fontSize: '0.62rem', letterSpacing: '1px', background: 'transparent', border: '1px solid #1e2530', color: '#6b7280', padding: '0.38rem 0.75rem', borderRadius: 2, cursor: 'pointer' },

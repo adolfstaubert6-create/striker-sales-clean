@@ -60,3 +60,34 @@ export async function removeContact(id, contacts, idx) {
     updatedAt: serverTimestamp(),
   })
 }
+
+export async function updateIntelligence(id, { newSignals, newSources, updatedScores, aiInterpretation, jobSignals, keyEvidence, existingSignals, existingSources }) {
+  // Merge signály — deduplikácia
+  const mergedSignals = [...new Set([...(existingSignals || []), ...(newSignals || [])])]
+
+  // Merge zdroje — pridaj len nové URL
+  const existingUrls = new Set((existingSources || []).map(s => s.url))
+  const ts = new Date().toISOString()
+  const sourcesToAdd = (newSources || [])
+    .filter(s => s.url && !existingUrls.has(s.url))
+    .map(s => ({ ...s, addedAt: ts }))
+  const mergedSources = [...(existingSources || []), ...sourcesToAdd]
+
+  return updateDoc(doc(db, 'intelligence_targets', id), {
+    signals:          mergedSignals,
+    sources:          mergedSources,
+    keyEvidence:      keyEvidence || [],
+    jobSignals:       jobSignals  || [],
+    lastGatherSummary: {
+      isRealPressure:      aiInterpretation?.isRealPressure,
+      pressureExplanation: aiInterpretation?.pressureExplanation,
+      timingAssessment:    aiInterpretation?.timingAssessment,
+      webSummary:          aiInterpretation?.webSummary,
+      searchSummary:       aiInterpretation?.searchSummary,
+      detectedJobRoles:    aiInterpretation?.detectedJobRoles || [],
+    },
+    ...updatedScores,
+    lastIntelGatherAt: serverTimestamp(),
+    updatedAt:         serverTimestamp(),
+  })
+}
