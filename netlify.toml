@@ -31,7 +31,7 @@
 [functions.intel-hunt]
   timeout = 26
 
-[functions.intelligence-gather]
+[functions.ai-analysis]
   timeout = 26
 
 [[redirects]]

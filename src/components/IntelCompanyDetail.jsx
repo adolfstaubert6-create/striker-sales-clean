@@ -279,67 +279,82 @@ function TabEnergy({ t }) {
   )
 }
 
-function TabAI({ t, onGather, gathering, gatherMsg, gatherPhase }) {
+function TabAI({ t, onGather, gathering, gatherMsg, analysisResult }) {
+  const r = analysisResult
   return (
     <div>
-      {/* Gather button + live status */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem' }}>
-          <button onClick={onGather} disabled={gathering} style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.35rem 0.9rem', border: '1px solid #ffaa0066', background: gathering ? 'rgba(255,170,0,0.05)' : 'rgba(255,170,0,0.1)', color: '#ffaa00', borderRadius: 2, cursor: 'pointer', fontWeight: 600, opacity: gathering ? 0.7 : 1 }}>
-            {gathering ? '⏳ Analyzujem...' : '🔍 Spustiť Firecrawl analýzu'}
-          </button>
-          {gatherMsg && (
-            <span style={{ fontFamily: mono, fontSize: '0.6rem', color: gatherMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>
-              {gatherMsg}
-            </span>
-          )}
-        </div>
-        {/* Live phase indicator počas zbierania */}
-        {gathering && gatherPhase && (
-          <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#374151', paddingLeft: '0.2rem' }}>
-            {gatherPhase}
-          </div>
+      {/* Button + status */}
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.25rem' }}>
+        <button onClick={onGather} disabled={gathering}
+          style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+            padding: '0.35rem 0.9rem', border: '1px solid #ffaa0066',
+            background: gathering ? 'rgba(255,170,0,0.05)' : 'rgba(255,170,0,0.1)',
+            color: '#ffaa00', borderRadius: 2, cursor: 'pointer', fontWeight: 600, opacity: gathering ? 0.7 : 1 }}>
+          {gathering ? '⏳ Analyzujem...' : '🧠 AI Analýza'}
+        </button>
+        {gatherMsg && (
+          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: gatherMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>
+            {gatherMsg}
+          </span>
         )}
       </div>
 
-      <SectionTitle>AI Reasoning</SectionTitle>
-      <div style={{ padding: '0.75rem 0.85rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '1rem' }}>
-        <TextBlock value={t.aiReasoning} placeholder="Spustiť Firecrawl pre AI reasoning z reálneho webu" />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-        {[
-          { label: 'Čo firmu trápi',          value: t.aiAnalysis?.whatTroubles  },
-          { label: 'Prečo vhodná pre STRIKER', value: t.aiAnalysis?.whyStrikerFit },
-          { label: 'Hlavný obchodný argument', value: t.aiAnalysis?.mainArgument  },
-          { label: 'Obchodná príležitosť',     value: t.businessOpportunity       },
-        ].map(({ label, value }) => (
-          <div key={label} style={{ padding: '0.6rem 0.75rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
-            <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
-            <TextBlock value={value} placeholder="—" />
+      {/* Results */}
+      {r && (
+        <div>
+          {/* Score */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem',
+            padding: '0.65rem 0.85rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+            <div style={{ fontFamily: mono, fontSize: '1.4rem', fontWeight: 700,
+              color: r.score >= 75 ? '#00cc88' : r.score >= 55 ? '#ffaa00' : '#ef4444' }}>
+              {r.score}
+            </div>
+            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280' }}>/100 · STRIKER FIT</div>
+            {r.usedFallback && (
+              <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#6b7280',
+                padding: '0.06rem 0.3rem', border: '1px solid #1e2530', borderRadius: 2 }}>FALLBACK</span>
+            )}
           </div>
-        ))}
-      </div>
 
-      <SectionTitle>Energetická intenzita a tepelná analýza</SectionTitle>
-      <InfoRow label="Tepelná potreba"    value={t.estimatedHeatDemand}      color="#ff5c00" />
-      <InfoRow label="Energetická intenz."value={t.estimatedEnergyIntensity} color="#ffaa00" />
-      <InfoRow label="Veľkosť firmy"      value={t.estimatedBusinessSize}    />
-      <InfoRow label="Timing"             value={t.lastGatherSummary?.timingAssessment} />
-      {t.lastGatherSummary?.strikerArgument && (
-        <div style={{ marginTop: '0.75rem', padding: '0.6rem 0.8rem', background: 'rgba(0,204,136,0.06)', border: '1px solid rgba(0,204,136,0.2)', borderRadius: 3 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#00cc88', lineHeight: 1.5 }}>✦ {t.lastGatherSummary.strikerArgument}</div>
+          {/* Pain points */}
+          <SectionTitle>Pain Points</SectionTitle>
+          <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem' }}>
+            {(r.painPoints || []).map((p, i) => (
+              <li key={i} style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', marginBottom: '0.2rem', lineHeight: 1.5 }}>{p}</li>
+            ))}
+          </ul>
+
+          {/* Reasoning + Argument + Opportunity */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '1rem' }}>
+            {[
+              { label: 'AI Reasoning',          value: r.reasoning      },
+              { label: 'Hlavný argument',        value: r.mainArgument   },
+              { label: 'Príležitosť',            value: r.opportunity    },
+            ].map(({ label, value }) => value ? (
+              <div key={label} style={{ padding: '0.55rem 0.7rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+                <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.25rem' }}>{label}</div>
+                <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.5 }}>{value}</div>
+              </div>
+            ) : null)}
+          </div>
+
+          {/* Email draft */}
+          {r.draft && (
+            <div>
+              <SectionTitle>Email Draft</SectionTitle>
+              <pre style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', background: '#0d1117',
+                border: '1px solid #1e2530', borderRadius: 3, padding: '0.75rem 0.85rem',
+                whiteSpace: 'pre-wrap', lineHeight: 1.7, margin: 0 }}>
+                {r.draft}
+              </pre>
+            </div>
+          )}
         </div>
       )}
 
-      {(t.extractedKeywords || []).length > 0 && (
-        <div style={{ marginTop: '1rem' }}>
-          <SectionTitle>Extrahované kľúčové slová</SectionTitle>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-            {t.extractedKeywords.map((kw, i) => (
-              <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', padding: '0.08rem 0.38rem', border: '1px solid #1e2530', borderRadius: 2, color: '#6b7280', background: '#0d1117' }}>{kw}</span>
-            ))}
-          </div>
+      {!r && !gathering && (
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic' }}>
+          Klikni "🧠 AI Analýza" pre vygenerovanie sales analýzy.
         </div>
       )}
     </div>
@@ -546,27 +561,12 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   const [activeTab,   setActiveTab]   = useState(initialTab)
   const [saving,      setSaving]      = useState({})
   const [confirmDel,  setConfirmDel]  = useState(false)
-  const [gathering,   setGathering]   = useState(false)
-  const [gatherMsg,   setGatherMsg]   = useState('')
-  const [gatherPhase, setGatherPhase] = useState('')
+  const [gathering,      setGathering]      = useState(false)
+  const [gatherMsg,      setGatherMsg]      = useState('')
+  const [analysisResult, setAnalysisResult] = useState(null)
 
-  // Sync tab keď initialTab sa zmení (napr. CRM/EMAIL button na karte)
+  // Sync tab keď initialTab sa zmení
   useEffect(() => { setActiveTab(initialTab) }, [initialTab])
-
-  // Detect when background function finishes via Firestore update on t
-  useEffect(() => {
-    if (t.gatherStatus === 'done' && gathering) {
-      setGathering(false)
-      setGatherPhase('')
-      const pages = t.webPagesCount || 0
-      setGatherMsg(`✓ AI analýza hotová · ${pages} stránok · ${(t.signals||[]).length} signálov`)
-    }
-    if (t.gatherStatus === 'error' && gathering) {
-      setGathering(false)
-      setGatherPhase('')
-      setGatherMsg('⚠ ' + (t.gatherError || 'Analýza zlyhala'))
-    }
-  }, [t.gatherStatus, t.crawlTimestamp])
 
   const oc = scoreColor(t.overallScore ?? 0)
 
@@ -583,49 +583,29 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   }
 
   async function handleGather() {
-    console.log("BTN CLICKED AI ANALYZA", t)
-
-    const hasWeb = !!t.web
     setGathering(true)
     setGatherMsg('')
-    setGatherPhase(hasWeb ? '🚀 Spúšťam AI analýzu...' : '🧠 AI analýza (bez webu)...')
-
-    console.log("BEFORE FETCH START-INTEL")
-
+    setAnalysisResult(null)
     try {
-      const res = await fetch('/.netlify/functions/start-intel', {
+      const res = await fetch('/.netlify/functions/ai-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          targetId:          t.id,
-          companyName:       t.name,
-          url:               t.web,
-          segment:           t.segment,
-          segmentLabel:      t.segmentLabel,
-          city:              t.city,
-          country:           t.country,
-          urgencyScore:      t.urgencyScore,
-          buyingIntentScore: t.buyingIntentScore || 50,
-          strikerFitScore:   t.strikerFitScore,
-          heatDemandScore:   t.heatDemandScore   || 50,
-          energyPainScore:   t.energyPainScore,
-          financialPowerScore: t.financialPowerScore,
+          companyName:  t.name,
+          city:         t.city,
+          segment:      t.segment,
+          segmentLabel: t.segmentLabel,
+          fitScore:     t.strikerFitScore || 50,
         }),
       })
-
-      console.log("AFTER FETCH", res.status)
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        throw new Error(`start-intel HTTP ${res.status}: ${text.slice(0, 200)}`)
-      }
-
-      setGatherPhase('⏳ AI analyzuje... (20–50 sek)')
+      const data = await res.json().catch(() => ({ ok: false, error: 'Invalid JSON' }))
+      if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      setAnalysisResult(data)
+      setGatherMsg(data.usedFallback ? '✓ AI analýza (fallback)' : '✓ AI analýza hotová')
     } catch (e) {
-      console.log("FETCH ERROR", e)
-      setGathering(false)
-      setGatherPhase('')
       setGatherMsg('⚠ ' + e.message)
+    } finally {
+      setGathering(false)
     }
   }
 
@@ -669,7 +649,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         <div style={{ padding: '1.25rem 1.4rem' }}>
           {activeTab === 'overview' && <TabOverview t={t} />}
           {activeTab === 'energy'   && <TabEnergy   t={t} />}
-          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} gatherPhase={gatherPhase} />}
+          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} />}
           {activeTab === 'sources'  && <TabSources  t={t} />}
           {activeTab === 'roi'      && <TabROI      t={t} />}
           {activeTab === 'crm'      && <TabCRM      t={t} onStatusChange={handleStatusChange} saving={saving} />}
