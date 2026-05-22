@@ -583,42 +583,56 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   }
 
   async function handleGather() {
-    if (!t.web) { setGatherMsg('⚠ Zadaj web URL'); return }
+    console.log('[handleGather] CALLED — t.id:', t.id, 't.web:', t.web, 't.name:', t.name)
+
+    if (!t.web) {
+      console.warn('[handleGather] BLOCKED — t.web is empty/falsy:', t.web)
+      setGatherMsg('⚠ Zadaj web URL')
+      return
+    }
+
     setGathering(true)
     setGatherMsg('')
     setGatherPhase('🚀 Spúšťam AI analýzu...')
 
+    const endpoint = '/.netlify/functions/start-intel'
+    const payload = {
+      targetId:          t.id,
+      companyName:       t.name,
+      url:               t.web,
+      segment:           t.segment,
+      segmentLabel:      t.segmentLabel,
+      city:              t.city,
+      country:           t.country,
+      urgencyScore:      t.urgencyScore,
+      buyingIntentScore: t.buyingIntentScore || 50,
+      strikerFitScore:   t.strikerFitScore,
+      heatDemandScore:   t.heatDemandScore   || 50,
+      energyPainScore:   t.energyPainScore,
+      financialPowerScore: t.financialPowerScore,
+    }
+
+    console.log('[handleGather] BEFORE FETCH →', endpoint, payload)
+
     try {
-      const res = await fetch('/.netlify/functions/start-intel', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetId:          t.id,
-          companyName:       t.name,
-          url:               t.web,
-          segment:           t.segment,
-          segmentLabel:      t.segmentLabel,
-          city:              t.city,
-          country:           t.country,
-          urgencyScore:      t.urgencyScore,
-          buyingIntentScore: t.buyingIntentScore || 50,
-          strikerFitScore:   t.strikerFitScore,
-          heatDemandScore:   t.heatDemandScore   || 50,
-          energyPainScore:   t.energyPainScore,
-          financialPowerScore: t.financialPowerScore,
-        }),
+        body: JSON.stringify(payload),
       })
+
+      console.log('[handleGather] AFTER FETCH — status:', res.status, 'ok:', res.ok)
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')
+        console.error('[handleGather] FETCH NOT OK — body preview:', text.slice(0, 200))
         throw new Error(`start-intel HTTP ${res.status}: ${text.slice(0, 100)}`)
       }
 
-      // 200 received — background function is running
-      // Results will arrive via Firestore subscription on t (parent re-renders)
-      // useEffect on [t.gatherStatus] detects completion and resets gathering state
+      console.log('[handleGather] SUCCESS — background pipeline started, waiting for Firebase')
       setGatherPhase('⏳ AI analyzuje... (20–50 sek)')
     } catch (e) {
+      console.error('[handleGather] FETCH ERROR:', e.message)
       setGathering(false)
       setGatherPhase('')
       setGatherMsg('⚠ ' + e.message)
