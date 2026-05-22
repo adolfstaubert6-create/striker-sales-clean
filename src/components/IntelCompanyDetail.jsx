@@ -553,6 +553,21 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   // Sync tab keď initialTab sa zmení (napr. CRM/EMAIL button na karte)
   useEffect(() => { setActiveTab(initialTab) }, [initialTab])
 
+  // Detect when background function finishes via Firestore update on t
+  useEffect(() => {
+    if (t.gatherStatus === 'done' && gathering) {
+      setGathering(false)
+      setGatherPhase('')
+      const pages = t.webPagesCount || 0
+      setGatherMsg(`✓ AI analýza hotová · ${pages} stránok · ${(t.signals||[]).length} signálov`)
+    }
+    if (t.gatherStatus === 'error' && gathering) {
+      setGathering(false)
+      setGatherPhase('')
+      setGatherMsg('⚠ ' + (t.gatherError || 'Analýza zlyhala'))
+    }
+  }, [t.gatherStatus, t.crawlTimestamp])
+
   const oc = scoreColor(t.overallScore ?? 0)
 
   async function handleStatusChange(status) {
@@ -569,72 +584,45 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
 
   async function handleGather() {
     if (!t.web) { setGatherMsg('⚠ Zadaj web URL'); return }
-    setGathering(true); setGatherMsg(''); setGatherPhase('🌐 Načítavam web firmy...')
+    setGathering(true)
+    setGatherMsg('')
+    setGatherPhase('🚀 Spúšťam AI analýzu...')
+
     try {
-      const res = await fetch('/.netlify/functions/intelligence-gather', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companyName: t.name, url: t.web, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, country: t.country, urgencyScore: t.urgencyScore, buyingIntentScore: t.buyingIntentScore || 50, strikerFitScore: t.strikerFitScore, heatDemandScore: t.heatDemandScore || 50, energyPainScore: t.energyPainScore, financialPowerScore: t.financialPowerScore }),
+      const res = await fetch('/.netlify/functions/start-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetId:          t.id,
+          companyName:       t.name,
+          url:               t.web,
+          segment:           t.segment,
+          segmentLabel:      t.segmentLabel,
+          city:              t.city,
+          country:           t.country,
+          urgencyScore:      t.urgencyScore,
+          buyingIntentScore: t.buyingIntentScore || 50,
+          strikerFitScore:   t.strikerFitScore,
+          heatDemandScore:   t.heatDemandScore   || 50,
+          energyPainScore:   t.energyPainScore,
+          financialPowerScore: t.financialPowerScore,
+        }),
       })
 
-      // Bezpečný JSON parse — ak Netlify vráti HTML error page (timeout/crash)
-      const ct = res.headers.get('content-type') || ''
-      if (!ct.includes('application/json')) {
-        const raw = await res.text().catch(() => '')
-        throw new Error(`Netlify function vrátila HTTP ${res.status} (${ct || 'no content-type'}). Preview: ${raw.slice(0, 150)}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`start-intel HTTP ${res.status}: ${text.slice(0, 100)}`)
       }
 
-      let data
-      try {
-        data = await res.json()
-      } catch (jsonErr) {
-        const raw = await res.text().catch(() => '(unreadable)')
-        throw new Error(`JSON parse zlyhal (HTTP ${res.status}). Preview: ${raw.slice(0, 150)}`)
-      }
-
-      if (!data.ok) throw new Error(data.error || `Function vrátila ok:false`)
-      setGatherPhase('🧠 AI generuje Problem Profile...')
-      const mergedSignals = [...new Set([...(t.signals||[]), ...(data.signals||[])])]
-      await updateTarget(t.id, {
-        signals:                mergedSignals,
-        ...(data.updatedScores || {}),
-        websiteSummary:         data.websiteSummary          || '',
-        extractedKeywords:      data.extractedKeywords        || [],
-        estimatedHeatDemand:    data.estimatedHeatDemand      || '',
-        estimatedEnergyIntensity:data.estimatedEnergyIntensity|| '',
-        estimatedROI:           data.estimatedROI             || '',
-        aiReasoning:            data.aiReasoning              || '',
-        businessOpportunity:    data.businessOpportunity      || '',
-        detectedSignals:        data.detectedSignals          || [],
-        signalsByCategory:      data.signalsByCategory        || {},
-        keyEvidence:            data.keyEvidence              || [],
-        sources:                [...(t.sources||[]), ...(data.sources||[]).map(s=>({...s,addedAt:new Date().toISOString()}))],
-        scrapedPages:           data.scrapedPages             || [],
-        crawlStatus:            data.crawlStatus              || '',
-        crawlTimestamp:         data.crawlTimestamp           || '',
-        lastGatherSummary:      data.aiInterpretation         || null,
-        // Nové Problem Profile polia
-        problemProfile:         data.problemProfile           || [],
-        heatPressure:           data.heatPressure             ?? null,
-        thermalDependency:           data.thermalDependency           ?? null,
-        thermalDependencyReason:     data.thermalDependencyReason     || '',
-        operatingCostPressure:       data.operatingCostPressure       ?? null,
-        operatingCostPressureReason: data.operatingCostPressureReason || '',
-        modernizationNeed:           data.modernizationNeed           ?? null,
-        modernizationNeedReason:     data.modernizationNeedReason     || '',
-        boilerDependencyProb:        data.boilerDependencyProb        ?? null,
-        boilerDependencyProbReason:  data.boilerDependencyProbReason  || '',
-        willingnessToSolve:          data.willingnessToSolve          ?? null,
-        willingnessToSolveReason:    data.willingnessToSolveReason    || '',
-        heatPressureReason:          data.heatPressureReason          || '',
-      })
-      const modeLabel = data.crawlStatus === 'homepage_only'   ? ' · lightweight scan (1 stránka)'
-                      : data.crawlStatus === 'homepage_failed' ? ' · bez web dát (timeout)'
-                      : data.crawlStatus === 'full'            ? ` · ${data.webPagesCount} stránok`
-                      : data.crawlStatus?.startsWith('error')  ? ` · Firecrawl chyba — AI odhad`
-                      : ''
-      setGatherMsg(`✓ AI analýza hotová${modeLabel} · ${(data.signals||[]).length} signálov · ${(data.problemProfile||[]).length} problémov`)
-    } catch (e) { setGatherMsg('⚠ ' + e.message) }
-    finally { setGathering(false); setGatherPhase('') }
+      // 200 received — background function is running
+      // Results will arrive via Firestore subscription on t (parent re-renders)
+      // useEffect on [t.gatherStatus] detects completion and resets gathering state
+      setGatherPhase('⏳ AI analyzuje... (20–50 sek)')
+    } catch (e) {
+      setGathering(false)
+      setGatherPhase('')
+      setGatherMsg('⚠ ' + e.message)
+    }
   }
 
   return (
