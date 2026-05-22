@@ -46,6 +46,9 @@
 [functions.client-card]
   timeout = 26
 
+[functions.find-contacts]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

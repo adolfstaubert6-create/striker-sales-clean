@@ -617,9 +617,87 @@ function TabROI({ t }) {
   )
 }
 
+const CONF_COLORS = { HIGH: '#00cc88', MEDIUM: '#ffaa00', LOW: '#6b7280' }
+
+function ContactCard({ c, onRemove }) {
+  const conf = CONF_COLORS[c.confidence] || '#6b7280'
+  return (
+    <div style={{ padding: '0.6rem 0.75rem', background: '#0d1117', border: `1px solid ${conf}22`, borderLeft: `3px solid ${conf}`, borderRadius: 3, marginBottom: '0.4rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.4rem' }}>
+        <div style={{ flex: 1 }}>
+          {c.role && <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.1rem' }}>{c.role}</div>}
+          <div style={{ fontFamily: sans, fontSize: '0.85rem', fontWeight: 600, color: '#e8eaed', marginBottom: '0.1rem' }}>{c.name}</div>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            {c.email && <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: '#00cc88' }}>✉ {c.email}</a>}
+            {c.phone && <span style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280' }}>📞 {c.phone}</span>}
+          </div>
+          {c.source && (
+            <div style={{ marginTop: '0.25rem' }}>
+              <a href={c.source} target="_blank" rel="noreferrer"
+                style={{ fontFamily: mono, fontSize: '0.46rem', color: '#374151', wordBreak: 'break-all' }}>
+                🔗 {c.source.replace(/^https?:\/\//, '').slice(0, 55)}
+              </a>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem', flexShrink: 0 }}>
+          {c.confidence && (
+            <span style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+              color: conf, padding: '0.04rem 0.3rem', border: `1px solid ${conf}44`, borderRadius: 2, background: `${conf}12` }}>
+              {c.confidence}
+            </span>
+          )}
+          {onRemove && (
+            <button onClick={onRemove}
+              style={{ fontFamily: mono, fontSize: '0.48rem', background: 'transparent', border: '1px solid #374151', color: '#6b7280', borderRadius: 2, padding: '0.08rem 0.35rem', cursor: 'pointer' }}>
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TabCRM({ t, onStatusChange, saving }) {
-  const [addCtOpen, setAddCtOpen] = useState(false)
-  const [newCt, setNewCt]         = useState({ role: '', name: '', email: '', phone: '' })
+  const [addCtOpen,      setAddCtOpen]      = useState(false)
+  const [newCt,          setNewCt]          = useState({ role: '', name: '', email: '', phone: '' })
+  const [findLoading,    setFindLoading]    = useState(false)
+  const [findMsg,        setFindMsg]        = useState('')
+  const [foundContacts,  setFoundContacts]  = useState(null)   // null=not searched, []=none found
+
+  async function handleFindContacts() {
+    setFindLoading(true)
+    setFindMsg('')
+    setFoundContacts(null)
+    try {
+      const res = await fetch('/.netlify/functions/find-contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: t.name, website: t.web, city: t.city, country: t.country || 'DE' }),
+      })
+      const data = await res.json().catch(() => ({ ok: false }))
+      if (!data.ok) throw new Error('Hľadanie zlyhalo')
+      setFoundContacts(data.contacts || [])
+      if (data.generalEmail && !t.email) {
+        await updateTarget(t.id, { email: data.generalEmail })
+      }
+      setFindMsg(
+        data.contacts?.length
+          ? `✅ Nájdené ${data.contacts.length} kontakt(y) · ${data.sourceNote || ''}`
+          : `ℹ Nenašla sa overená kontaktná osoba. ${data.generalEmail ? '· Email: ' + data.generalEmail : ''}`
+      )
+    } catch (e) {
+      setFindMsg('⚠ ' + e.message)
+    } finally {
+      setFindLoading(false)
+    }
+  }
+
+  async function saveFoundContact(c) {
+    await addContact(t.id, { role: c.role || '', name: c.name, email: c.email || '', phone: c.phone || '', source: c.source || '', confidence: c.confidence || 'MEDIUM' })
+    setFoundContacts(prev => prev.filter(fc => fc !== c))
+  }
 
   return (
     <div>
@@ -635,34 +713,69 @@ function TabCRM({ t, onStatusChange, saving }) {
         ))}
       </div>
 
-      <SectionTitle>Kontaktné osoby</SectionTitle>
-      {(t.contacts || []).length === 0 && !addCtOpen && (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '0.75rem', fontStyle: 'italic' }}>Zatiaľ žiadne kontakty</div>
-      )}
-      {(t.contacts || []).map((c, i) => (
-        <div key={i} style={{ padding: '0.55rem 0.75rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '0.35rem' }}>
-          {c.role && <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.12rem' }}>{c.role}</div>}
-          {c.name && <div style={{ fontFamily: sans, fontSize: '0.85rem', fontWeight: 600, color: '#e8eaed' }}>{c.name}</div>}
-          <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.1rem' }}>
-            {c.email && <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: '#00cc88' }}>✉ {c.email}</a>}
-            {c.phone && <span style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280' }}>📞 {c.phone}</span>}
-          </div>
-        </div>
-      ))}
+      {/* Kontaktné osoby */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#374151' }}>Kontaktné osoby</span>
+        <button onClick={handleFindContacts} disabled={findLoading}
+          style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase',
+            padding: '0.2rem 0.6rem', border: '1px solid #ff5c0055', background: 'rgba(255,92,0,0.08)',
+            color: '#ff5c00', borderRadius: 2, cursor: 'pointer', opacity: findLoading ? 0.65 : 1 }}>
+          {findLoading ? '⏳ Hľadám...' : '🔍 Nájsť kontakty'}
+        </button>
+        {findMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: findMsg.startsWith('✅') ? '#00cc88' : findMsg.startsWith('ℹ') ? '#ffaa00' : '#ef4444' }}>{findMsg}</span>}
+      </div>
 
-      {(t.suggestedContacts || []).filter(sg => !(t.contacts||[]).some(c => c.role === sg.role)).length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.5rem' }}>
-          {(t.suggestedContacts||[]).filter(sg => !(t.contacts||[]).some(c => c.role === sg.role)).map((sg, i) => (
-            <button key={i} onClick={() => { setNewCt(p => ({...p, role: sg.role})); setAddCtOpen(true) }}
-              style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.15rem 0.5rem', border: '1px dashed #374151', background: 'transparent', color: '#6b7280', borderRadius: 2, cursor: 'pointer' }}>
-              + {sg.role}
-            </button>
+      {/* Uložené kontakty */}
+      {(t.contacts || []).length > 0 ? (
+        <div style={{ marginBottom: '0.65rem' }}>
+          {(t.contacts || []).map((c, i) => (
+            <ContactCard key={i} c={c} onRemove={() => removeContact(t.id, i)} />
+          ))}
+        </div>
+      ) : foundContacts === null ? (
+        <div style={{ padding: '0.85rem', background: '#0a0c10', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '0.65rem', textAlign: 'center' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#374151', fontStyle: 'italic' }}>
+            Nenašla sa overená kontaktná osoba.
+          </div>
+          {t.email && <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.58rem', color: '#00cc88', display: 'block', marginTop: '0.3rem' }}>✉ {t.email}</a>}
+          <div style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151', marginTop: '0.25rem' }}>Klikni „🔍 Nájsť kontakty" pre automatické vyhľadanie.</div>
+        </div>
+      ) : foundContacts.length === 0 && (
+        <div style={{ padding: '0.85rem', background: '#0a0c10', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '0.65rem', textAlign: 'center' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#374151', fontStyle: 'italic' }}>
+            Nenašla sa overená kontaktná osoba.
+          </div>
+          {t.email && <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.58rem', color: '#00cc88', display: 'block', marginTop: '0.3rem' }}>✉ {t.email}</a>}
+        </div>
+      )}
+
+      {/* Nájdené kontakty na uloženie */}
+      {foundContacts && foundContacts.length > 0 && (
+        <div style={{ marginBottom: '0.65rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#00cc88', marginBottom: '0.35rem' }}>
+            ✅ Overené kontakty na uloženie
+          </div>
+          {foundContacts.map((c, i) => (
+            <div key={i} style={{ position: 'relative' }}>
+              <ContactCard c={c} />
+              <button onClick={() => saveFoundContact(c)}
+                style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', fontFamily: mono, fontSize: '0.5rem',
+                  letterSpacing: '1px', textTransform: 'uppercase', padding: '0.18rem 0.5rem',
+                  border: '1px solid #00cc8855', background: 'rgba(0,204,136,0.1)', color: '#00cc88',
+                  borderRadius: 2, cursor: 'pointer' }}>
+                + Uložiť
+              </button>
+            </div>
           ))}
         </div>
       )}
 
+      {/* Manuálne pridanie */}
       {addCtOpen ? (
         <div style={{ background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, padding: '0.75rem', marginTop: '0.35rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.5rem' }}>
+            Manuálne zadanie — iba overené informácie
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', marginBottom: '0.4rem' }}>
             <div>
               <label style={css.label}>Pozícia</label>
@@ -671,17 +784,22 @@ function TabCRM({ t, onStatusChange, saving }) {
                 {CONTACT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
-            <div><label style={css.label}>Meno</label><input style={css.input} placeholder="Jan Novák" value={newCt.name} onChange={e => setNewCt(p => ({...p, name: e.target.value}))} /></div>
-            <div><label style={css.label}>Email</label><input style={css.input} placeholder="jan@firma.de" value={newCt.email} onChange={e => setNewCt(p => ({...p, email: e.target.value}))} /></div>
-            <div><label style={css.label}>Telefón</label><input style={css.input} placeholder="+49 170 000 0000" value={newCt.phone} onChange={e => setNewCt(p => ({...p, phone: e.target.value}))} /></div>
+            <div><label style={css.label}>Meno</label><input style={css.input} placeholder="Skutočné meno osoby" value={newCt.name} onChange={e => setNewCt(p => ({...p, name: e.target.value}))} /></div>
+            <div><label style={css.label}>Email</label><input style={css.input} placeholder="overený@email.de" value={newCt.email} onChange={e => setNewCt(p => ({...p, email: e.target.value}))} /></div>
+            <div><label style={css.label}>Telefón</label><input style={css.input} placeholder="ak overený" value={newCt.phone} onChange={e => setNewCt(p => ({...p, phone: e.target.value}))} /></div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={async () => { await addContact(t.id, newCt); setNewCt({ role:'',name:'',email:'',phone:'' }); setAddCtOpen(false) }} style={css.saveBtn}>✓ Uložiť</button>
+            <button onClick={async () => {
+              if (!newCt.name) return
+              await addContact(t.id, { ...newCt, confidence: 'MEDIUM', source: 'manuálne zadanie' })
+              setNewCt({ role:'',name:'',email:'',phone:'' })
+              setAddCtOpen(false)
+            }} style={css.saveBtn}>✓ Uložiť</button>
             <button onClick={() => setAddCtOpen(false)} style={css.cancelBtn}>Zrušiť</button>
           </div>
         </div>
       ) : (
-        <button onClick={() => setAddCtOpen(true)} style={css.ghostBtn}>+ Pridať kontaktnú osobu</button>
+        <button onClick={() => setAddCtOpen(true)} style={css.ghostBtn}>+ Pridať kontakt manuálne</button>
       )}
     </div>
   )
