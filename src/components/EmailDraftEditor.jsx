@@ -59,6 +59,8 @@ const BTN = {
   save:    { background: '#ff5c00', border: '1px solid #ff5c00', color: '#fff' },
   cancel:  { background: 'transparent', border: '1px solid #374151', color: '#9ca3af' },
   copy:    { background: 'transparent', border: '1px solid #1e2530', color: '#6b7280' },
+  delete:  { background: 'transparent', border: '1px solid #ef444433', color: '#ef4444' },
+  deleted: { background: 'rgba(0,204,136,0.08)', border: '1px solid #00cc8866', color: '#00cc88' },
   copied:  { background: 'rgba(0,204,136,0.08)', border: '1px solid #00cc8866', color: '#00cc88' },
   queue:   { background: 'rgba(99,102,241,0.1)', border: '1px solid #6366f155', color: '#818cf8' },
   queued:  { background: 'rgba(0,204,136,0.08)', border: '1px solid #00cc8866', color: '#00cc88' },
@@ -89,6 +91,7 @@ export default function EmailDraftEditor({
   const [saving,      setSaving]      = useState(false)
   const [copied,      setCopied]      = useState(false)
   const [saved,       setSaved]       = useState(false)
+  const [deleted,     setDeleted]     = useState(false)
   const [queued,      setQueued]      = useState(false)
   const [queueing,    setQueueing]    = useState(false)
   const [isDirty,     setIsDirty]     = useState(false)
@@ -209,6 +212,25 @@ export default function EmailDraftEditor({
     }
   }
 
+  // ── Delete ───────────────────────────────────────────────────────────────────
+
+  async function handleDelete() {
+    if (!window.confirm('Naozaj chcete vymazať tento draft?')) return
+    const empty = { subject: '', body: '' }
+    // Wipe local state
+    setLocalDraft(prev => ({ ...prev, [activeLang]: empty }))
+    setQueued(false)
+    setSaved(false)
+    // Persist to Firebase — save empty draft for this language only
+    try {
+      await onSave(activeLang, '', '')
+    } catch (e) {
+      console.error('[EmailDraftEditor] delete save failed:', e)
+    }
+    setDeleted(true)
+    setTimeout(() => setDeleted(false), 2500)
+  }
+
   // ── Copy ─────────────────────────────────────────────────────────────────────
 
   function copyDraft() {
@@ -254,7 +276,12 @@ export default function EmailDraftEditor({
             • Upravené – neuložené
           </span>
         )}
-        {!translating && saved && !editing && (
+        {!translating && deleted && !editing && (
+          <span style={{ fontSize: '0.5rem', color: '#00cc88', letterSpacing: '0.5px' }}>
+            ✅ Draft vymazaný
+          </span>
+        )}
+        {!translating && saved && !editing && !deleted && (
           <span style={{ fontSize: '0.5rem', color: '#00cc88', letterSpacing: '0.5px' }}>
             ✅ Uložené
           </span>
@@ -279,6 +306,11 @@ export default function EmailDraftEditor({
               <button onClick={handleQueue} disabled={queueing}
                 style={btn(queued ? 'queued' : 'queue', { opacity: queueing ? 0.65 : 1 })}>
                 {queued ? '✓ Queue' : '📤 Na schválenie'}
+              </button>
+            )}
+            {hasContent && !translating && (
+              <button onClick={handleDelete} style={btn('delete')} title="Vymazať draft pre tento jazyk">
+                🗑
               </button>
             )}
             {!translating && (
