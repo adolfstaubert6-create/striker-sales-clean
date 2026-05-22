@@ -10,8 +10,8 @@ import { seedKnowledgeBase } from './services/firebaseService.js'
 
 // Firebase Auth email → app username
 const EMAIL_TO_USER = {
-  'staubert@striker-sales.internal': 'Staubert',
-  'szabo@striker-sales.internal':    'Szabo',
+  'adolf@striker.local': 'Staubert',
+  'sabo@striker.local':  'Szabo',
 }
 
 export default function App() {

@@ -2,33 +2,18 @@ import { useState } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '../firebase.js'
 
-// Mapovanie username → Firebase Auth email
-// Firebase Auth používatelia musia byť vytvorení v Firebase Console
-const USERNAME_MAP = {
-  staubert: 'staubert@striker-sales.internal',
-  szabo:    'szabo@striker-sales.internal',
-}
-
 export default function LoginScreen() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error,    setError]    = useState(false)
-  const [loading,  setLoading]  = useState(false)
+  const [email,   setEmail]   = useState('')
+  const [password,setPassword]= useState('')
+  const [error,   setError]   = useState(false)
+  const [loading, setLoading] = useState(false)
 
   async function doLogin() {
-    const key   = username.trim().toLowerCase()
-    const email = USERNAME_MAP[key]
-
-    if (!email) {
-      setError(true)
-      setPassword('')
-      return
-    }
-
+    if (!email.trim() || !password) { setError(true); return }
     setLoading(true)
     setError(false)
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      await signInWithEmailAndPassword(auth, email.trim(), password)
       // onAuthStateChanged v App.jsx automaticky detekuje prihlásenie
     } catch {
       setError(true)
@@ -36,10 +21,6 @@ export default function LoginScreen() {
     } finally {
       setLoading(false)
     }
-  }
-
-  function onKey(e) {
-    if (e.key === 'Enter') doLogin()
   }
 
   return (
@@ -65,10 +46,11 @@ export default function LoginScreen() {
 
         <input
           style={inputStyle}
-          placeholder="Meno..."
-          autoComplete="username"
-          value={username}
-          onChange={e => { setUsername(e.target.value); setError(false) }}
+          type="email"
+          placeholder="Email..."
+          autoComplete="email"
+          value={email}
+          onChange={e => { setEmail(e.target.value); setError(false) }}
           onKeyDown={e => e.key === 'Enter' && document.getElementById('pwd-input').focus()}
           disabled={loading}
         />
@@ -80,13 +62,13 @@ export default function LoginScreen() {
           autoComplete="current-password"
           value={password}
           onChange={e => { setPassword(e.target.value); setError(false) }}
-          onKeyDown={onKey}
+          onKeyDown={e => e.key === 'Enter' && doLogin()}
           disabled={loading}
         />
 
         {error && (
           <div style={{ color: 'var(--err)', fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.68rem', marginBottom: '0.75rem' }}>
-            Nesprávne meno alebo heslo
+            Nesprávny email alebo heslo
           </div>
         )}
 
