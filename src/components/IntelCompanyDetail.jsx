@@ -6,6 +6,7 @@ import { de } from '../locales/de.js'
 import { en } from '../locales/en.js'
 import EmailDraftEditor from './EmailDraftEditor.jsx'
 import NextBestAction   from './NextBestAction.jsx'
+import ProgressBar      from './ProgressBar.jsx'
 
 const LOCALES = { sk, de, en }
 
@@ -245,7 +246,7 @@ function MetricGauge({ label, value, reason }) {
   )
 }
 
-function TabEnergy({ t, onSignal, signalLoading, signalMsg }) {
+function TabEnergy({ t, onSignal, signalLoading, signalMsg, signalTimeoutMsg }) {
   const profile     = t.problemProfile    || []
   const hasProfile  = profile.length > 0
   const signalsCats = t.signalsByCategory || {}
@@ -268,13 +269,16 @@ function TabEnergy({ t, onSignal, signalLoading, signalMsg }) {
         >
           {signalLoading ? '⏳ Analyzujem signály...' : '🔍 Signal Engine'}
         </button>
-        {signalMsg && (
+        {signalMsg && !signalLoading && (
           <span style={{ fontFamily: mono, fontSize: '0.6rem',
             color: (signalMsg.startsWith('✓') || signalMsg.startsWith('✅')) ? '#00cc88' : '#ef4444' }}>
             {signalMsg}
           </span>
         )}
       </div>
+
+      {/* Signal Engine Progress Bar */}
+      <ProgressBar running={signalLoading} maxSecs={12} type="signal" timeoutMsg={signalTimeoutMsg} />
 
       {/* LIVE DATA card */}
       {isLive && (
@@ -390,7 +394,7 @@ function TabEnergy({ t, onSignal, signalLoading, signalMsg }) {
 const LANG_CODES = ['sk', 'de']
 const LANG_FLAGS = { sk: '🇸🇰', de: '🇩🇪', en: '🇬🇧' }
 
-function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLang, L, emailDraft, onSaveDraft, onQueueDraft, onDraftDirty, defaultDraftLang }) {
+function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLang, L, emailDraft, onSaveDraft, onQueueDraft, onDraftDirty, defaultDraftLang, aiTimeoutMsg }) {
   const r = analysisResult
   const flagStyle = (active) => ({
     fontSize: '1.35rem', lineHeight: 1, padding: '0.15rem 0.22rem',
@@ -423,12 +427,15 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLan
           {gathering ? L.analyzing : L.aiBtn}
         </button>
 
-        {gatherMsg && (
+        {gatherMsg && !gathering && (
           <span style={{ fontFamily: mono, fontSize: '0.6rem', color: gatherMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>
             {gatherMsg}
           </span>
         )}
       </div>
+
+      {/* AI Progress Bar */}
+      <ProgressBar running={gathering} maxSecs={15} type="ai" timeoutMsg={aiTimeoutMsg} />
 
       {/* Results */}
       {r && (
@@ -704,8 +711,10 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   const [lang,           setLang]           = useState('sk')
   const [emailDraft,     setEmailDraft]     = useState(() => initDraft(t))
   const [draftDirty,    setDraftDirty]    = useState(false)
-  const [signalLoading, setSignalLoading] = useState(false)
-  const [signalMsg,     setSignalMsg]     = useState('')
+  const [signalLoading,   setSignalLoading]   = useState(false)
+  const [signalMsg,       setSignalMsg]       = useState('')
+  const [aiTimeoutMsg,    setAiTimeoutMsg]    = useState(null)
+  const [signalTimeoutMsg,setSignalTimeoutMsg]= useState(null)
 
   const L = LOCALES[lang] || sk
 
@@ -738,6 +747,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
 
     setSignalLoading(true)
     setSignalMsg('')
+    setSignalTimeoutMsg(null)
     try {
       const payload = {
         companyName:     t.name,
@@ -785,6 +795,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
           ? `✅ LIVE · ${data.reviewCount || 0} Google recenzií · ${(data.liveSignals||[]).length} signálov`
           : '✓ AI simulácia (Google recenzie nedostupné)'
       )
+      if (data.usedFallback) setSignalTimeoutMsg('Analýza trvala príliš dlho – použil sa záložný odhad.')
     } catch (e) {
       setSignalMsg('⚠ ' + e.message)
     } finally {
@@ -819,6 +830,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   async function handleGather() {
     setGathering(true)
     setGatherMsg('')
+    setAiTimeoutMsg(null)
     setAnalysisResult(null)
     try {
       const res = await fetch('/.netlify/functions/ai-analysis', {
@@ -837,7 +849,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
       if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setAnalysisResult(data)
       setGatherMsg(data.usedFallback ? L.doneFallback : L.done)
-      // Pre-fill email draft for the analysis language
+      if (data.usedFallback) setAiTimeoutMsg('Analýza trvala príliš dlho – použil sa záložný odhad.')
       if (data.subject || data.draft) {
         setEmailDraft(prev => ({
           ...prev,
@@ -890,8 +902,8 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         {/* Tab obsah */}
         <div style={{ padding: '1.25rem 1.4rem' }}>
           {activeTab === 'overview' && <TabOverview t={t} />}
-          {activeTab === 'energy'   && <TabEnergy   t={t} onSignal={handleSignalEngine} signalLoading={signalLoading} signalMsg={signalMsg} />}
-          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} emailDraft={emailDraft} onSaveDraft={handleSaveDraft} onQueueDraft={handleQueueEmail} onDraftDirty={setDraftDirty} defaultDraftLang={defaultDraftLang(t)} />}
+          {activeTab === 'energy'   && <TabEnergy   t={t} onSignal={handleSignalEngine} signalLoading={signalLoading} signalMsg={signalMsg} signalTimeoutMsg={signalTimeoutMsg} />}
+          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} emailDraft={emailDraft} onSaveDraft={handleSaveDraft} onQueueDraft={handleQueueEmail} onDraftDirty={setDraftDirty} defaultDraftLang={defaultDraftLang(t)} aiTimeoutMsg={aiTimeoutMsg} />}
           {activeTab === 'sources'  && <TabSources  t={t} />}
           {activeTab === 'roi'      && <TabROI      t={t} />}
           {activeTab === 'crm'      && <TabCRM      t={t} onStatusChange={handleStatusChange} saving={saving} />}

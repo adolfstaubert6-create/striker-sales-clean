@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import ProgressBar from './ProgressBar.jsx'
 
 const mono = "'IBM Plex Mono',monospace"
 
@@ -244,8 +245,8 @@ export default function EmailDraftEditor({
 
         {/* Status indicators */}
         {translating && (
-          <span style={{ fontSize: '0.5rem', color: '#ffaa00', letterSpacing: '0.5px', animation: 'pulse 1s infinite' }}>
-            ⏳ Prekladám email...
+          <span style={{ fontSize: '0.5rem', color: '#ffaa00', letterSpacing: '0.5px' }}>
+            ⏳
           </span>
         )}
         {!translating && isDirty && (
@@ -297,11 +298,10 @@ export default function EmailDraftEditor({
 
       {/* ── Body ── */}
       <div style={base.body}>
-        {translating ? (
-          <div style={{ fontSize: '0.62rem', color: '#ffaa00', textAlign: 'center', padding: '1.5rem 0', fontStyle: 'italic' }}>
-            ⏳ Prekladám email do {({ de: 'nemčiny', sk: 'slovenčiny', en: 'angličtiny' })[activeLang] || activeLang}...
-          </div>
-        ) : !editing ? (
+        {/* Translation progress bar */}
+        <ProgressBar running={translating} maxSecs={12} type="translate" />
+
+        {translating ? null : !editing ? (
           hasContent ? (
             <>
               {cur.subject && (
