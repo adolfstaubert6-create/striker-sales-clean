@@ -558,12 +558,27 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
     if (!t.web) { setGatherMsg('⚠ Zadaj web URL'); return }
     setGathering(true); setGatherMsg('')
     try {
-      const res  = await fetch('/.netlify/functions/intelligence-gather', {
+      const res = await fetch('/.netlify/functions/intelligence-gather', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyName: t.name, url: t.web, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, country: t.country, urgencyScore: t.urgencyScore, buyingIntentScore: t.buyingIntentScore || 50, strikerFitScore: t.strikerFitScore, heatDemandScore: t.heatDemandScore || 50, energyPainScore: t.energyPainScore, financialPowerScore: t.financialPowerScore }),
       })
-      const data = await res.json()
-      if (!data.ok) throw new Error(data.error)
+
+      // Bezpečný JSON parse — ak Netlify vráti HTML error page (timeout/crash)
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('application/json')) {
+        const raw = await res.text().catch(() => '')
+        throw new Error(`Netlify function vrátila HTTP ${res.status} (${ct || 'no content-type'}). Preview: ${raw.slice(0, 150)}`)
+      }
+
+      let data
+      try {
+        data = await res.json()
+      } catch (jsonErr) {
+        const raw = await res.text().catch(() => '(unreadable)')
+        throw new Error(`JSON parse zlyhal (HTTP ${res.status}). Preview: ${raw.slice(0, 150)}`)
+      }
+
+      if (!data.ok) throw new Error(data.error || `Function vrátila ok:false`)
       const mergedSignals = [...new Set([...(t.signals||[]), ...(data.signals||[])])]
       await updateTarget(t.id, {
         signals:                mergedSignals,

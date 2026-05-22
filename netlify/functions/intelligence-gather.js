@@ -309,7 +309,15 @@ exports.handler = async (event) => {
 
   const baseUrl = normalizeUrl(url)
   const t0      = Date.now()
-  console.log(`[intel-gather] START — "${companyName}" | firecrawl=${!!FIRECRAWL_KEY}`)
+
+  // ── DEBUG: env vars check (nikdy neloguj celý key) ──────────────────────────
+  console.log('[intel-gather] ENV CHECK:')
+  console.log(`  ANTHROPIC_API_KEY present: ${!!CLAUDE_KEY}`)
+  console.log(`  FIRECRAWL_API_KEY present: ${!!FIRECRAWL_KEY}`)
+  console.log(`  FIRECRAWL_API_KEY prefix:  ${FIRECRAWL_KEY ? FIRECRAWL_KEY.slice(0, 6) + '...' : 'MISSING'}`)
+  console.log(`  Firecrawl endpoint: https://api.firecrawl.dev/v1/scrape`)
+  console.log(`  Company: "${companyName}" | URL: ${baseUrl || 'none'} | Segment: ${segment}`)
+  // ────────────────────────────────────────────────────────────────────────────
 
   try {
     // 1. Scrape web pages — zachytí akékoľvek Firecrawl chyby
