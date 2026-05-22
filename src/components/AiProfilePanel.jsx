@@ -1,7 +1,57 @@
-import ProgressBar from './ProgressBar.jsx'
+import ProgressBar        from './ProgressBar.jsx'
+import IntelligenceEngine from './IntelligenceEngine.jsx'
 
 const mono = "'IBM Plex Mono',monospace"
 const sans = "'IBM Plex Sans',sans-serif"
+
+// ── Local intelligence fallback — built from available metrics ────────────────
+
+const MOD_KW = ['renovierung','modernisierung','renovation','umbau','modernizácia','rekonštrukcia','veraltet','alt','outdated','rebuilt']
+
+function buildLocalIntelligence(t) {
+  const seg     = (t.segment || '').toLowerCase()
+  const isL     = seg.includes('waesch') || seg.includes('laund') || seg.includes('textil')
+  const isH     = seg.includes('hotel') || seg.includes('gastro') || seg.includes('resort')
+  const hasMet  = t.heatPressure != null
+  const modSig  = (t.liveSignals || []).filter(s => MOD_KW.some(k => s.toLowerCase().includes(k)))
+  const wScore  = t.willingnessToSolve || 50
+  const modNeed = t.modernizationNeed  || 50
+
+  return {
+    buildingAge: {
+      estimate:       isL ? 'stredná až staršia budova' : isH ? 'stredná budova' : 'stredný vek',
+      approximateAge: '10–30 rokov (AI odhad)',
+      confidence:     'LOW',
+      reasoning:      'Pravdepodobný vek na základe segmentu — bez overených dát.',
+    },
+    technologyState: {
+      heatingType:   isL ? 'pravdepodobne plynový kotol' : isH ? 'pravdepodobne plynový kotol alebo CZT' : 'typ neznámy (AI odhad)',
+      estimatedAge:  hasMet && modNeed >= 65 ? '15–25 rokov (AI odhad)' : '5–20 rokov (AI odhad)',
+      status:        modNeed >= 70 ? 'pravdepodobne zastarané' : modNeed >= 50 ? 'stredný vek' : 'stav neznámy',
+      hotWater:      isL ? 'veľmi vysoká závislosť' : isH ? 'vysoká závislosť' : 'stredná závislosť',
+      wellness:      isH ? 'možné (závisí od prevádzky)' : 'pravdepodobne nie',
+      confidence:    hasMet ? 'MEDIUM' : 'LOW',
+      reasoning:     'Podľa signálnych metrík a segmentu — technická dokumentácia neoverená.',
+    },
+    modernizationSignals: {
+      detected:       modSig.slice(0, 5),
+      interpretation: modSig.length > 2
+        ? 'Detekované signály naznačujú záujem o modernizáciu alebo technické problémy.'
+        : modNeed >= 65
+        ? 'AI metriky môžu naznačovať potrebu modernizácie vykurovacieho systému.'
+        : 'Slabé signály — situácia sa overí počas obchodného kontaktu.',
+      confidence: modSig.length > 2 ? 'HIGH' : hasMet ? 'MEDIUM' : 'LOW',
+    },
+    investmentProfile: {
+      type:           wScore >= 70 ? 'aktívne hľadá riešenie' : wScore >= 50 ? 'cost-saving mode' : 'konzervatívny prístup',
+      label:          wScore >= 70 ? 'Hľadá riešenie' : wScore >= 50 ? 'Šetrí náklady' : 'Konzervatívny',
+      interpretation: wScore >= 70
+        ? 'Podľa signálov firma môže aktívne hľadať spôsoby optimalizácie prevádzkových nákladov.'
+        : 'Firma môže byť otvorená riešeniu, ak sa preukáže jasný a rýchly ROI.',
+      confidence:     hasMet ? 'MEDIUM' : 'LOW',
+    },
+  }
+}
 
 // ── Local profile builder — no API, from available data ───────────────────────
 
@@ -42,8 +92,10 @@ function buildLocalProfile(t, analysisResult) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AiProfilePanel({ target: t, analysisResult, clientCard, onGenerate, loading }) {
-  const isLive      = t.reviewsSource === 'serpapi'
+  const isLive           = t.reviewsSource === 'serpapi'
   const hasClaudeProfile = !!(clientCard?.clientProfile)
+  // Intelligence: use Claude output if available, else build locally
+  const intelligence     = clientCard?.intelligence || buildLocalIntelligence(t)
 
   // Text to display — priority: Claude profile > local build
   const profileText = hasClaudeProfile
@@ -124,6 +176,9 @@ export default function AiProfilePanel({ target: t, analysisResult, clientCard, 
           Klikni „🧠 Zlepšiť s Claude AI" pre vygenerovanie obchodného profilu klienta.
         </p>
       )}
+
+      {/* Intelligence Engine — always shown (local fallback or Claude) */}
+      {!loading && <IntelligenceEngine intelligence={intelligence} />}
     </div>
   )
 }

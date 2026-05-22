@@ -3,7 +3,10 @@ const CLAUDE_MODEL = 'claude-sonnet-4-6'
 
 // ── Segment fallback ───────────────────────────────────────────────────────────
 
-function buildFallback(companyName, segment, segmentLabel, fitScore) {
+const MOD_KEYWORDS = ['renovierung','modernisierung','renovation','umbau','sanierung','modernizácia','rekonštrukcia','veraltet','outdated','alt','upgraded','rebuilt','technical issues']
+
+function buildFallback(companyName, segment, segmentLabel, fitScore, liveSignals) {
+  const modDetected = (liveSignals || []).filter(s => MOD_KEYWORDS.some(k => s.toLowerCase().includes(k)))
   const seg = (segment || '').toLowerCase()
   const isL = seg.includes('waesch') || seg.includes('laund') || seg.includes('textil')
   const isH = seg.includes('hotel') || seg.includes('gastro') || seg.includes('resort')
@@ -49,6 +52,34 @@ function buildFallback(companyName, segment, segmentLabel, fitScore) {
       'Konzervatívny manažment môže požadovať referencie a testovacie obdobie',
       'Cenová citlivosť — investícia 8 000+ EUR vyžaduje jasný ROI argument',
     ],
+    intelligence: {
+      buildingAge: {
+        estimate:        isL ? 'stredná až staršia budova' : isH ? 'stredná budova' : 'stredný vek (AI odhad)',
+        approximateAge:  '10–30 rokov (AI odhad)',
+        confidence:      'LOW',
+        reasoning:       'AI odhad na základe segmentu — bez overených dát o budove.',
+      },
+      technologyState: {
+        heatingType:   isL ? 'pravdepodobne plynový kotol alebo centrálny systém' : isH ? 'pravdepodobne plynový kotol' : 'neznámy typ (AI odhad)',
+        estimatedAge:  isL ? '10–20 rokov (AI odhad)' : '5–20 rokov (AI odhad)',
+        status:        high ? 'pravdepodobne zastarané — vhodné na modernizáciu' : 'stav neznámy',
+        hotWater:      isL ? 'veľmi vysoká závislosť' : isH ? 'vysoká závislosť' : 'stredná závislosť',
+        wellness:      isH ? 'možná závislosť (wellness, bazén)' : 'pravdepodobne nie',
+        confidence:    'LOW',
+        reasoning:     'Odhadované na základe segmentu bez technickej dokumentácie.',
+      },
+      modernizationSignals: {
+        detected:        modDetected.slice(0, 5),
+        interpretation:  modDetected.length > 2 ? 'Signály z dostupných dát naznačujú záujem o modernizáciu alebo technické problémy.' : high ? 'AI metriky naznačujú pravdepodobnú potrebu modernizácie.' : 'Slabé signály modernizácie — potrebný ďalší prieskum.',
+        confidence:      modDetected.length > 2 ? 'HIGH' : high ? 'MEDIUM' : 'LOW',
+      },
+      investmentProfile: {
+        type:            high ? 'aktívne hľadá riešenie' : 'konzervatívny prístup',
+        label:           high ? 'Hľadá riešenie' : 'Konzervatívny',
+        interpretation:  high ? 'Podľa signálov firma môže aktívne hľadať spôsoby optimalizácie nákladov.' : 'Firma môže byť otvorená riešeniu, ak sa preukáže jasný ROI.',
+        confidence:      'LOW',
+      },
+    },
   }
 }
 
@@ -109,13 +140,41 @@ Vráť VÝLUČNE valid JSON:
     "startWith": "email alebo telefonát",
     "nextStep": "konkrétny ďalší krok — max 12 slov"
   },
-  "risks": ["riziko 1 — max 10 slov", "riziko 2", "riziko 3"]
+  "risks": ["riziko 1 — max 10 slov", "riziko 2", "riziko 3"],
+  "intelligence": {
+    "buildingAge": {
+      "estimate": "staršia/stredná/moderná budova",
+      "approximateAge": "X–Y rokov alebo 'neznámy'",
+      "confidence": "LOW|MEDIUM|HIGH",
+      "reasoning": "1 veta prečo — začni 'pravdepodobne' alebo 'podľa signálov'"
+    },
+    "technologyState": {
+      "heatingType": "typ vykurovania — max 6 slov",
+      "estimatedAge": "vek technológie — napr. '10–20 rokov'",
+      "status": "zastarané|stredný vek|moderné|neznáme",
+      "hotWater": "nízka|stredná|vysoká|veľmi vysoká závislosť",
+      "wellness": "áno|nie|možné",
+      "confidence": "LOW|MEDIUM|HIGH",
+      "reasoning": "1 veta — začni 'pravdepodobne' alebo 'môže naznačovať'"
+    },
+    "modernizationSignals": {
+      "detected": ["signál z reviews/webu 1", "signál 2"],
+      "interpretation": "1-2 vety čo signály naznačujú",
+      "confidence": "LOW|MEDIUM|HIGH"
+    },
+    "investmentProfile": {
+      "type": "aktívne investuje|modernizuje|stagnuje|cost-saving mode|neznáme",
+      "label": "krátky label max 3 slová",
+      "interpretation": "1-2 vety o investičnom správaní firmy",
+      "confidence": "LOW|MEDIUM|HIGH"
+    }
+  }
 }`
 
   const fetchP   = fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 2200, messages: [{ role: 'user', content: prompt }] }),
   })
   const timeoutP = new Promise((_, rej) => setTimeout(() => rej(new Error('Claude timeout 15s')), 15000))
 
@@ -155,7 +214,7 @@ exports.handler = async (event) => {
       console.log(`[client-card] Claude OK ${Date.now()-t0}ms`)
     } catch (e) {
       console.warn(`[client-card] Claude failed (${e.message}) — fallback`)
-      result       = buildFallback(body.name, body.segment, body.segmentLabel, body.fitScore || 50)
+      result       = buildFallback(body.name, body.segment, body.segmentLabel, body.fitScore || 50, body.liveSignals)
       usedFallback = true
     }
   } else {
