@@ -583,52 +583,46 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   }
 
   async function handleGather() {
-    console.log('[handleGather] CALLED — t.id:', t.id, 't.web:', t.web, 't.name:', t.name)
-    const hasWeb = !!t.web
-    if (!hasWeb) console.warn('[handleGather] No web URL — using name/segment/city fallback')
+    console.log("BTN CLICKED AI ANALYZA", t)
 
+    const hasWeb = !!t.web
     setGathering(true)
     setGatherMsg('')
     setGatherPhase(hasWeb ? '🚀 Spúšťam AI analýzu...' : '🧠 AI analýza (bez webu)...')
 
-    const endpoint = '/.netlify/functions/start-intel'
-    const payload = {
-      targetId:          t.id,
-      companyName:       t.name,
-      url:               t.web,
-      segment:           t.segment,
-      segmentLabel:      t.segmentLabel,
-      city:              t.city,
-      country:           t.country,
-      urgencyScore:      t.urgencyScore,
-      buyingIntentScore: t.buyingIntentScore || 50,
-      strikerFitScore:   t.strikerFitScore,
-      heatDemandScore:   t.heatDemandScore   || 50,
-      energyPainScore:   t.energyPainScore,
-      financialPowerScore: t.financialPowerScore,
-    }
-
-    console.log('[handleGather] BEFORE FETCH →', endpoint, payload)
+    console.log("BEFORE FETCH START-INTEL")
 
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch('/.netlify/functions/start-intel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          targetId:          t.id,
+          companyName:       t.name,
+          url:               t.web,
+          segment:           t.segment,
+          segmentLabel:      t.segmentLabel,
+          city:              t.city,
+          country:           t.country,
+          urgencyScore:      t.urgencyScore,
+          buyingIntentScore: t.buyingIntentScore || 50,
+          strikerFitScore:   t.strikerFitScore,
+          heatDemandScore:   t.heatDemandScore   || 50,
+          energyPainScore:   t.energyPainScore,
+          financialPowerScore: t.financialPowerScore,
+        }),
       })
 
-      console.log('[handleGather] AFTER FETCH — status:', res.status, 'ok:', res.ok)
+      console.log("AFTER FETCH", res.status)
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')
-        console.error('[handleGather] FETCH NOT OK — body preview:', text.slice(0, 200))
-        throw new Error(`start-intel HTTP ${res.status}: ${text.slice(0, 100)}`)
+        throw new Error(`start-intel HTTP ${res.status}: ${text.slice(0, 200)}`)
       }
 
-      console.log('[handleGather] SUCCESS — background pipeline started, waiting for Firebase')
       setGatherPhase('⏳ AI analyzuje... (20–50 sek)')
     } catch (e) {
-      console.error('[handleGather] FETCH ERROR:', e.message)
+      console.log("FETCH ERROR", e)
       setGathering(false)
       setGatherPhase('')
       setGatherMsg('⚠ ' + e.message)
