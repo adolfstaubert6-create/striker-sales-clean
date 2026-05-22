@@ -1,19 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { updateTarget, addContact, removeContact } from '../services/intelTargetService.js'
-import { INTEL_STATUS_LIST, scoreColor } from '../constants/intelMeta.js'
+import { INTEL_STATUS_LIST } from '../constants/intelMeta.js'
 import ProgressBar from './ProgressBar.jsx'
 import EmailDraftEditor from './EmailDraftEditor.jsx'
 
 const mono = "'IBM Plex Mono',monospace"
 const sans = "'IBM Plex Sans',sans-serif"
 
-// ── Design tokens ──────────────────────────────────────────────────────────────
-const C = {
-  bg:      '#080a0d',
+// ── Tokens ────────────────────────────────────────────────────────────────────
+const T = {
+  bg:      '#07090c',
   panel:   '#0d1117',
   card:    '#111418',
   border:  '#1a1f2a',
-  border2: '#21262d',
   orange:  '#ff5c00',
   amber:   '#ffaa00',
   green:   '#00cc88',
@@ -25,569 +24,524 @@ const C = {
   ghost:   '#374151',
 }
 
-// ── Left-nav items ─────────────────────────────────────────────────────────────
+// ── Data source badge ─────────────────────────────────────────────────────────
+const DS = {
+  live:      { label: 'ŽIVÉ DÁTA',       color: T.green  },
+  ai:        { label: 'AI ODHAD',        color: T.amber  },
+  verified:  { label: 'OVERENÝ ÚDAJ',   color: T.purple },
+  unknown:   { label: 'NEOVERENÉ',       color: T.ghost  },
+}
+
+function Badge({ type = 'unknown' }) {
+  const d = DS[type] || DS.unknown
+  return (
+    <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+      color: d.color, padding: '0.03rem 0.28rem', border: `1px solid ${d.color}44`,
+      borderRadius: 2, background: `${d.color}10`, flexShrink: 0 }}>
+      {d.label}
+    </span>
+  )
+}
+
+// ── Left nav ──────────────────────────────────────────────────────────────────
 const NAV = [
-  { key: 'overview',    icon: '🗂',  label: 'Prehľad klienta'     },
-  { key: 'ai-profile',  icon: '🧠',  label: 'AI profil klienta'   },
-  { key: 'energy',      icon: '⚡',  label: 'Energetický problém' },
-  { key: 'signals',     icon: '📡',  label: 'Signály'             },
-  { key: 'reviews',     icon: '⭐',  label: 'Recenzie'            },
-  { key: 'technology',  icon: '⚙',  label: 'Technológie'         },
-  { key: 'contacts',    icon: '👤',  label: 'Kontakty'            },
-  { key: 'finance',     icon: '💰',  label: 'Financie / ROI'      },
-  { key: 'email',       icon: '✉',  label: 'Email'               },
-  { key: 'followup',    icon: '🔔',  label: 'Follow-up'           },
-  { key: 'activity',    icon: '📋',  label: 'Aktivity'            },
-  { key: 'documents',   icon: '📄',  label: 'Dokumenty'           },
+  { key: 'overview',  icon: '◈', label: 'Prehľad'          },
+  { key: 'problem',   icon: '⚡', label: 'Problém klienta'  },
+  { key: 'signals',   icon: '◉', label: 'Signály'           },
+  { key: 'contacts',  icon: '◎', label: 'Kontakty'          },
+  { key: 'email',     icon: '✉', label: 'Email'             },
+  { key: 'analysis',  icon: '◆', label: 'AI Analýza'        },
 ]
 
-// ── Small helpers ──────────────────────────────────────────────────────────────
-
-function SLabel({ children }) {
-  return <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.55rem' }}>{children}</div>
-}
-
-function InfoPill({ label, value, color }) {
-  if (!value && value !== 0) return null
+// ── KPI card ──────────────────────────────────────────────────────────────────
+function KPI({ label, value, unit = '', source, color, note }) {
+  const hasVal = value != null && value !== ''
+  const col = color || (typeof value === 'number' ? (value >= 70 ? T.orange : value >= 45 ? T.amber : T.dim) : T.dim)
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 3, padding: '0.55rem 0.7rem', marginBottom: '0.4rem' }}>
-      <div style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.18rem' }}>{label}</div>
-      <div style={{ fontFamily: mono, fontSize: '0.68rem', color: color || C.sub, lineHeight: 1.45 }}>{value}</div>
-    </div>
-  )
-}
-
-function MetricBar({ label, value, color }) {
-  if (value == null) return null
-  const col = color || (value >= 70 ? C.orange : value >= 45 ? C.amber : C.dim)
-  return (
-    <div style={{ marginBottom: '0.55rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.18rem' }}>
-        <span style={{ fontFamily: mono, fontSize: '0.5rem', color: C.sub }}>{label}</span>
-        <span style={{ fontFamily: mono, fontSize: '0.55rem', fontWeight: 700, color: col }}>{value}</span>
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 6, padding: '1rem', flex: 1, minWidth: 130 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+        <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.ghost }}>{label}</div>
+        {source && <Badge type={source} />}
       </div>
-      <div style={{ height: 3, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{ width: `${value}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.4s ease' }} />
-      </div>
-    </div>
-  )
-}
-
-function Placeholder({ onClose }) {
-  return (
-    <div style={{ fontFamily: mono, fontSize: '0.62rem', color: C.dim, fontStyle: 'italic', padding: '2rem', textAlign: 'center' }}>
-      Táto sekcia bude dostupná v ďalšej verzii.
-      <br /><br />
-      <button onClick={onClose} style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.65rem', border: `1px solid ${C.border2}`, background: 'transparent', color: C.dim, borderRadius: 2, cursor: 'pointer' }}>
-        ← Späť
-      </button>
-    </div>
-  )
-}
-
-// ── Avatar circle ──────────────────────────────────────────────────────────────
-
-function Avatar({ name, size = 32 }) {
-  const colors = [C.orange, C.purple, C.green, C.amber, '#60a5fa', '#f472b6']
-  const idx    = (name || 'X').charCodeAt(0) % colors.length
-  return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: `${colors[idx]}22`, border: `1.5px solid ${colors[idx]}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <span style={{ fontFamily: sans, fontSize: size * 0.4 + 'px', fontWeight: 700, color: colors[idx] }}>
-        {(name || '?').charAt(0).toUpperCase()}
-      </span>
-    </div>
-  )
-}
-
-// ── Contact card ───────────────────────────────────────────────────────────────
-
-function ContactRow({ c, onRemove }) {
-  const confColor = { HIGH: C.green, MEDIUM: C.amber, LOW: C.dim }[c.confidence] || C.dim
-  return (
-    <div style={{ display: 'flex', gap: '0.6rem', padding: '0.65rem', background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, marginBottom: '0.4rem', alignItems: 'flex-start' }}>
-      <Avatar name={c.name || c.email} size={36} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {c.name
-          ? <div style={{ fontFamily: sans, fontSize: '0.78rem', fontWeight: 600, color: C.text, marginBottom: '0.08rem' }}>{c.name}</div>
-          : <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.ghost, fontStyle: 'italic' }}>Meno neznáme</div>
-        }
-        {c.role && <div style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.purple, marginBottom: '0.12rem' }}>{c.role}</div>}
-        {c.email
-          ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.54rem', color: C.green, display: 'block', marginBottom: '0.06rem' }}>✉ {c.email}</a>
-          : <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.ghost, fontStyle: 'italic' }}>Email nenájdený.</div>
-        }
-        {c.phone && <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.dim }}>📞 {c.phone}</div>}
-        <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {c.confidence && (
-            <span style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: confColor, padding: '0.03rem 0.28rem', border: `1px solid ${confColor}44`, borderRadius: 2 }}>{c.confidence}</span>
+      {hasVal ? (
+        <>
+          <div style={{ fontFamily: mono, fontSize: '1.6rem', fontWeight: 700, color: col, lineHeight: 1, marginBottom: '0.3rem' }}>
+            {typeof value === 'number' ? value : value}{unit}
+          </div>
+          {typeof value === 'number' && (
+            <div style={{ height: 3, background: T.border, borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.min(100, value)}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.5s ease' }} />
+            </div>
           )}
-          {c.emailType && c.emailType !== 'PERSONAL' && (
-            <span style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.amber, padding: '0.03rem 0.28rem', border: `1px solid ${C.amber}33`, borderRadius: 2 }}>{c.emailType}</span>
-          )}
-          {c.source && c.source !== 'manuálne zadanie' && (
-            <a href={c.source.startsWith('http') ? c.source : '#'} target="_blank" rel="noreferrer"
-              style={{ fontFamily: mono, fontSize: '0.44rem', color: C.ghost }}>🔗</a>
-          )}
-        </div>
-      </div>
-      {onRemove && (
-        <button onClick={onRemove} style={{ background: 'transparent', border: 'none', color: C.ghost, fontSize: '0.7rem', cursor: 'pointer', flexShrink: 0, padding: '0.1rem', lineHeight: 1 }}>✕</button>
+          {note && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: T.dim, marginTop: '0.3rem', lineHeight: 1.4 }}>{note}</div>}
+        </>
+      ) : (
+        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', marginTop: '0.25rem' }}>Dáta zatiaľ neoverené</div>
       )}
     </div>
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── Section heading ───────────────────────────────────────────────────────────
+function SH({ children }) {
+  return <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: T.ghost, marginBottom: '1rem' }}>{children}</div>
+}
 
-export default function ClientIntelligenceDashboard({ target: initialT, onClose, onDelete }) {
-  const [t,              setT]              = useState(initialT)
-  const [activeKey,      setActiveKey]      = useState('overview')
-  const [analysisResult, setAnalysisResult] = useState(null)
-  const [gatherLoading,  setGatherLoading]  = useState(false)
-  const [signalLoading,  setSignalLoading]  = useState(false)
-  const [signalMsg,      setSignalMsg]      = useState('')
-  const [findLoading,    setFindLoading]    = useState(false)
-  const [findMsg,        setFindMsg]        = useState('')
-  const [foundContacts,  setFoundContacts]  = useState(null)
-  const [emailDraft,     setEmailDraft]     = useState(t.emailDraft || { sk:{subject:'',body:''}, de:{subject:'',body:''}, en:{subject:'',body:''} })
+// ── Contact row ───────────────────────────────────────────────────────────────
+function CRow({ c, onRemove, action }) {
+  const initials = (c.name || c.email || '?').charAt(0).toUpperCase()
+  const avatarColors = [T.orange, T.purple, T.green, T.amber]
+  const ac = avatarColors[(initials.charCodeAt(0) || 0) % avatarColors.length]
+  const conf = { HIGH: T.green, MEDIUM: T.amber, LOW: T.dim }[c.confidence] || T.dim
 
-  const fit      = t.strikerFitScore || t.overallScore || 0
-  const fitColor = fit >= 80 ? C.orange : fit >= 60 ? C.amber : C.dim
-  const isLive   = t.reviewsSource === 'serpapi'
+  return (
+    <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'flex-start', padding: '0.75rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, marginBottom: '0.4rem' }}>
+      {/* Avatar */}
+      <div style={{ width: 34, height: 34, borderRadius: '50%', background: `${ac}18`, border: `1.5px solid ${ac}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ fontFamily: sans, fontSize: '0.85rem', fontWeight: 700, color: ac }}>{initials}</span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {c.name
+          ? <div style={{ fontFamily: sans, fontSize: '0.8rem', fontWeight: 600, color: T.text, marginBottom: '0.05rem' }}>{c.name}</div>
+          : <div style={{ fontFamily: mono, fontSize: '0.54rem', color: T.ghost, fontStyle: 'italic' }}>Meno neznáme</div>
+        }
+        {c.role && <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: T.purple, marginBottom: '0.12rem' }}>{c.role}</div>}
+        {c.email
+          ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.54rem', color: T.green, display: 'block' }}>✉ {c.email}</a>
+          : <div style={{ fontFamily: mono, fontSize: '0.52rem', color: T.ghost, fontStyle: 'italic' }}>Email nenájdený</div>
+        }
+        {c.phone && <div style={{ fontFamily: mono, fontSize: '0.52rem', color: T.dim, marginTop: '0.05rem' }}>📞 {c.phone}</div>}
+        <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>
+          {c.confidence && <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: conf, padding: '0.02rem 0.25rem', border: `1px solid ${conf}44`, borderRadius: 2 }}>{c.confidence}</span>}
+          {c.emailType && c.emailType !== 'PERSONAL' && <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', textTransform: 'uppercase', color: T.amber, padding: '0.02rem 0.25rem', border: `1px solid ${T.amber}33`, borderRadius: 2 }}>{c.emailType}</span>}
+        </div>
+      </div>
+      {(onRemove || action) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flexShrink: 0 }}>
+          {action && <button onClick={action} style={{ fontFamily: mono, fontSize: '0.45rem', padding: '0.1rem 0.4rem', border: `1px solid ${T.green}44`, background: `${T.green}10`, color: T.green, borderRadius: 2, cursor: 'pointer' }}>+ Uložiť</button>}
+          {onRemove && <button onClick={onRemove} style={{ background: 'transparent', border: 'none', color: T.ghost, fontSize: '0.7rem', cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>}
+        </div>
+      )}
+    </div>
+  )
+}
 
-  // ── Handlers ──────────────────────────────────────────────────────────────────
+// ── Metric row (compact, labeled) ─────────────────────────────────────────────
+function MRow({ label, value, reason, source }) {
+  if (value == null) return null
+  const col = value >= 70 ? T.orange : value >= 45 ? T.amber : T.dim
+  return (
+    <div style={{ marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.22rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.52rem', color: T.sub }}>{label}</span>
+        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          {source && <Badge type={source} />}
+          <span style={{ fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, color: col }}>{value}</span>
+        </div>
+      </div>
+      <div style={{ height: 4, background: T.border, borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ width: `${value}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.4s ease' }} />
+      </div>
+      {reason && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: T.ghost, marginTop: '0.2rem', lineHeight: 1.4 }}>{reason}</div>}
+    </div>
+  )
+}
 
-  async function runAiAnalysis() {
+// ── Main ──────────────────────────────────────────────────────────────────────
+export default function ClientIntelligenceDashboard({ target: initialT, onClose }) {
+  const [t, ]              = useState(initialT)
+  const [nav,              setNav]             = useState('overview')
+  const [analysisResult,   setAnalysisResult]  = useState(null)
+  const [gatherLoading,    setGatherLoading]   = useState(false)
+  const [signalLoading,    setSignalLoading]   = useState(false)
+  const [signalMsg,        setSignalMsg]       = useState('')
+  const [findLoading,      setFindLoading]     = useState(false)
+  const [findMsg,          setFindMsg]         = useState('')
+  const [foundContacts,    setFoundContacts]   = useState(null)
+  const [emailDraft,       setEmailDraft]      = useState(
+    t.emailDraft || { sk: { subject: '', body: '' }, de: { subject: '', body: '' }, en: { subject: '', body: '' } }
+  )
+
+  const fit     = t.strikerFitScore || t.overallScore || 0
+  const fitCol  = fit >= 80 ? T.orange : fit >= 60 ? T.amber : T.dim
+  const isLive  = t.reviewsSource === 'serpapi'
+  const hasEnergy = t.heatPressure != null
+
+  // ── API handlers (concise) ───────────────────────────────────────────────────
+
+  async function runAnalysis() {
     setGatherLoading(true)
     try {
-      const res  = await fetch('/.netlify/functions/ai-analysis', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ companyName:t.name, city:t.city, segment:t.segment, segmentLabel:t.segmentLabel, fitScore:t.strikerFitScore||50, language:'sk' }) })
-      const data = await res.json()
-      if (data.ok) {
-        setAnalysisResult(data)
-        if (data.subject||data.draft) setEmailDraft(prev => ({...prev, sk:{subject:data.subject||'', body:data.draft||''}}))
+      const r = await fetch('/.netlify/functions/ai-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, city: t.city, segment: t.segment, segmentLabel: t.segmentLabel, fitScore: t.strikerFitScore || 50, language: 'sk' }) })
+      const d = await r.json()
+      if (d.ok) {
+        setAnalysisResult(d)
+        if (d.subject || d.draft) setEmailDraft(p => ({ ...p, sk: { subject: d.subject || '', body: d.draft || '' } }))
       }
-    } catch(e){} finally { setGatherLoading(false) }
+    } catch {}
+    finally { setGatherLoading(false) }
   }
 
-  async function runSignalEngine() {
+  async function runSignals() {
     setSignalLoading(true); setSignalMsg('')
     try {
-      const res  = await fetch('/.netlify/functions/serpapi-reviews', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ companyName:t.name, url:t.web, segment:t.segment, segmentLabel:t.segmentLabel, city:t.city, country:t.country||'DE', strikerFitScore:t.strikerFitScore||50, painPoints:analysisResult?.painPoints||[], aiReasoning:analysisResult?.reasoning||'' }) })
-      const data = await res.json()
-      if (data.ok) {
-        await updateTarget(t.id, { heatPressure:data.heatPressure, heatPressureReason:data.heatPressureReason, thermalDependency:data.thermalDependency, thermalDependencyReason:data.thermalDependencyReason, operatingCostPressure:data.operatingCostPressure, operatingCostPressureReason:data.operatingCostPressureReason, modernizationNeed:data.modernizationNeed, modernizationNeedReason:data.modernizationNeedReason, boilerDependencyProb:data.boilerDependencyProb, boilerDependencyProbReason:data.boilerDependencyProbReason, willingnessToSolve:data.willingnessToSolve, willingnessToSolveReason:data.willingnessToSolveReason, reviewsSource:data.reviewsSource, reviewsCachedAt:data.reviewsCachedAt, reviewRating:data.reviewRating, reviewCount:data.reviewCount, reviewSummary:data.reviewSummary, liveSignals:data.liveSignals||[] })
-        setSignalMsg(data.reviewsSource==='serpapi' ? `✅ LIVE · ${data.reviewCount||0} recenzií` : '✓ Signály')
+      const r = await fetch('/.netlify/functions/serpapi-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, url: t.web, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, country: t.country || 'DE', strikerFitScore: t.strikerFitScore || 50, painPoints: analysisResult?.painPoints || [], aiReasoning: analysisResult?.reasoning || '' }) })
+      const d = await r.json()
+      if (d.ok) {
+        await updateTarget(t.id, { heatPressure: d.heatPressure, heatPressureReason: d.heatPressureReason, thermalDependency: d.thermalDependency, thermalDependencyReason: d.thermalDependencyReason, operatingCostPressure: d.operatingCostPressure, operatingCostPressureReason: d.operatingCostPressureReason, modernizationNeed: d.modernizationNeed, modernizationNeedReason: d.modernizationNeedReason, boilerDependencyProb: d.boilerDependencyProb, boilerDependencyProbReason: d.boilerDependencyProbReason, willingnessToSolve: d.willingnessToSolve, willingnessToSolveReason: d.willingnessToSolveReason, reviewsSource: d.reviewsSource, reviewsCachedAt: d.reviewsCachedAt, reviewRating: d.reviewRating, reviewCount: d.reviewCount, reviewSummary: d.reviewSummary, liveSignals: d.liveSignals || [] })
+        setSignalMsg(d.reviewsSource === 'serpapi' ? `✅ ${d.reviewCount || 0} Google recenzií · ${(d.liveSignals || []).length} signálov` : '✅ AI signálová analýza')
       }
-    } catch(e){ setSignalMsg('⚠ '+e.message) } finally { setSignalLoading(false) }
+    } catch (e) { setSignalMsg('⚠ ' + e.message) }
+    finally { setSignalLoading(false) }
   }
 
   async function runFindContacts() {
     setFindLoading(true); setFindMsg('')
     try {
-      const res  = await fetch('/.netlify/functions/find-contacts', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ companyName:t.name, website:t.web, city:t.city, country:t.country||'DE' }) })
-      const data = await res.json()
-      if (data.ok) {
-        setFoundContacts(data.contacts||[])
-        if (data.generalEmail && !t.email) await updateTarget(t.id, {email:data.generalEmail})
-        setFindMsg(data.contacts?.length ? `✅ ${data.contacts.length} kontakt(y)` : 'ℹ Nenajdené')
+      const r = await fetch('/.netlify/functions/find-contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, website: t.web, city: t.city, country: t.country || 'DE' }) })
+      const d = await r.json()
+      if (d.ok) {
+        setFoundContacts(d.contacts || [])
+        if (d.generalEmail && !t.email) await updateTarget(t.id, { email: d.generalEmail })
+        setFindMsg(d.contacts?.length ? `✅ ${d.contacts.length} overených kontaktov` : 'Nenašla sa overená kontaktná osoba.')
       }
-    } catch(e){ setFindMsg('⚠ '+e.message) } finally { setFindLoading(false) }
+    } catch (e) { setFindMsg('⚠ ' + e.message) }
+    finally { setFindLoading(false) }
   }
 
   async function saveDraft(lang, subject, body) {
-    const updated = {...emailDraft, [lang]:{subject,body}}
+    const updated = { ...emailDraft, [lang]: { subject, body } }
     setEmailDraft(updated)
-    await updateTarget(t.id, {emailDraft:updated})
+    await updateTarget(t.id, { emailDraft: updated })
   }
 
-  // ── Center content ────────────────────────────────────────────────────────────
+  // ── Center sections ───────────────────────────────────────────────────────────
 
-  function renderCenter() {
+  function Center() {
 
-    if (activeKey === 'overview') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.85rem'}}>
-        <SLabel>Prehľad klienta</SLabel>
+    if (nav === 'overview') {
+      const problem = t.clientCard?.clientProfile || analysisResult?.reasoning
+      const nextStep = t.clientCard?.salesStrategy?.nextStep || analysisResult?.opportunity
+      const mainContact = (t.contacts || [])[0]
 
-        {/* Summary cards */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem'}}>
-          <InfoPill label="Segment"       value={t.segmentLabel||t.segment} />
-          <InfoPill label="Lokalita"      value={[t.city,t.country].filter(Boolean).join(', ')} />
-          <InfoPill label="Web"           value={t.web} color={C.purple} />
-          <InfoPill label="STRIKER FIT"   value={fit ? `${fit}/100` : '—'} color={fitColor} />
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <SH>Prehľad klienta</SH>
+
+          {/* Problem statement */}
+          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.orange}`, borderRadius: 4, padding: '1.1rem 1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.orange }}>Problém klienta</div>
+              <Badge type={isLive ? 'live' : problem ? 'ai' : 'unknown'} />
+            </div>
+            {problem
+              ? <p style={{ fontFamily: sans, fontSize: '0.78rem', color: T.text, lineHeight: 1.65, margin: 0 }}>{problem.split('\n\n')[0].slice(0, 200)}</p>
+              : <p style={{ fontFamily: sans, fontSize: '0.72rem', color: T.ghost, fontStyle: 'italic', margin: 0 }}>Spusti AI Analýzu alebo Signal Engine pre zistenie problému klienta.</p>
+            }
+          </div>
+
+          {/* 4 KPIs */}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <KPI label="STRIKER Fit"       value={fit || null}            source={fit ? 'verified' : 'unknown'} color={fitCol} />
+            <KPI label="Teplotný tlak"     value={t.heatPressure ?? null} source={hasEnergy ? (isLive ? 'live' : 'ai') : 'unknown'} />
+            <KPI label="Signály"           value={isLive ? (t.liveSignals || []).length : null} unit=" signálov" source={isLive ? 'live' : 'unknown'} color={T.green} note={isLive ? `★ ${t.reviewRating || '—'} Google` : null} />
+            <KPI label="Ochota riešiť"     value={t.willingnessToSolve ?? null} source={hasEnergy ? 'ai' : 'unknown'} />
+          </div>
+
+          {/* Next step */}
+          {nextStep && (
+            <div style={{ background: `${T.green}08`, border: `1px solid ${T.green}22`, borderRadius: 4, padding: '1rem 1.25rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.green, marginBottom: '0.45rem' }}>Odporúčaný ďalší krok</div>
+              <div style={{ fontFamily: sans, fontSize: '0.8rem', color: T.text, marginBottom: '0.5rem' }}>{nextStep}</div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button onClick={() => setNav('email')} style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: `1px solid ${T.green}55`, background: `${T.green}12`, color: T.green, borderRadius: 3, cursor: 'pointer' }}>✉ Otvoriť Email</button>
+                {mainContact?.email && <a href={`mailto:${mainContact.email}`} style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: `1px solid ${T.border}`, background: 'transparent', color: T.dim, borderRadius: 3, textDecoration: 'none' }}>Kontakt: {mainContact.name || mainContact.email}</a>}
+              </div>
+            </div>
+          )}
+
+          {/* Pain points (concise) */}
+          {analysisResult?.painPoints?.length > 0 && (
+            <div>
+              <SH>Kľúčové problémy</SH>
+              {analysisResult.painPoints.slice(0, 3).map((p, i) => (
+                <div key={i} style={{ display: 'flex', gap: '0.5rem', padding: '0.55rem 0.75rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: '0.35rem', alignItems: 'flex-start' }}>
+                  <span style={{ color: T.red, flexShrink: 0, marginTop: '0.05rem' }}>▸</span>
+                  <span style={{ fontFamily: sans, fontSize: '0.72rem', color: T.sub, lineHeight: 1.5 }}>{p}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+      )
+    }
 
-        {/* Tags */}
-        {Object.keys(t.signalsByCategory||{}).length > 0 && (
-          <div style={{display:'flex',gap:'0.25rem',flexWrap:'wrap'}}>
-            {Object.entries(t.signalsByCategory||{}).map(([k,v])=>(
-              <span key={k} style={{fontFamily:mono,fontSize:'0.46rem',padding:'0.05rem 0.32rem',border:`1px solid ${C.purple}44`,borderRadius:2,color:C.purple,background:`${C.purple}0d`}}>{v.label||k}</span>
-            ))}
-          </div>
-        )}
-
-        {/* Short AI profile */}
-        {(t.clientCard?.clientProfile || analysisResult?.reasoning) && (
-          <div style={{background:C.card,border:`1px solid ${C.border2}`,borderLeft:`2px solid ${C.orange}`,borderRadius:3,padding:'0.75rem 0.9rem'}}>
-            <SLabel>🧠 AI Profil</SLabel>
-            <p style={{fontFamily:sans,fontSize:'0.7rem',color:C.sub,lineHeight:1.65,margin:0}}>
-              {(t.clientCard?.clientProfile||analysisResult?.reasoning||'').split('\n\n')[0]}
-            </p>
-          </div>
-        )}
-
-        {/* Quick energy snapshot */}
-        {t.heatPressure != null && (
-          <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.75rem 0.9rem'}}>
-            <SLabel>Energetický snapshot</SLabel>
-            <MetricBar label="Teplotný tlak"      value={t.heatPressure} />
-            <MetricBar label="Závislosť od tepla" value={t.thermalDependency} />
-            <MetricBar label="Potreba moderniz."  value={t.modernizationNeed} />
-          </div>
-        )}
-      </div>
-    )
-
-    if (activeKey === 'ai-profile') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.85rem'}}>
-        <SLabel>AI Profil klienta</SLabel>
-        <ProgressBar running={gatherLoading} maxSecs={15} type="ai" />
-        <button onClick={runAiAnalysis} disabled={gatherLoading}
-          style={{fontFamily:mono,fontSize:'0.55rem',letterSpacing:'1px',textTransform:'uppercase',padding:'0.35rem 0.85rem',border:`1px solid ${C.amber}44`,background:'rgba(255,170,0,0.07)',color:C.amber,borderRadius:3,cursor:'pointer',alignSelf:'flex-start',opacity:gatherLoading?0.6:1}}>
-          {gatherLoading ? '⏳ Analyzujem...' : '🧠 Generovať AI profil'}
-        </button>
-        {(t.clientCard?.clientProfile || analysisResult?.reasoning) ? (
-          <div style={{background:C.card,border:`1px solid ${C.border2}`,borderLeft:`2px solid ${C.orange}`,borderRadius:3,padding:'0.85rem 1rem'}}>
-            {(t.clientCard?.clientProfile||analysisResult?.reasoning||'').split('\n\n').map((p,i)=>(
-              <p key={i} style={{fontFamily:sans,fontSize:'0.72rem',color:i===0?C.text:C.sub,lineHeight:1.7,margin:0,marginBottom:i<3?'0.5rem':0}}>{p}</p>
+    if (nav === 'problem') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH>Energetický problém</SH>
+        <div style={{ display: 'flex', gap: '0.65rem' }}>
+          <button onClick={runSignals} disabled={signalLoading}
+            style={{ fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.38rem 0.9rem', border: `1px solid ${T.orange}44`, background: signalLoading ? 'transparent' : `${T.orange}0d`, color: T.orange, borderRadius: 3, cursor: 'pointer', opacity: signalLoading ? 0.6 : 1 }}>
+            {signalLoading ? '⏳ Analyzujem...' : '⚡ Spustiť Signal Engine'}
+          </button>
+          {signalMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: signalMsg.startsWith('✅') ? T.green : T.amber, alignSelf: 'center' }}>{signalMsg}</span>}
+        </div>
+        <ProgressBar running={signalLoading} maxSecs={12} type="signal" />
+        {hasEnergy ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+            {[
+              { label: 'Teplotný tlak',       val: t.heatPressure,          reason: t.heatPressureReason },
+              { label: 'Závislosť od tepla',  val: t.thermalDependency,     reason: t.thermalDependencyReason },
+              { label: 'Prevádzkové náklady', val: t.operatingCostPressure, reason: t.operatingCostPressureReason },
+              { label: 'Potreba modernizácie', val: t.modernizationNeed,    reason: t.modernizationNeedReason },
+              { label: 'Závislosť od kotlov', val: t.boilerDependencyProb,  reason: t.boilerDependencyProbReason },
+              { label: 'Ochota riešiť',       val: t.willingnessToSolve,    reason: t.willingnessToSolveReason },
+            ].map(({ label, val, reason }) => (
+              <div key={label} style={{ padding: '0.75rem 0.9rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: '0.25rem' }}>
+                <MRow label={label} value={val} reason={reason} source={isLive ? 'live' : 'ai'} />
+              </div>
             ))}
           </div>
         ) : (
-          <div style={{fontFamily:mono,fontSize:'0.6rem',color:C.ghost,fontStyle:'italic'}}>Klikni „Generovať AI profil" pre vygenerovanie obchodného profilu.</div>
-        )}
-        {analysisResult && (
-          <>
-            {analysisResult.painPoints?.length > 0 && (
-              <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.75rem 0.9rem'}}>
-                <SLabel>Pain Points</SLabel>
-                {analysisResult.painPoints.map((p,i)=>(
-                  <div key={i} style={{display:'flex',gap:'0.35rem',marginBottom:'0.22rem'}}>
-                    <span style={{color:C.red,flexShrink:0}}>⚠</span>
-                    <span style={{fontFamily:mono,fontSize:'0.58rem',color:C.sub,lineHeight:1.5}}>{p}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {analysisResult.mainArgument && (
-              <div style={{padding:'0.55rem 0.75rem',background:'rgba(0,204,136,0.05)',border:`1px solid rgba(0,204,136,0.2)`,borderRadius:3}}>
-                <span style={{fontFamily:mono,fontSize:'0.55rem',color:C.green}}>✦ {analysisResult.mainArgument}</span>
-              </div>
-            )}
-          </>
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', padding: '1.5rem', textAlign: 'center', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4 }}>
+            Dáta zatiaľ neoverené — spusti Signal Engine.
+          </div>
         )}
       </div>
     )
 
-    if (activeKey === 'energy') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.85rem'}}>
-        <SLabel>Energetický problém</SLabel>
-        <ProgressBar running={signalLoading} maxSecs={12} type="signal" />
-        <button onClick={runSignalEngine} disabled={signalLoading}
-          style={{fontFamily:mono,fontSize:'0.55rem',letterSpacing:'1px',textTransform:'uppercase',padding:'0.35rem 0.85rem',border:`1px solid ${C.orange}44`,background:'rgba(255,92,0,0.07)',color:C.orange,borderRadius:3,cursor:'pointer',alignSelf:'flex-start',opacity:signalLoading?0.6:1}}>
-          {signalLoading ? '⏳ Analyzujem...' : '⚡ Spustiť Signal Engine'}
-        </button>
-        {signalMsg && <div style={{fontFamily:mono,fontSize:'0.55rem',color:signalMsg.startsWith('✅')?C.green:C.amber}}>{signalMsg}</div>}
-        {t.heatPressure != null ? (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem'}}>
-            {[
-              {label:'Teplotný tlak',       value:t.heatPressure,          reason:t.heatPressureReason},
-              {label:'Závislosť od tepla',  value:t.thermalDependency,     reason:t.thermalDependencyReason},
-              {label:'Prevádzkové náklady', value:t.operatingCostPressure, reason:t.operatingCostPressureReason},
-              {label:'Potreba moderniz.',   value:t.modernizationNeed,     reason:t.modernizationNeedReason},
-              {label:'Závislosť od kotlov', value:t.boilerDependencyProb,  reason:t.boilerDependencyProbReason},
-              {label:'Ochota riešiť',       value:t.willingnessToSolve,    reason:t.willingnessToSolveReason},
-            ].map(({label,value,reason})=>(
-              <div key={label} style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.65rem 0.75rem'}}>
-                <div style={{fontFamily:mono,fontSize:'0.42rem',letterSpacing:'1.5px',textTransform:'uppercase',color:C.ghost,marginBottom:'0.22rem'}}>{label}</div>
-                {value!=null?(
-                  <>
-                    <div style={{fontFamily:mono,fontSize:'1.25rem',fontWeight:700,color:value>=70?C.orange:value>=45?C.amber:C.dim,marginBottom:'0.18rem'}}>{value}</div>
-                    <div style={{height:3,background:C.border,borderRadius:2,overflow:'hidden',marginBottom:'0.22rem'}}>
-                      <div style={{width:`${value}%`,height:'100%',background:value>=70?C.orange:value>=45?C.amber:C.dim,borderRadius:2}}/>
-                    </div>
-                    {reason && <div style={{fontFamily:mono,fontSize:'0.48rem',color:C.dim,lineHeight:1.4}}>{reason}</div>}
-                  </>
-                ):(
-                  <div style={{fontFamily:mono,fontSize:'0.52rem',color:C.ghost,fontStyle:'italic'}}>Čaká na analýzu</div>
-                )}
-              </div>
-            ))}
+    if (nav === 'signals') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH>Signály</SH>
+        {isLive && t.reviewSummary ? (
+          <div style={{ background: T.card, border: `1px solid ${T.green}33`, borderLeft: `3px solid ${T.green}`, borderRadius: 4, padding: '1rem 1.2rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.55rem' }}>
+              <Badge type="live" />
+              {t.reviewRating && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: T.amber }}>★ {t.reviewRating} ({t.reviewCount || 0} recenzií)</span>}
+            </div>
+            <p style={{ fontFamily: sans, fontSize: '0.72rem', color: T.sub, lineHeight: 1.65, margin: 0 }}>{t.reviewSummary}</p>
           </div>
-        ):(
-          <div style={{fontFamily:mono,fontSize:'0.6rem',color:C.ghost,fontStyle:'italic'}}>Spusti Signal Engine pre energetické metriky.</div>
-        )}
-      </div>
-    )
-
-    if (activeKey === 'signals') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.85rem'}}>
-        <SLabel>Signály</SLabel>
-        {isLive && t.reviewSummary && (
-          <div style={{background:C.card,border:`1px solid rgba(0,204,136,0.25)`,borderLeft:`3px solid ${C.green}`,borderRadius:3,padding:'0.75rem 0.9rem'}}>
-            <div style={{fontFamily:mono,fontSize:'0.42rem',letterSpacing:'1.5px',textTransform:'uppercase',color:C.green,marginBottom:'0.3rem'}}>🔴 LIVE · Google · ★{t.reviewRating} ({t.reviewCount||0})</div>
-            <p style={{fontFamily:sans,fontSize:'0.7rem',color:C.sub,lineHeight:1.65,margin:0}}>{t.reviewSummary}</p>
+        ) : (
+          <div style={{ padding: '1.5rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, textAlign: 'center' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', marginBottom: '0.75rem' }}>Dáta zatiaľ neoverené</div>
+            <button onClick={() => { runSignals(); }} style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.8rem', border: `1px solid ${T.orange}44`, background: `${T.orange}0d`, color: T.orange, borderRadius: 3, cursor: 'pointer' }}>⚡ Signal Engine</button>
           </div>
         )}
-        {(t.liveSignals||[]).length > 0 ? (
+        {(t.liveSignals || []).length > 0 && (
           <div>
-            <SLabel>Detekované kľúčové slová</SLabel>
-            <div style={{display:'flex',flexWrap:'wrap',gap:'0.25rem'}}>
-              {(t.liveSignals||[]).map((s,i)=>(
-                <span key={i} style={{fontFamily:mono,fontSize:'0.5rem',padding:'0.06rem 0.35rem',border:`1px solid ${C.amber}44`,borderRadius:2,color:C.amber,background:`${C.amber}0d`}}>{s}</span>
+            <SH>Detekované kľúčové slová</SH>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+              {(t.liveSignals || []).map((s, i) => (
+                <span key={i} style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.1rem 0.4rem', border: `1px solid ${T.amber}44`, borderRadius: 3, color: T.amber, background: `${T.amber}0d` }}>{s}</span>
               ))}
             </div>
           </div>
-        ):(
-          <div style={{fontFamily:mono,fontSize:'0.6rem',color:C.ghost,fontStyle:'italic'}}>Spusti Signal Engine pre live signály.</div>
-        )}
-        {Object.keys(t.signalsByCategory||{}).length > 0 && (
-          <div>
-            <SLabel>Kategórie signálov</SLabel>
-            {Object.entries(t.signalsByCategory).map(([k,v])=>(
-              <div key={k} style={{marginBottom:'0.45rem'}}>
-                <div style={{fontFamily:mono,fontSize:'0.44rem',letterSpacing:'1px',textTransform:'uppercase',color:C.purple,marginBottom:'0.15rem'}}>{v.label||k} ({v.count||0})</div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:'0.18rem'}}>
-                  {(v.found||[]).slice(0,6).map((kw,i)=>(
-                    <span key={i} style={{fontFamily:mono,fontSize:'0.46rem',padding:'0.03rem 0.28rem',border:`1px solid ${C.purple}33`,borderRadius:2,color:C.purple,background:`${C.purple}0d`}}>{kw}</span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         )}
       </div>
     )
 
-    if (activeKey === 'reviews') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.85rem'}}>
-        <SLabel>Recenzie</SLabel>
-        {isLive ? (
-          <>
-            <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
-              <span style={{fontFamily:mono,fontSize:'0.42rem',letterSpacing:'1.5px',textTransform:'uppercase',color:C.green,padding:'0.05rem 0.3rem',border:`1px solid ${C.green}44`,borderRadius:2,background:`${C.green}12`}}>🔴 LIVE DATA</span>
-              {t.reviewRating && <span style={{fontFamily:mono,fontSize:'0.7rem',color:C.amber}}>★ {t.reviewRating} <span style={{fontSize:'0.5rem',color:C.dim}}>({t.reviewCount||0} recenzií)</span></span>}
-            </div>
-            {t.reviewSummary && <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.8rem 0.95rem'}}><p style={{fontFamily:sans,fontSize:'0.72rem',color:C.sub,lineHeight:1.7,margin:0}}>{t.reviewSummary}</p></div>}
-            <div style={{display:'flex',flexWrap:'wrap',gap:'0.22rem'}}>
-              {(t.liveSignals||[]).map((s,i)=><span key={i} style={{fontFamily:mono,fontSize:'0.48rem',padding:'0.04rem 0.3rem',border:`1px solid ${C.amber}44`,borderRadius:2,color:C.amber,background:`${C.amber}0d`}}>{s}</span>)}
-            </div>
-          </>
-        ):(
-          <div>
-            <div style={{fontFamily:mono,fontSize:'0.6rem',color:C.ghost,fontStyle:'italic',marginBottom:'0.75rem'}}>Google recenzie zatiaľ nenačítané. Spusti Signal Engine.</div>
-            <button onClick={()=>{runSignalEngine();setActiveKey('energy')}}
-              style={{fontFamily:mono,fontSize:'0.55rem',letterSpacing:'1px',textTransform:'uppercase',padding:'0.35rem 0.85rem',border:`1px solid ${C.orange}44`,background:'rgba(255,92,0,0.07)',color:C.orange,borderRadius:3,cursor:'pointer'}}>
-              ⚡ Signal Engine
-            </button>
-          </div>
-        )}
-      </div>
-    )
-
-    if (activeKey === 'contacts') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.85rem'}}>
-        <SLabel>Kontakty</SLabel>
+    if (nav === 'contacts') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH>Kontakty</SH>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={runFindContacts} disabled={findLoading}
+            style={{ fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.38rem 0.9rem', border: `1px solid ${T.orange}44`, background: `${T.orange}0d`, color: T.orange, borderRadius: 3, cursor: 'pointer', opacity: findLoading ? 0.6 : 1 }}>
+            {findLoading ? '⏳ Hľadám...' : '🔍 Nájsť kontakty'}
+          </button>
+          {findMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: findMsg.startsWith('✅') ? T.green : T.amber }}>{findMsg}</span>}
+        </div>
         <ProgressBar running={findLoading} maxSecs={15} type="ai" />
-        <button onClick={runFindContacts} disabled={findLoading}
-          style={{fontFamily:mono,fontSize:'0.55rem',letterSpacing:'1px',textTransform:'uppercase',padding:'0.35rem 0.85rem',border:`1px solid ${C.orange}44`,background:'rgba(255,92,0,0.07)',color:C.orange,borderRadius:3,cursor:'pointer',alignSelf:'flex-start',opacity:findLoading?0.6:1}}>
-          {findLoading?'⏳ Hľadám...':'👤 Nájsť kontakty'}
-        </button>
-        {findMsg && <div style={{fontFamily:mono,fontSize:'0.55rem',color:findMsg.startsWith('✅')?C.green:C.amber}}>{findMsg}</div>}
-        {(t.contacts||[]).map((c,i)=><ContactRow key={i} c={c} onRemove={()=>removeContact(t.id,i)}/>)}
-        {foundContacts?.map((c,i)=>(
-          <div key={i} style={{position:'relative'}}>
-            <ContactRow c={c}/>
-            <button onClick={()=>{addContact(t.id,{...c,source:c.source||'web',confidence:c.confidence||'MEDIUM'});setFoundContacts(prev=>prev.filter(fc=>fc!==c))}}
-              style={{position:'absolute',top:'0.55rem',right:'0.55rem',fontFamily:mono,fontSize:'0.48rem',padding:'0.1rem 0.4rem',border:`1px solid ${C.green}44`,background:`${C.green}12`,color:C.green,borderRadius:2,cursor:'pointer'}}>
-              + Uložiť
-            </button>
+        {t.email && (
+          <div style={{ padding: '0.6rem 0.8rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+            <Badge type="unknown" />
+            <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.6rem', color: T.green }}>✉ {t.email}</a>
+            <span style={{ fontFamily: mono, fontSize: '0.48rem', color: T.ghost }}>všeobecný email firmy</span>
           </div>
-        ))}
-        {!t.contacts?.length && !foundContacts && (
-          <div style={{fontFamily:mono,fontSize:'0.6rem',color:C.ghost,fontStyle:'italic'}}>Nenašla sa overená kontaktná osoba. Klikni „Nájsť kontakty".</div>
         )}
-        {t.email && <div style={{padding:'0.5rem 0.7rem',background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,fontFamily:mono,fontSize:'0.58rem'}}><a href={`mailto:${t.email}`} style={{color:C.green}}>✉ {t.email}</a><span style={{color:C.ghost,marginLeft:'0.4rem'}}>všeobecný email</span></div>}
+        {(t.contacts || []).map((c, i) => <CRow key={i} c={c} onRemove={() => removeContact(t.id, i)} />)}
+        {foundContacts?.map((c, i) => (
+          <CRow key={i} c={c} action={() => { addContact(t.id, { ...c, source: c.source || 'web', confidence: c.confidence || 'MEDIUM' }); setFoundContacts(p => p.filter(fc => fc !== c)) }} />
+        ))}
+        {!t.contacts?.length && !foundContacts && !t.email && (
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', padding: '1.5rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, textAlign: 'center' }}>
+            Dáta zatiaľ neoverené — klikni Nájsť kontakty.
+          </div>
+        )}
       </div>
     )
 
-    if (activeKey === 'email') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.75rem'}}>
-        <SLabel>Email</SLabel>
+    if (nav === 'email') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <SH>Email</SH>
         <EmailDraftEditor draft={emailDraft} onSave={saveDraft} defaultLang="de" />
       </div>
     )
 
-    if (activeKey === 'followup') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.85rem'}}>
-        <SLabel>Follow-up / Ďalší krok</SLabel>
-        {t.clientCard?.salesStrategy ? (
+    if (nav === 'analysis') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH>AI Analýza</SH>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+          <button onClick={runAnalysis} disabled={gatherLoading}
+            style={{ fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.38rem 0.9rem', border: `1px solid ${T.amber}44`, background: `${T.amber}0d`, color: T.amber, borderRadius: 3, cursor: 'pointer', opacity: gatherLoading ? 0.6 : 1 }}>
+            {gatherLoading ? '⏳ Analyzujem...' : '🧠 Spustiť AI Analýzu'}
+          </button>
+        </div>
+        <ProgressBar running={gatherLoading} maxSecs={15} type="ai" />
+        {analysisResult ? (
           <>
-            <div style={{background:C.card,border:`1px solid rgba(0,204,136,0.2)`,borderLeft:`3px solid ${C.green}`,borderRadius:3,padding:'0.75rem 0.9rem'}}>
-              <div style={{fontFamily:mono,fontSize:'0.42rem',letterSpacing:'2px',textTransform:'uppercase',color:C.green,marginBottom:'0.35rem'}}>ĎALŠÍ KROK</div>
-              <div style={{fontFamily:sans,fontSize:'0.72rem',color:C.text,fontWeight:600,marginBottom:'0.3rem'}}>{t.clientCard.salesStrategy.nextStep}</div>
-              <div style={{fontFamily:mono,fontSize:'0.55rem',color:C.sub}}>Začni: {t.clientCard.salesStrategy.startWith||'email'} · Tón: {t.clientCard.salesStrategy.tone}</div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, padding: '1rem 1.25rem', textAlign: 'center' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.ghost, marginBottom: '0.3rem' }}>Score</div>
+                <div style={{ fontFamily: mono, fontSize: '2rem', fontWeight: 700, color: T.orange, lineHeight: 1 }}>{analysisResult.score}</div>
+                <div style={{ fontFamily: mono, fontSize: '0.4rem', color: T.ghost }}>/10</div>
+              </div>
+              {analysisResult.mainArgument && (
+                <div style={{ flex: 1, background: `${T.green}08`, border: `1px solid ${T.green}22`, borderRadius: 4, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center' }}>
+                  <span style={{ fontFamily: sans, fontSize: '0.72rem', color: T.text, lineHeight: 1.5 }}>✦ {analysisResult.mainArgument}</span>
+                </div>
+              )}
             </div>
-            {t.clientCard.salesStrategy.emphasize?.length > 0 && (
-              <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.65rem 0.8rem'}}>
-                <SLabel>Zdôrazniť</SLabel>
-                {t.clientCard.salesStrategy.emphasize.map((e,i)=><div key={i} style={{fontFamily:mono,fontSize:'0.56rem',color:C.green,marginBottom:'0.18rem'}}>✓ {e}</div>)}
+            {analysisResult.reasoning && (
+              <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, padding: '1rem 1.25rem' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.ghost, marginBottom: '0.4rem' }}>AI Reasoning <Badge type="ai" /></div>
+                <p style={{ fontFamily: sans, fontSize: '0.72rem', color: T.sub, lineHeight: 1.65, margin: 0 }}>{analysisResult.reasoning}</p>
               </div>
             )}
-            {t.clientCard.risks?.length > 0 && (
-              <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.65rem 0.8rem'}}>
-                <SLabel>Riziká</SLabel>
-                {t.clientCard.risks.map((r,i)=><div key={i} style={{fontFamily:mono,fontSize:'0.56rem',color:C.sub,marginBottom:'0.18rem'}}>⚠ {r}</div>)}
+            {analysisResult.painPoints?.length > 0 && (
+              <div>
+                <SH>Pain Points</SH>
+                {analysisResult.painPoints.map((p, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '0.5rem', padding: '0.6rem 0.8rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: '0.3rem' }}>
+                    <span style={{ color: T.red, flexShrink: 0 }}>▸</span>
+                    <span style={{ fontFamily: sans, fontSize: '0.7rem', color: T.sub, lineHeight: 1.5 }}>{p}</span>
+                  </div>
+                ))}
               </div>
             )}
           </>
-        ):(
-          <div style={{fontFamily:mono,fontSize:'0.6rem',color:C.ghost,fontStyle:'italic'}}>Generuj AI kartu klienta pre odporúčaný follow-up.</div>
+        ) : (
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', padding: '1.5rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, textAlign: 'center' }}>
+            Dáta zatiaľ neoverené — spusti AI Analýzu.
+          </div>
         )}
       </div>
     )
 
-    if (activeKey === 'finance') return (
-      <div style={{display:'flex',flexDirection:'column',gap:'0.85rem'}}>
-        <SLabel>Financie / ROI</SLabel>
-        {analysisResult?.opportunity && <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.75rem 0.9rem'}}><SLabel>Príležitosť</SLabel><p style={{fontFamily:sans,fontSize:'0.72rem',color:C.sub,lineHeight:1.65,margin:0}}>{analysisResult.opportunity}</p></div>}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem'}}>
-          <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.7rem'}}><SLabel>Cena STRIKER</SLabel><div style={{fontFamily:mono,fontSize:'1.1rem',fontWeight:700,color:C.orange}}>8 000–10 000 €</div></div>
-          <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.7rem'}}><SLabel>ROI</SLabel><div style={{fontFamily:mono,fontSize:'1.1rem',fontWeight:700,color:C.green}}>6–36 mesiacov</div></div>
-          {t.estimatedROI && <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.7rem'}}><SLabel>AI odhad ROI</SLabel><div style={{fontFamily:mono,fontSize:'0.68rem',color:C.amber}}>{t.estimatedROI}</div></div>}
-          {t.estimatedHeatDemand && <div style={{background:C.card,border:`1px solid ${C.border2}`,borderRadius:3,padding:'0.7rem'}}><SLabel>Spotreba tepla</SLabel><div style={{fontFamily:mono,fontSize:'0.68rem',color:C.sub}}>{t.estimatedHeatDemand}</div></div>}
-        </div>
-      </div>
-    )
-
-    return <Placeholder onClose={()=>setActiveKey('overview')}/>
+    return null
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+  // ── Layout ────────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{position:'fixed',inset:0,background:C.bg,zIndex:300,display:'flex',overflow:'hidden'}}>
+    <div style={{ position: 'fixed', inset: 0, background: T.bg, zIndex: 300, display: 'flex', overflow: 'hidden', fontFamily: sans }}>
 
-      {/* ── LEFT PANEL ── */}
-      <div style={{width:270,flexShrink:0,background:'#050709',borderRight:`1px solid ${C.border}`,display:'flex',flexDirection:'column',overflowY:'auto'}}>
+      {/* ── LEFT ── */}
+      <div style={{ width: 260, flexShrink: 0, background: '#050709', borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
-        {/* Company image / placeholder */}
-        <div style={{height:170,flexShrink:0,position:'relative',overflow:'hidden',background:`linear-gradient(135deg, #0d1117 0%, rgba(255,92,0,0.08) 100%)`}}>
+        {/* Company image */}
+        <div style={{ height: 190, flexShrink: 0, position: 'relative', background: `linear-gradient(160deg, #0d1117 0%, ${T.orange}08 100%)`, overflow: 'hidden' }}>
           {t.photoUrl
-            ? <img src={t.photoUrl} alt={t.name} style={{width:'100%',height:'100%',objectFit:'cover',opacity:0.85}}/>
+            ? <img src={t.photoUrl} alt={t.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : (
-              <div style={{width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:'0.4rem'}}>
-                <div style={{fontFamily:sans,fontSize:'3.5rem',fontWeight:700,color:`${C.orange}55`,lineHeight:1}}>{(t.name||'X').charAt(0)}</div>
-                <div style={{fontFamily:mono,fontSize:'0.42rem',letterSpacing:'2px',textTransform:'uppercase',color:C.ghost}}>STRIKER</div>
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontFamily: sans, fontSize: '5rem', fontWeight: 700, color: `${T.orange}30`, lineHeight: 1 }}>
+                  {(t.name || 'X').charAt(0)}
+                </span>
               </div>
             )
           }
-          {/* Overlay gradient */}
-          <div style={{position:'absolute',bottom:0,left:0,right:0,height:50,background:'linear-gradient(to top, #050709, transparent)'}}/>
-          {/* Close button */}
-          <button onClick={onClose} style={{position:'absolute',top:'0.5rem',right:'0.5rem',background:'rgba(0,0,0,0.5)',border:`1px solid ${C.border}`,color:C.dim,borderRadius:3,padding:'0.15rem 0.45rem',fontFamily:mono,fontSize:'0.5rem',cursor:'pointer'}}>✕</button>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 40%, #050709 100%)' }} />
+          <button onClick={onClose} style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', background: 'rgba(0,0,0,0.55)', border: `1px solid ${T.border}`, color: T.dim, borderRadius: 3, padding: '0.18rem 0.5rem', fontFamily: mono, fontSize: '0.5rem', cursor: 'pointer', letterSpacing: '1px' }}>✕ ZAVRIEŤ</button>
         </div>
 
         {/* Company info */}
-        <div style={{padding:'0.85rem 1rem',borderBottom:`1px solid ${C.border}`}}>
-          <div style={{fontFamily:sans,fontSize:'0.95rem',fontWeight:700,color:C.text,lineHeight:1.25,marginBottom:'0.2rem'}}>{t.name}</div>
-          <div style={{fontFamily:mono,fontSize:'0.52rem',color:C.dim,marginBottom:'0.35rem'}}>{[t.city,t.country].filter(Boolean).join(' · ')}</div>
-          <div style={{fontFamily:mono,fontSize:'0.5rem',color:C.sub,marginBottom:'0.4rem'}}>{t.segmentLabel||t.segment||'—'}</div>
-          <div style={{display:'flex',alignItems:'center',gap:'0.5rem',flexWrap:'wrap'}}>
-            <div style={{fontFamily:mono,fontSize:'1.25rem',fontWeight:700,color:fitColor,lineHeight:1}}>{fit}</div>
+        <div style={{ padding: '0.9rem 1rem 0.8rem', borderBottom: `1px solid ${T.border}` }}>
+          <div style={{ fontFamily: sans, fontSize: '1rem', fontWeight: 700, color: T.text, lineHeight: 1.25, marginBottom: '0.25rem' }}>{t.name}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: T.dim, marginBottom: '0.2rem' }}>
+            {[t.city, t.country].filter(Boolean).join(' · ')}
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.5rem', color: T.ghost, marginBottom: '0.55rem' }}>
+            {t.segmentLabel || t.segment || '—'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '1.5rem', fontWeight: 700, color: fitCol, lineHeight: 1 }}>{fit || '—'}</span>
             <div>
-              <div style={{fontFamily:mono,fontSize:'0.38rem',letterSpacing:'1.5px',textTransform:'uppercase',color:C.ghost}}>STRIKER FIT</div>
-              {isLive && <span style={{fontFamily:mono,fontSize:'0.38rem',letterSpacing:'1px',textTransform:'uppercase',color:C.green,padding:'0.02rem 0.25rem',border:`1px solid ${C.green}44`,borderRadius:2,background:`${C.green}12`}}>LIVE</span>}
+              <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: T.ghost }}>STRIKER FIT</div>
+              {isLive && <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', color: T.green, marginTop: '0.05rem' }}>🔴 ŽIVÉ DÁTA</div>}
             </div>
           </div>
         </div>
 
-        {/* Navigation menu */}
-        <div style={{flex:1,padding:'0.4rem 0'}}>
+        {/* Navigation */}
+        <nav style={{ flex: 1, padding: '0.5rem 0' }}>
           {NAV.map(item => {
-            const active = item.key === activeKey
+            const active = item.key === nav
             return (
-              <button key={item.key} onClick={()=>setActiveKey(item.key)}
-                style={{width:'100%',display:'flex',alignItems:'center',gap:'0.6rem',padding:'0.5rem 1rem',background:active?'rgba(255,92,0,0.1)':'transparent',border:'none',borderLeft:`2px solid ${active?C.orange:'transparent'}`,color:active?C.orange:C.dim,fontFamily:mono,fontSize:'0.58rem',letterSpacing:'0.5px',cursor:'pointer',textAlign:'left',transition:'all 0.12s'}}>
-                <span style={{fontSize:'0.78rem',width:18,flexShrink:0,textAlign:'center'}}>{item.icon}</span>
+              <button key={item.key} onClick={() => setNav(item.key)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 1rem', background: active ? `${T.orange}0d` : 'transparent', border: 'none', borderLeft: `2px solid ${active ? T.orange : 'transparent'}`, color: active ? T.text : T.dim, fontFamily: mono, fontSize: '0.58rem', letterSpacing: '0.5px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
+                <span style={{ fontSize: '0.8rem', width: 18, flexShrink: 0, textAlign: 'center', opacity: 0.7 }}>{item.icon}</span>
                 {item.label}
               </button>
             )
           })}
-        </div>
+        </nav>
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{flex:1,overflowY:'auto',padding:'1.5rem 1.75rem',borderRight:`1px solid ${C.border}`}}>
-        {renderCenter()}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '2rem 2.25rem', borderRight: `1px solid ${T.border}` }}>
+        <Center />
       </div>
 
-      {/* ── RIGHT PANEL — Contacts ── */}
-      <div style={{width:280,flexShrink:0,overflowY:'auto',padding:'1.2rem 1rem'}}>
-        <SLabel>Kontakty</SLabel>
+      {/* ── RIGHT — always visible ── */}
+      <div style={{ width: 270, flexShrink: 0, overflowY: 'auto', padding: '1.25rem 1rem' }}>
 
-        {/* General email */}
-        {t.email && (
-          <div style={{marginBottom:'0.65rem',padding:'0.45rem 0.6rem',background:C.card,border:`1px solid ${C.border2}`,borderRadius:3}}>
-            <div style={{fontFamily:mono,fontSize:'0.4rem',letterSpacing:'1.5px',textTransform:'uppercase',color:C.ghost,marginBottom:'0.1rem'}}>Všeobecný email</div>
-            <a href={`mailto:${t.email}`} style={{fontFamily:mono,fontSize:'0.6rem',color:C.green}}>✉ {t.email}</a>
-          </div>
-        )}
-
-        {/* Saved contacts */}
-        {(t.contacts||[]).map((c,i)=><ContactRow key={i} c={c} onRemove={()=>removeContact(t.id,i)}/>)}
-
-        {/* Found contacts (unsaved) */}
-        {foundContacts?.length > 0 && (
-          <>
-            <div style={{fontFamily:mono,fontSize:'0.4rem',letterSpacing:'2px',textTransform:'uppercase',color:C.green,margin:'0.5rem 0 0.35rem'}}>Nájdené — na uloženie</div>
-            {foundContacts.map((c,i)=>(
-              <div key={i} style={{position:'relative',marginBottom:'0.4rem'}}>
-                <ContactRow c={c}/>
-                <button onClick={()=>{addContact(t.id,{...c,source:c.source||'web',confidence:c.confidence||'MEDIUM'});setFoundContacts(prev=>prev.filter(fc=>fc!==c))}}
-                  style={{position:'absolute',bottom:'0.5rem',right:'0.55rem',fontFamily:mono,fontSize:'0.45rem',padding:'0.08rem 0.38rem',border:`1px solid ${C.green}44`,background:`${C.green}12`,color:C.green,borderRadius:2,cursor:'pointer'}}>
-                  + Uložiť
-                </button>
-              </div>
-            ))}
-          </>
-        )}
-
-        {!t.contacts?.length && !foundContacts && !t.email && (
-          <div style={{fontFamily:mono,fontSize:'0.55rem',color:C.ghost,fontStyle:'italic',marginBottom:'0.75rem'}}>Nenašla sa overená kontaktná osoba.</div>
-        )}
-
-        {/* Find contacts button */}
-        <button onClick={()=>{runFindContacts();setActiveKey('contacts')}} disabled={findLoading}
-          style={{width:'100%',fontFamily:mono,fontSize:'0.52rem',letterSpacing:'1px',textTransform:'uppercase',padding:'0.32rem 0.6rem',border:`1px solid ${C.border2}`,background:'transparent',color:findLoading?C.ghost:C.dim,borderRadius:3,cursor:'pointer',marginTop:'0.35rem',opacity:findLoading?0.6:1}}>
-          {findLoading?'⏳ Hľadám...':'🔍 Nájsť kontakty'}
-        </button>
-        {findMsg && <div style={{fontFamily:mono,fontSize:'0.5rem',color:findMsg.startsWith('✅')?C.green:C.amber,marginTop:'0.3rem'}}>{findMsg}</div>}
-
-        {/* Status */}
-        <div style={{marginTop:'1.25rem'}}>
-          <SLabel>Pipeline stav</SLabel>
-          {INTEL_STATUS_LIST.slice(0,5).map(s=>(
-            <button key={s.key} onClick={()=>updateTarget(t.id,{status:s.key})}
-              style={{display:'block',width:'100%',fontFamily:mono,fontSize:'0.5rem',letterSpacing:'0.5px',textTransform:'uppercase',padding:'0.25rem 0.55rem',border:`1px solid ${s.color}44`,background:t.status===s.key?s.bg:'transparent',color:t.status===s.key?s.color:C.ghost,borderRadius:2,cursor:'pointer',textAlign:'left',marginBottom:'0.2rem'}}>
+        {/* Pipeline */}
+        <SH>Stav obchodu</SH>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginBottom: '1.5rem' }}>
+          {INTEL_STATUS_LIST.slice(0, 5).map(s => (
+            <button key={s.key} onClick={() => updateTarget(t.id, { status: s.key })}
+              style={{ display: 'block', width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.6rem', border: `1px solid ${s.color}33`, background: t.status === s.key ? s.bg : 'transparent', color: t.status === s.key ? s.color : T.ghost, borderRadius: 2, cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
               {s.label}
             </button>
           ))}
         </div>
 
-        {/* Data source */}
-        <div style={{marginTop:'1.25rem',padding:'0.5rem 0.6rem',background:C.card,border:`1px solid ${C.border}`,borderRadius:3}}>
-          <div style={{fontFamily:mono,fontSize:'0.4rem',letterSpacing:'1.5px',textTransform:'uppercase',color:C.ghost,marginBottom:'0.2rem'}}>Zdroj dát</div>
-          <div style={{fontFamily:mono,fontSize:'0.52rem',color:C.dim}}>{isLive?'🔴 Google Reviews + AI':'AI simulácia'}</div>
-          {t.reviewsCachedAt && <div style={{fontFamily:mono,fontSize:'0.48rem',color:C.ghost,marginTop:'0.1rem'}}>{new Date(t.reviewsCachedAt).toLocaleDateString('sk-SK')}</div>}
+        {/* Contacts */}
+        <SH>Kontakty</SH>
+        {t.email && !t.contacts?.length && (
+          <div style={{ padding: '0.5rem 0.65rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: '0.4rem' }}>
+            <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: T.green }}>✉ {t.email}</a>
+          </div>
+        )}
+        {(t.contacts || []).slice(0, 3).map((c, i) => <CRow key={i} c={c} />)}
+        {!t.contacts?.length && !t.email && (
+          <div style={{ fontFamily: mono, fontSize: '0.55rem', color: T.ghost, fontStyle: 'italic', marginBottom: '0.75rem' }}>Dáta zatiaľ neoverené</div>
+        )}
+        <button onClick={() => { setNav('contacts'); runFindContacts() }} disabled={findLoading}
+          style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.6rem', border: `1px solid ${T.border}`, background: 'transparent', color: T.dim, borderRadius: 3, cursor: 'pointer', marginTop: '0.35rem', marginBottom: '1.5rem', opacity: findLoading ? 0.6 : 1 }}>
+          {findLoading ? '⏳' : '🔍 Nájsť kontakty'}
+        </button>
+
+        {/* Quick actions */}
+        <SH>Rýchle akcie</SH>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+          {[
+            { label: '✉ Email',          action: () => setNav('email'),    col: T.green  },
+            { label: '⚡ Signal Engine',  action: () => { runSignals(); setNav('signals') }, col: T.orange },
+            { label: '🧠 AI Analýza',    action: () => { runAnalysis(); setNav('analysis') }, col: T.amber  },
+          ].map(({ label, action, col }) => (
+            <button key={label} onClick={action}
+              style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.35rem 0.7rem', border: `1px solid ${col}33`, background: `${col}08`, color: col, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Data freshness */}
+        <div style={{ marginTop: '1.5rem', padding: '0.6rem 0.75rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: T.ghost, marginBottom: '0.3rem' }}>Aktuálnosť dát</div>
+          <div style={{ fontFamily: mono, fontSize: '0.54rem', color: isLive ? T.green : T.dim, marginBottom: '0.1rem' }}>{isLive ? '🔴 Živé Google dáta' : 'AI simulácia'}</div>
+          {t.reviewsCachedAt && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: T.ghost }}>{new Date(t.reviewsCachedAt).toLocaleDateString('sk-SK')}</div>}
         </div>
       </div>
     </div>
