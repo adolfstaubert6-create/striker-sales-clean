@@ -100,14 +100,49 @@ function normalizeUrl(url) {
 
 async function firecrawlPage(url) {
   if (!FIRECRAWL_KEY || !url) return null
-  const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${FIRECRAWL_KEY}` },
-    body:    JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true }),
-  })
-  if (!res.ok) return null
-  const data = await res.json()
-  if (!data.success) return null
+
+  let res
+  try {
+    res = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${FIRECRAWL_KEY}` },
+      body:    JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true }),
+    })
+  } catch (fetchErr) {
+    console.error(`[firecrawl] Network error for ${url}:`, fetchErr.message)
+    return null
+  }
+
+  // Log status pre debug
+  const ct = res.headers.get('content-type') || ''
+  console.log(`[firecrawl] ${url} → status=${res.status} content-type=${ct}`)
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    console.error(`[firecrawl] ${res.status} for ${url} — body preview: ${errText.slice(0, 200)}`)
+    return null
+  }
+
+  // Overenie Content-Type pred JSON.parse
+  if (!ct.includes('application/json')) {
+    const rawText = await res.text().catch(() => '')
+    console.error(`[firecrawl] Non-JSON response for ${url}. Content-Type: ${ct}. Preview: ${rawText.slice(0, 300)}`)
+    return null
+  }
+
+  let data
+  try {
+    data = await res.json()
+  } catch (jsonErr) {
+    console.error(`[firecrawl] JSON parse failed for ${url}:`, jsonErr.message)
+    return null
+  }
+
+  if (!data.success) {
+    console.warn(`[firecrawl] success=false for ${url}:`, data.error || 'no error msg')
+    return null
+  }
+
   const content = (data.data?.markdown || '').slice(0, 3000)
   if (content.trim().length < 80) return null
   return { url, title: data.data?.metadata?.title || '', content }
@@ -277,9 +312,16 @@ exports.handler = async (event) => {
   console.log(`[intel-gather] START — "${companyName}" | firecrawl=${!!FIRECRAWL_KEY}`)
 
   try {
-    // 1. Scrape web pages
-    const pages = await withTimeout(() => gatherWebPages(baseUrl), 20000) || []
-    console.log(`[intel-gather] Scraped: ${pages.length} pages`)
+    // 1. Scrape web pages — zachytí akékoľvek Firecrawl chyby
+    let pages = []
+    let crawlError = null
+    try {
+      pages = await withTimeout(() => gatherWebPages(baseUrl), 20000) || []
+      console.log(`[intel-gather] Scraped: ${pages.length} pages`)
+    } catch (crawlErr) {
+      crawlError = crawlErr.message
+      console.error('[intel-gather] Firecrawl error (pokračujem bez webu):', crawlErr.message)
+    }
 
     // 2. Signal detection from all web content
     const allText          = pages.map(p => p.content).join(' ')
@@ -313,7 +355,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         ok: true, elapsed: `${elapsed}s`,
         webPagesCount:   pages.length,
-        crawlStatus:     pages.length > 0 ? 'success' : (FIRECRAWL_KEY ? 'no_content' : 'no_api_key'),
+        crawlStatus:     pages.length > 0 ? 'success' : crawlError ? `error: ${crawlError.slice(0,80)}` : (FIRECRAWL_KEY ? 'no_content' : 'no_api_key'),
         crawlTimestamp:  new Date().toISOString(),
 
         // Real signal data
