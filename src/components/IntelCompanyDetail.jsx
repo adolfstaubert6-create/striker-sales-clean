@@ -303,7 +303,7 @@ function TabEnergy({ t }) {
 
 const LANG_CODES = ['sk', 'de']
 
-function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLang, L, emailDraft, onSaveDraft, defaultDraftLang }) {
+function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLang, L, emailDraft, onSaveDraft, onQueueDraft, onDraftDirty, defaultDraftLang }) {
   const r = analysisResult
   const btnStyle = (active) => ({
     fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1.5px', textTransform: 'uppercase',
@@ -397,6 +397,8 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLan
         <EmailDraftEditor
           draft={emailDraft}
           onSave={onSaveDraft}
+          onQueue={onQueueDraft}
+          onDirtyChange={onDraftDirty}
           defaultLang={defaultDraftLang}
         />
       </div>
@@ -609,6 +611,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   const [analysisResult, setAnalysisResult] = useState(null)
   const [lang,           setLang]           = useState('sk')
   const [emailDraft,     setEmailDraft]     = useState(() => initDraft(t))
+  const [draftDirty,    setDraftDirty]    = useState(false)
 
   const L = LOCALES[lang] || sk
 
@@ -633,6 +636,24 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
     const updated = { ...emailDraft, [draftLang]: { subject, body } }
     setEmailDraft(updated)
     await updateTarget(t.id, { emailDraft: updated })
+  }
+
+  async function handleQueueEmail(draftLang, subject, body) {
+    const updated = { ...emailDraft, [draftLang]: { subject, body } }
+    setEmailDraft(updated)
+    await updateTarget(t.id, {
+      emailDraft: updated,
+      emailQueueStatus: 'pending_approval',
+      emailQueueLang: draftLang,
+      emailQueueAt: new Date().toISOString(),
+    })
+  }
+
+  function handleClose() {
+    if (draftDirty) {
+      if (!window.confirm('Máte neuložené zmeny v email drafte. Chcete ich zahodiť?')) return
+    }
+    onClose()
   }
 
   async function handleGather() {
@@ -672,7 +693,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, padding: '1rem', overflowY: 'auto' }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
+      onClick={e => e.target === e.currentTarget && handleClose()}>
       <div style={{ background: '#0d1117', border: '1px solid #1e2530', borderTop: `3px solid ${oc}`, borderRadius: 4, width: '100%', maxWidth: 900, margin: '0 auto' }}>
 
         {/* Modal hlavička */}
@@ -687,7 +708,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
           </div>
           <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
             <button onClick={() => setConfirmDel(true)} style={{ fontFamily: mono, fontSize: '0.58rem', letterSpacing: '1px', background: 'rgba(239,68,68,0.08)', border: '1px solid #ef444466', color: '#ef4444', padding: '0.28rem 0.65rem', borderRadius: 2, cursor: 'pointer' }}>🗑</button>
-            <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: '0 0.2rem' }}>✕</button>
+            <button onClick={handleClose} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '1.1rem', cursor: 'pointer', lineHeight: 1, padding: '0 0.2rem' }}>✕</button>
           </div>
         </div>
 
@@ -710,7 +731,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         <div style={{ padding: '1.25rem 1.4rem' }}>
           {activeTab === 'overview' && <TabOverview t={t} />}
           {activeTab === 'energy'   && <TabEnergy   t={t} />}
-          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} emailDraft={emailDraft} onSaveDraft={handleSaveDraft} defaultDraftLang={defaultDraftLang(t)} />}
+          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} emailDraft={emailDraft} onSaveDraft={handleSaveDraft} onQueueDraft={handleQueueEmail} onDraftDirty={setDraftDirty} defaultDraftLang={defaultDraftLang(t)} />}
           {activeTab === 'sources'  && <TabSources  t={t} />}
           {activeTab === 'roi'      && <TabROI      t={t} />}
           {activeTab === 'crm'      && <TabCRM      t={t} onStatusChange={handleStatusChange} saving={saving} />}
