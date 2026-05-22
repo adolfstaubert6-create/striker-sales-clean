@@ -106,36 +106,150 @@ function TabOverview({ t }) {
   )
 }
 
-function TabEnergy({ t }) {
-  const signalsCats = t.signalsByCategory || {}
-  const hasSignals  = Object.keys(signalsCats).length > 0
+function ProblemCard({ p, idx }) {
+  const sevColor = { critical: '#ff5c00', high: '#ffaa00', medium: '#818cf8', low: '#4b5563' }
+  const sevLabel = { critical: 'KRITICKÝ', high: 'VYSOKÝ', medium: 'STREDNÝ', low: 'NÍZKY' }
+  const color    = sevColor[p.severity] || '#ffaa00'
 
   return (
-    <div>
-      <SectionTitle>Detekované energetické problémy</SectionTitle>
-
-      {t.aiAnalysis?.energyProblem ? (
-        <div style={{ padding: '0.75rem 0.85rem', background: '#0d1117', border: '1px solid #ffaa0033', borderLeft: '3px solid #ffaa00', borderRadius: 3, marginBottom: '1rem' }}>
-          <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#ffaa00', marginBottom: '0.3rem' }}>⚠ Hlavný energetický problém</div>
-          <div style={{ fontFamily: mono, fontSize: '0.65rem', color: '#9ca3af', lineHeight: 1.65 }}>{t.aiAnalysis.energyProblem}</div>
+    <div style={{ background: '#0d1117', border: `1px solid ${color}33`, borderLeft: `3px solid ${color}`, borderRadius: 3, padding: '0.85rem 1rem', marginBottom: '0.65rem' }}>
+      {/* Hlavička problému */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.65rem' }}>
+        <div>
+          <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1.5px', textTransform: 'uppercase', color, marginBottom: '0.2rem' }}>
+            🔥 PROBLÉM {idx + 1} · {sevLabel[p.severity] || 'STREDNÝ'}
+          </div>
+          <div style={{ fontFamily: "'IBM Plex Sans',sans-serif", fontSize: '0.9rem', fontWeight: 700, color: '#e8eaed' }}>
+            {p.problem}
+          </div>
         </div>
-      ) : (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '1rem', fontStyle: 'italic' }}>
-          Spustiť AI analýzu pre detekciu energetických problémov
+        {/* Confidence meter */}
+        <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '0.75rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '1.3rem', fontWeight: 700, color, lineHeight: 1 }}>{p.confidence}%</div>
+          <div style={{ fontFamily: mono, fontSize: '0.42rem', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '1px' }}>confidence</div>
+          <div style={{ marginTop: '0.2rem', width: 56, height: 3, background: '#1e2530', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ width: `${p.confidence}%`, height: '100%', background: color, borderRadius: 2 }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Detekovaný text / citácia */}
+      {p.detectedText && (
+        <div style={{ marginBottom: '0.5rem', padding: '0.4rem 0.6rem', background: '#111418', border: '1px solid #1e2530', borderRadius: 2 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.15rem' }}>
+            📄 Detekovaný text
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#818cf8', fontStyle: 'italic', lineHeight: 1.5 }}>
+            „{p.detectedText}"
+          </div>
         </div>
       )}
 
-      {hasSignals && (
+      {/* Zdroj */}
+      {p.source && p.source !== 'segment_analysis' && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <span style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151' }}>Zdroj: </span>
+          <a href={p.source.startsWith('http') ? p.source : `https://${p.source}`} target="_blank" rel="noreferrer"
+            style={{ fontFamily: mono, fontSize: '0.58rem', color: '#818cf8', wordBreak: 'break-all' }}>
+            {p.source}
+          </a>
+        </div>
+      )}
+      {p.source === 'segment_analysis' && (
+        <div style={{ marginBottom: '0.5rem', fontFamily: mono, fontSize: '0.52rem', color: '#374151' }}>
+          ℹ Zdroj: AI odhad na základe segmentu (bez webu)
+        </div>
+      )}
+
+      {/* AI reasoning */}
+      {p.aiReasoning && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.15rem' }}>
+            🧠 AI reasoning
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.6 }}>{p.aiReasoning}</div>
+        </div>
+      )}
+
+      {/* STRIKER riešenie */}
+      {p.strikerSolution && (
+        <div style={{ padding: '0.35rem 0.6rem', background: 'rgba(0,204,136,0.06)', border: '1px solid rgba(0,204,136,0.2)', borderRadius: 2 }}>
+          <span style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#00cc88' }}>✦ STRIKER rieši: </span>
+          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: '#00cc88' }}>{p.strikerSolution}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MetricGauge({ label, value, description }) {
+  if (value == null) return (
+    <div style={{ textAlign: 'center', padding: '0.65rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+      <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
+      <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#1e2530' }}>—</div>
+    </div>
+  )
+  const color = value >= 70 ? '#ff5c00' : value >= 50 ? '#ffaa00' : '#4b5563'
+  return (
+    <div style={{ textAlign: 'center', padding: '0.65rem', background: '#0d1117', border: `1px solid ${value >= 70 ? color + '33' : '#1e2530'}`, borderRadius: 3 }}>
+      <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
+      <div style={{ fontFamily: mono, fontSize: '1.4rem', fontWeight: 700, color, lineHeight: 1 }}>{value}%</div>
+      <div style={{ height: 3, background: '#1e2530', borderRadius: 2, overflow: 'hidden', margin: '0.2rem 0' }}>
+        <div style={{ width: `${value}%`, height: '100%', background: color, borderRadius: 2 }} />
+      </div>
+      {description && <div style={{ fontFamily: mono, fontSize: '0.42rem', color: '#374151', lineHeight: 1.4 }}>{description}</div>}
+    </div>
+  )
+}
+
+function TabEnergy({ t }) {
+  const profile    = t.problemProfile    || []
+  const hasProfile = profile.length > 0
+  const signalsCats = t.signalsByCategory || {}
+  const hasMetrics = t.heatPressure != null
+
+  return (
+    <div>
+      {/* Problem Profile */}
+      <SectionTitle>⚠ Problem Profile</SectionTitle>
+
+      {!hasProfile ? (
+        <div style={{ padding: '1.25rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, textAlign: 'center', marginBottom: '1.25rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '0.35rem' }}>
+            Žiadny Problem Profile — spustiť Firecrawl analýzu
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#1e2530' }}>
+            → AI Analýza tab → 🔍 Spustiť Firecrawl analýzu
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginBottom: '1.25rem' }}>
+          {profile.map((p, i) => <ProblemCard key={i} p={p} idx={i} />)}
+        </div>
+      )}
+
+      {/* AI metriky */}
+      <SectionTitle>AI Metriky energetickej záťaže</SectionTitle>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '0.5rem', marginBottom: '1.25rem' }}>
+        <MetricGauge label="Heat Pressure"         value={t.heatPressure}         description="Tlak tepelnej spotreby" />
+        <MetricGauge label="Thermal Dependency"    value={t.thermalDependency}    description="Závislosť od tepla" />
+        <MetricGauge label="Operating Cost"        value={t.operatingCostPressure}description="Nákladový tlak" />
+        <MetricGauge label="Modernization Need"    value={t.modernizationNeed}    description="Potreba obnovy" />
+        <MetricGauge label="Boiler Dependency"     value={t.boilerDependencyProb} description="Závislosť na kotle" />
+      </div>
+
+      {/* Signály podľa kategórie */}
+      {Object.keys(signalsCats).length > 0 && (
         <div style={{ marginBottom: '1rem' }}>
-          <SectionTitle>Signály podľa kategórie</SectionTitle>
+          <SectionTitle>Detekované signály podľa kategórie</SectionTitle>
           {Object.entries(signalsCats).map(([key, data]) => (
-            <div key={key} style={{ marginBottom: '0.65rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.25rem' }}>
+            <div key={key} style={{ marginBottom: '0.6rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.2rem' }}>
                 {data.label || key}
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.22rem' }}>
                 {(data.found || []).map((kw, i) => (
-                  <span key={i} style={{ fontFamily: mono, fontSize: '0.54rem', padding: '0.1rem 0.4rem', border: '1px solid #818cf844', borderRadius: 2, color: '#818cf8', background: 'rgba(129,140,248,0.08)' }}>{kw}</span>
+                  <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', padding: '0.08rem 0.38rem', border: '1px solid #818cf844', borderRadius: 2, color: '#818cf8', background: 'rgba(129,140,248,0.08)' }}>{kw}</span>
                 ))}
               </div>
             </div>
@@ -143,38 +257,16 @@ function TabEnergy({ t }) {
         </div>
       )}
 
-      {(t.signals || []).length > 0 && (
+      {/* Firecrawl findings */}
+      {t.lastGatherSummary?.pressureExplanation && (
         <div>
-          <SectionTitle>Nájdené signály</SectionTitle>
-          {t.signals.map((s, i) => (
-            <div key={i} style={{ display: 'flex', gap: '0.45rem', marginBottom: '0.3rem', alignItems: 'flex-start' }}>
-              <span style={{ color: '#ff5c00', fontFamily: mono, fontSize: '0.6rem', flexShrink: 0 }}>▸</span>
-              <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.5 }}>{s}</span>
+          <SectionTitle>Firecrawl — celkový tlak</SectionTitle>
+          <div style={{ padding: '0.6rem 0.8rem', background: '#0d1117', border: `1px solid ${t.lastGatherSummary.isRealPressure ? '#ff5c0044' : '#1e2530'}`, borderRadius: 3 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: t.lastGatherSummary.isRealPressure ? '#ff5c00' : '#6b7280', lineHeight: 1.5 }}>
+              {t.lastGatherSummary.isRealPressure ? '⚡ REÁLNY TLAK: ' : '💬 Marketing: '}
+              {t.lastGatherSummary.pressureExplanation}
             </div>
-          ))}
-        </div>
-      )}
-
-      {t.lastGatherSummary && (
-        <div style={{ marginTop: '1rem' }}>
-          <SectionTitle>Firecrawl výsledky</SectionTitle>
-          {t.lastGatherSummary.energyFindings && (
-            <InfoRow label="Energetika"    value={t.lastGatherSummary.energyFindings}        color="#ffaa00" />
-          )}
-          {t.lastGatherSummary.modernizationFindings && (
-            <InfoRow label="Modernizácia"  value={t.lastGatherSummary.modernizationFindings} />
-          )}
-          {t.lastGatherSummary.esgFindings && (
-            <InfoRow label="ESG"           value={t.lastGatherSummary.esgFindings}           color="#00cc88" />
-          )}
-          {t.lastGatherSummary.pressureExplanation && (
-            <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.7rem', background: '#0d1117', border: `1px solid ${t.lastGatherSummary.isRealPressure ? '#ff5c0044' : '#1e2530'}`, borderRadius: 3 }}>
-              <span style={{ fontFamily: mono, fontSize: '0.6rem', color: t.lastGatherSummary.isRealPressure ? '#ff5c00' : '#6b7280' }}>
-                {t.lastGatherSummary.isRealPressure ? '⚡ REÁLNY TLAK: ' : '💬 Marketing: '}
-                {t.lastGatherSummary.pressureExplanation}
-              </span>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>
@@ -467,8 +559,33 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
       const mergedSignals = [...new Set([...(t.signals||[]), ...(data.signals||[])])]
-      await updateTarget(t.id, { signals: mergedSignals, ...(data.updatedScores || {}), websiteSummary: data.websiteSummary || '', extractedKeywords: data.extractedKeywords || [], estimatedHeatDemand: data.estimatedHeatDemand || '', estimatedEnergyIntensity: data.estimatedEnergyIntensity || '', estimatedROI: data.estimatedROI || '', aiReasoning: data.aiReasoning || '', businessOpportunity: data.businessOpportunity || '', detectedSignals: data.detectedSignals || [], signalsByCategory: data.signalsByCategory || {}, keyEvidence: data.keyEvidence || [], sources: [...(t.sources||[]), ...(data.sources||[]).map(s=>({...s,addedAt:new Date().toISOString()}))], scrapedPages: data.scrapedPages || [], crawlStatus: data.crawlStatus || '', crawlTimestamp: data.crawlTimestamp || '', lastGatherSummary: data.aiInterpretation || null })
-      setGatherMsg(`✓ ${data.webPagesCount} stránok · ${(data.signals||[]).length} signálov`)
+      await updateTarget(t.id, {
+        signals:                mergedSignals,
+        ...(data.updatedScores || {}),
+        websiteSummary:         data.websiteSummary          || '',
+        extractedKeywords:      data.extractedKeywords        || [],
+        estimatedHeatDemand:    data.estimatedHeatDemand      || '',
+        estimatedEnergyIntensity:data.estimatedEnergyIntensity|| '',
+        estimatedROI:           data.estimatedROI             || '',
+        aiReasoning:            data.aiReasoning              || '',
+        businessOpportunity:    data.businessOpportunity      || '',
+        detectedSignals:        data.detectedSignals          || [],
+        signalsByCategory:      data.signalsByCategory        || {},
+        keyEvidence:            data.keyEvidence              || [],
+        sources:                [...(t.sources||[]), ...(data.sources||[]).map(s=>({...s,addedAt:new Date().toISOString()}))],
+        scrapedPages:           data.scrapedPages             || [],
+        crawlStatus:            data.crawlStatus              || '',
+        crawlTimestamp:         data.crawlTimestamp           || '',
+        lastGatherSummary:      data.aiInterpretation         || null,
+        // Nové Problem Profile polia
+        problemProfile:         data.problemProfile           || [],
+        heatPressure:           data.heatPressure             ?? null,
+        thermalDependency:      data.thermalDependency        ?? null,
+        operatingCostPressure:  data.operatingCostPressure    ?? null,
+        modernizationNeed:      data.modernizationNeed        ?? null,
+        boilerDependencyProb:   data.boilerDependencyProb     ?? null,
+      })
+      setGatherMsg(`✓ ${data.webPagesCount} stránok · ${(data.signals||[]).length} signálov · ${(data.problemProfile||[]).length} problémov detekovaných`)
     } catch (e) { setGatherMsg('⚠ ' + e.message) }
     finally { setGathering(false) }
   }

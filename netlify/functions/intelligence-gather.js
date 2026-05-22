@@ -162,31 +162,49 @@ Ak web nebol dostupný, odhadni na základe segmentu + lokality + veľkosti — 
 Vráť VÝLUČNE valid JSON (žiadny markdown), VŠETOK TEXT PO SLOVENSKY:
 {
   "websiteSummary": "<Čo táto konkrétna firma robí — 2-3 vety z obsahu webu. Ak web chýba: odhad na základe segmentu.>",
-  "extractedKeywords": ["<max 8 kľúčových slov nájdených na webe alebo relevantných pre segment>"],
+  "extractedKeywords": ["<max 8 kľúčových slov>"],
   "estimatedHeatDemand": "<Konkrétny odhad tepelnej potreby napr. '~120-180 kW — hotel s bazénom, saunou a 80 izbami'>",
-  "estimatedBusinessSize": "<Veľkosť firmy na základe webu napr. 'Stredná firma · ~50-150 zamestnancov · 3 pobočky'>",
-  "estimatedEnergyIntensity": "<nízka|stredná|vysoká|veľmi vysoká> — <dôvod 1 veta>",
+  "estimatedBusinessSize": "<Veľkosť firmy na základe webu>",
+  "estimatedEnergyIntensity": "<nízka|stredná|vysoká|veľmi vysoká> — <dôvod>",
   "estimatedROI": "<Odhad ROI pre STRIKER napr. '8-15 mesiacov · úspora ~800-1 200 EUR/mesiac'>",
-  "aiReasoning": "<Prečo je táto firma dobrý target — 2-3 vety KONKRÉTNE z obsahu webu alebo segmentu>",
-  "businessOpportunity": "<Konkrétna obchodná príležitosť pre STRIKER v tejto firme — 1-2 vety>",
+  "aiReasoning": "<Prečo je táto firma dobrý target — 2-3 vety KONKRÉTNE>",
+  "businessOpportunity": "<Konkrétna obchodná príležitosť — 1-2 vety>",
   "isRealPressure": <true|false>,
   "pressureLevel": "nízky|stredný|vysoký|kritický",
-  "pressureExplanation": "<Konkrétny dôvod reálneho tlaku alebo jeho absencie — 1-2 vety>",
-  "timingAssessment": "<Je teraz vhodný čas? Prečo? — 1 veta>",
-  "signals": ["<konkrétny signál 1>","<signál 2>","<signál 3>","<signál 4>"],
-  "keyEvidence": ["<priama citácia alebo konkrétny fakt z webu 1>","<fakt 2>"],
-  "strikerArgument": "<Najsilnejší 1-vetový predajný argument pre STRIKER špecificky pre túto firmu>",
+  "pressureExplanation": "<Konkrétny dôvod — 1-2 vety>",
+  "timingAssessment": "<Je teraz vhodný čas? — 1 veta>",
+  "signals": ["<signál 1>","<signál 2>","<signál 3>","<signál 4>"],
+  "keyEvidence": ["<citácia z webu 1>","<citácia 2>"],
+  "strikerArgument": "<Najsilnejší predajný argument — 1 veta>",
   "urgencyBoost": <int -20 to 30>,
   "buyingIntentBoost": <int -20 to 30>,
-  "energyFindings": "<Čo konkrétne naznačuje spotrebu energie — 1-2 vety>",
-  "modernizationFindings": "<Signály modernizácie alebo rekonštrukcie — 1-2 vety>",
-  "esgFindings": "<ESG/sustainability signály — 1-2 vety>"
+  "energyFindings": "<Energetické náklady — 1-2 vety>",
+  "modernizationFindings": "<Modernizácia — 1-2 vety>",
+  "esgFindings": "<ESG — 1-2 vety>",
+
+  "problemProfile": [
+    {
+      "problem": "<Konkrétny energetický problém — max 8 slov>",
+      "confidence": <int 0-100>,
+      "source": "<URL stránky kde bol text nájdený, alebo 'segment_analysis' ak web chýba>",
+      "detectedText": "<Doslová citácia z webu ktorá naznačuje problém, alebo null>",
+      "aiReasoning": "<Prečo si AI myslí že firma má tento problém — 1-2 vety konkrétne>",
+      "severity": "critical|high|medium|low",
+      "strikerSolution": "<Ako konkrétne STRIKER rieši práve tento problém — 1 veta>"
+    }
+  ],
+
+  "heatPressure": <int 0-100, tlak vysokej spotreby tepla>,
+  "thermalDependency": <int 0-100, závislosť prevádzky od tepla>,
+  "operatingCostPressure": <int 0-100, tlak prevádzkových nákladov>,
+  "modernizationNeed": <int 0-100, potreba modernizácie kotolne>,
+  "boilerDependencyProb": <int 0-100, pravdepodobnosť závislosti na kotli>
 }`
 
   const res  = await fetch('https://api.anthropic.com/v1/messages', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
-    body:    JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 1400, messages: [{ role: 'user', content: prompt }] }),
+    body:    JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error?.message || `Claude ${res.status}`)
@@ -303,6 +321,14 @@ exports.handler = async (event) => {
         // Scores and interpretation
         updatedScores,
         sources,
+
+        // Problem Profile — s confidence, zdrojom, citáciou a AI reasoning
+        problemProfile:          ai.problemProfile          || [],
+        heatPressure:            ai.heatPressure            ?? null,
+        thermalDependency:       ai.thermalDependency       ?? null,
+        operatingCostPressure:   ai.operatingCostPressure   ?? null,
+        modernizationNeed:       ai.modernizationNeed       ?? null,
+        boilerDependencyProb:    ai.boilerDependencyProb    ?? null,
 
         aiInterpretation: {
           isRealPressure:        ai.isRealPressure,
