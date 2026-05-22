@@ -189,6 +189,22 @@ async function gatherWebPages(baseUrl) {
 
 // ── Claude AI — real business intelligence ────────────────────────────────────
 
+// Short fallback prompt for no-web scenario — faster, fewer tokens
+function buildNoWebPrompt(companyName, segmentLabel, city, country, currentScores) {
+  return `Si STRIKER INTELLIGENCE AI. Vráť VÝLUČNE valid JSON bez markdown.
+
+STRIKER: 45kW → 120-160kW teplo, 8000-10000 EUR, ROI 6-36 mes.
+
+FIRMA: ${companyName}
+SEGMENT: ${segmentLabel}
+LOKALITA: ${[city, country].filter(Boolean).join(', ')}
+FIT SCORE: ${currentScores.strikerFit}/100
+WEB: nedostupný — odhadni podľa segmentu
+
+JSON (slovensky, stručne):
+{"websiteSummary":"AI odhad — web nedostupný. 2 vety o firme podľa segmentu.","extractedKeywords":[],"estimatedHeatDemand":"odhad kW","estimatedBusinessSize":"odhad veľkosti","estimatedEnergyIntensity":"úroveň","estimatedROI":"X-Y mesiacov","aiReasoning":"2 vety prečo STRIKER target","businessOpportunity":"1 veta","isRealPressure":true,"pressureLevel":"stredný","pressureExplanation":"1 veta","timingAssessment":"1 veta","signals":["signál 1","signál 2"],"keyEvidence":[],"strikerArgument":"1 veta","urgencyBoost":5,"buyingIntentBoost":5,"energyFindings":"1 veta","modernizationFindings":"1 veta","esgFindings":"1 veta","problemProfile":[{"problem":"max 8 slov","confidence":65,"source":"segment_analysis","detectedText":null,"aiReasoning":"1 veta","severity":"medium","strikerSolution":"1 veta"},{"problem":"druhý problém","confidence":60,"source":"segment_analysis","detectedText":null,"aiReasoning":"1 veta","severity":"medium","strikerSolution":"1 veta"}],"heatPressure":70,"heatPressureReason":"1 veta","thermalDependency":70,"thermalDependencyReason":"1 veta","operatingCostPressure":65,"operatingCostPressureReason":"1 veta","modernizationNeed":60,"modernizationNeedReason":"1 veta","boilerDependencyProb":70,"boilerDependencyProbReason":"1 veta","willingnessToSolve":65,"willingnessToSolveReason":"1 veta"}`
+}
+
 async function analyzeWithClaude({ companyName, segmentLabel, city, country, pages, signalsByCategory, currentScores }) {
   const hasContent   = pages.length > 0
   const webContent   = hasContent
@@ -434,22 +450,29 @@ exports.handler = async (event) => {
   // ────────────────────────────────────────────────────────────────────────────
 
   try {
-    console.log(`[PIPELINE] START targetId=${targetId} company="${companyName}" url=${baseUrl||'none'}`)
+    const currentScores = { urgency: urgencyScore, buyingIntent: buyingIntentScore, strikerFit: strikerFitScore, heatDemand: heatDemandScore, energyPain: energyPainScore, financialPower: financialPowerScore }
+    console.log(`[PIPELINE] START targetId=${targetId} company="${companyName}" url=${baseUrl||'NONE (no-web fallback)'}`)
 
-    // ── STEP 1: Firecrawl ──
-    console.log(`[PIPELINE] STEP 1 — Firecrawl scrape`)
+    // ── STEP 1: Firecrawl — skipped if no URL ──
     let pages    = []
     let scanMode = 'no_url'
     let crawlError = null
-    try {
-      const crawlResult = await withTimeout(() => gatherWebPages(baseUrl), 28000, 'gatherWebPages')
-      pages    = crawlResult?.pages    || []
-      scanMode = crawlResult?.scanMode || 'timeout'
-      console.log(`[PIPELINE] STEP 1 DONE — ${pages.length} pages, mode=${scanMode}, total_chars=${pages.reduce((a,p)=>a+p.content.length,0)}`)
-    } catch (crawlErr) {
-      crawlError = crawlErr.message
-      scanMode   = 'error'
-      console.error('[PIPELINE] STEP 1 ERROR:', crawlErr.message, '— continuing without web data')
+
+    if (!baseUrl) {
+      console.log(`[PIPELINE] STEP 1 SKIPPED — no URL, using name/segment/city fallback`)
+      scanMode = 'no_url_fallback'
+    } else {
+      console.log(`[PIPELINE] STEP 1 — Firecrawl scrape`)
+      try {
+        const crawlResult = await withTimeout(() => gatherWebPages(baseUrl), 22000, 'gatherWebPages')
+        pages    = crawlResult?.pages    || []
+        scanMode = crawlResult?.scanMode || 'timeout'
+        console.log(`[PIPELINE] STEP 1 DONE — ${pages.length} pages, mode=${scanMode}`)
+      } catch (crawlErr) {
+        crawlError = crawlErr.message
+        scanMode   = 'error'
+        console.error('[PIPELINE] STEP 1 ERROR:', crawlErr.message)
+      }
     }
 
     // ── STEP 2: Signal detection ──
@@ -457,20 +480,42 @@ exports.handler = async (event) => {
     const allText           = pages.map(p => p.content).join(' ')
     const signalsByCategory = detectSignals(allText)
     const allDetectedSignals = Object.entries(signalsByCategory).flatMap(([, v]) => v.found)
-    console.log(`[PIPELINE] STEP 2 DONE — groups: [${Object.keys(signalsByCategory).join(', ')}] total_signals=${allDetectedSignals.length}`)
+    console.log(`[PIPELINE] STEP 2 DONE — signals: ${allDetectedSignals.length}`)
 
-    // ── STEP 3: Claude AI ──
-    console.log(`[PIPELINE] STEP 3 — Claude AI analysis`)
-    const ai = await analyzeWithClaude({
-      companyName, segmentLabel: segmentLabel || segment, city, country,
-      pages, signalsByCategory,
-      currentScores: { urgency: urgencyScore, buyingIntent: buyingIntentScore, strikerFit: strikerFitScore, heatDemand: heatDemandScore, energyPain: energyPainScore, financialPower: financialPowerScore },
-    })
-    console.log(`[PIPELINE] STEP 3 DONE — score=${ai.heatPressure} problemProfile=${(ai.problemProfile||[]).length} items`)
+    // ── STEP 3: Claude AI — short prompt + 18s timeout when no web data ──
+    console.log(`[PIPELINE] STEP 3 — Claude AI${!baseUrl ? ' (no-web prompt, 18s limit)' : ''}`)
+    let ai
+
+    if (!baseUrl) {
+      // No-web fast path: simple prompt, 1000 tokens, 18s timeout
+      const noWebPrompt = buildNoWebPrompt(companyName, segmentLabel || segment, city, country, currentScores)
+      const claudeT0 = Date.now()
+      console.log('[CLAUDE-NOWEB] START')
+      const fcNoWeb = fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 1000, messages: [{ role: 'user', content: noWebPrompt }] }),
+      })
+      const toNoWeb = new Promise((_, rej) => setTimeout(() => rej(new Error('Claude no-web timeout 18s')), 18000))
+      const rNoWeb = await Promise.race([fcNoWeb, toNoWeb])
+      console.log(`[CLAUDE-NOWEB] HTTP ${rNoWeb.status} in ${Date.now()-claudeT0}ms`)
+      const dNoWeb = await rNoWeb.json()
+      if (!rNoWeb.ok) throw new Error(dNoWeb.error?.message || `Claude ${rNoWeb.status}`)
+      const rawNoWeb = (dNoWeb.content?.[0]?.text || '').trim().replace(/^```json\s*/i,'').replace(/```\s*$/i,'').trim()
+      console.log(`[CLAUDE-NOWEB] DONE — ${rawNoWeb.length} chars`)
+      try { ai = JSON.parse(rawNoWeb) }
+      catch (e) { throw new Error('Claude no-web JSON parse failed: ' + e.message) }
+    } else {
+      ai = await analyzeWithClaude({
+        companyName, segmentLabel: segmentLabel || segment, city, country,
+        pages, signalsByCategory, currentScores,
+      })
+    }
+    console.log(`[PIPELINE] STEP 3 DONE — problemProfile=${(ai.problemProfile||[]).length} items`)
 
     // ── STEP 4: Score calculation ──
     console.log(`[PIPELINE] STEP 4 — Score calculation`)
-    const updatedScores = buildUpdatedScores(ai, signalsByCategory, { urgency: urgencyScore, buyingIntent: buyingIntentScore, strikerFit: strikerFitScore, heatDemand: heatDemandScore, energyPain: energyPainScore, financialPower: financialPowerScore })
+    const updatedScores = buildUpdatedScores(ai, signalsByCategory, currentScores)
     console.log(`[PIPELINE] STEP 4 DONE — urgency=${updatedScores.urgencyScore} fit=${updatedScores.strikerFitScore}`)
 
     // ── STEP 5: Sources ──

@@ -584,16 +584,12 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
 
   async function handleGather() {
     console.log('[handleGather] CALLED — t.id:', t.id, 't.web:', t.web, 't.name:', t.name)
-
-    if (!t.web) {
-      console.warn('[handleGather] BLOCKED — t.web is empty/falsy:', t.web)
-      setGatherMsg('⚠ Zadaj web URL')
-      return
-    }
+    const hasWeb = !!t.web
+    if (!hasWeb) console.warn('[handleGather] No web URL — using name/segment/city fallback')
 
     setGathering(true)
     setGatherMsg('')
-    setGatherPhase('🚀 Spúšťam AI analýzu...')
+    setGatherPhase(hasWeb ? '🚀 Spúšťam AI analýzu...' : '🧠 AI analýza (bez webu)...')
 
     const endpoint = '/.netlify/functions/start-intel'
     const payload = {
