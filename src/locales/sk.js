@@ -10,7 +10,7 @@ export const sk = {
   done:           '✓ AI analýza hotová',
   doneFallback:   '✓ AI analýza (záložná)',
   error:          '⚠ Chyba analýzy',
-  placeholder:    "Klikni „🧠 AI Analýza" pre vygenerovanie sales analýzy.",
+  placeholder:    'Klikni na AI Analýza pre vygenerovanie sales analyzy.',
 
   // Score
   scoreSuffix:    'STRIKER FIT',

@@ -2140,7 +2140,7 @@ PRAVIDLÁ EMAILU:
                       )}
 
                       {/* Action bar */}
-                      <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', paddingTop: '0.05rem', borderTop: '1px solid #1a1f2a', paddingTop: '0.5rem' }}>
+                      <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', paddingTop: '0.5rem', borderTop: '1px solid #1a1f2a' }}>
                         {!isResolved && !isSent && (
                           <button style={{ ...css.replyAction, color: '#00cc88', borderColor: '#00cc8844' }}
                             onClick={() => handleResolveReply(r.id)}>✅ Vybavené</button>
