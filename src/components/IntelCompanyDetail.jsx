@@ -188,7 +188,7 @@ function ProblemCard({ p, idx }) {
       {p.aiReasoning && (
         <div style={{ marginBottom: '0.5rem' }}>
           <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.15rem' }}>
-            🧠 AI reasoning
+            🧠 AI zdôvodnenie
           </div>
           <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.6 }}>{p.aiReasoning}</div>
         </div>
@@ -212,7 +212,7 @@ function MetricGauge({ label, value, reason }) {
     <div style={{ padding: '0.7rem 0.8rem', background: '#0d1117', border: `1px solid ${!isEmpty && value >= 70 ? color + '33' : '#1e2530'}`, borderRadius: 3 }}>
       <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
       {isEmpty ? (
-        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#1e2530' }}>—</div>
+        <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', fontStyle: 'italic', lineHeight: 1.4 }}>Čaká na AI signal analýzu</div>
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', marginBottom: '0.25rem' }}>
@@ -238,16 +238,13 @@ function TabEnergy({ t }) {
 
   return (
     <div>
-      {/* Problem Profile */}
-      <SectionTitle>⚠ Problem Profile</SectionTitle>
+      {/* Profil problému */}
+      <SectionTitle>⚠ Profil problému</SectionTitle>
 
       {!hasProfile ? (
         <div style={{ padding: '1.25rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, textAlign: 'center', marginBottom: '1.25rem' }}>
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '0.35rem' }}>
-            Žiadny Problem Profile — spustiť Firecrawl analýzu
-          </div>
-          <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#1e2530' }}>
-            → AI Analýza tab → 🔍 Spustiť Firecrawl analýzu
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic' }}>
+            Čaká na AI signal analýzu
           </div>
         </div>
       ) : (
@@ -259,12 +256,12 @@ function TabEnergy({ t }) {
       {/* AI metriky */}
       <SectionTitle>AI Metriky energetickej záťaže</SectionTitle>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.65rem', marginBottom: '1.25rem' }}>
-        <MetricGauge label="Heat Pressure"        value={t.heatPressure}          reason={t.heatPressureReason} />
-        <MetricGauge label="Thermal Dependency"   value={t.thermalDependency}     reason={t.thermalDependencyReason} />
-        <MetricGauge label="Operating Cost"       value={t.operatingCostPressure} reason={t.operatingCostPressureReason} />
-        <MetricGauge label="Modernization Need"   value={t.modernizationNeed}     reason={t.modernizationNeedReason} />
-        <MetricGauge label="Boiler Dependency"    value={t.boilerDependencyProb}  reason={t.boilerDependencyProbReason} />
-        <MetricGauge label="Willingness To Solve" value={t.willingnessToSolve}    reason={t.willingnessToSolveReason} />
+        <MetricGauge label="Teplotný tlak"          value={t.heatPressure}          reason={t.heatPressureReason} />
+        <MetricGauge label="Závislosť od tepla"     value={t.thermalDependency}     reason={t.thermalDependencyReason} />
+        <MetricGauge label="Prevádzkové náklady"    value={t.operatingCostPressure} reason={t.operatingCostPressureReason} />
+        <MetricGauge label="Potreba modernizácie"   value={t.modernizationNeed}     reason={t.modernizationNeedReason} />
+        <MetricGauge label="Závislosť od kotlov"    value={t.boilerDependencyProb}  reason={t.boilerDependencyProbReason} />
+        <MetricGauge label="Ochota riešiť problém"  value={t.willingnessToSolve}    reason={t.willingnessToSolveReason} />
       </div>
 
       {/* Signály podľa kategórie */}
