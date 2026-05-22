@@ -205,18 +205,33 @@ function ProblemCard({ p, idx }) {
   )
 }
 
+function metricLevel(v) {
+  if (v >= 86) return { label: 'KRITICKÝ', color: '#ef4444' }
+  if (v >= 66) return { label: 'VYSOKÝ',   color: '#ff5c00' }
+  if (v >= 41) return { label: 'STREDNÝ',  color: '#ffaa00' }
+  return              { label: 'NÍZKY',    color: '#6b7280' }
+}
+
 function MetricGauge({ label, value, reason }) {
   const isEmpty = value == null
-  const color   = !isEmpty ? (value >= 70 ? '#ff5c00' : value >= 50 ? '#ffaa00' : '#4b5563') : '#1e2530'
+  const color   = !isEmpty ? (value >= 66 ? '#ff5c00' : value >= 41 ? '#ffaa00' : '#6b7280') : '#1e2530'
+  const level   = !isEmpty ? metricLevel(value) : null
   return (
-    <div style={{ padding: '0.7rem 0.8rem', background: '#0d1117', border: `1px solid ${!isEmpty && value >= 70 ? color + '33' : '#1e2530'}`, borderRadius: 3 }}>
-      <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
+    <div style={{ padding: '0.7rem 0.8rem', background: '#0d1117', border: `1px solid ${!isEmpty && value >= 66 ? color + '33' : '#1e2530'}`, borderRadius: 3 }}>
+      <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
       {isEmpty ? (
         <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', fontStyle: 'italic', lineHeight: 1.4 }}>Čaká na AI signal analýzu</div>
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', marginBottom: '0.25rem' }}>
-            <div style={{ fontFamily: mono, fontSize: '1.35rem', fontWeight: 700, color, lineHeight: 1 }}>{value}%</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.22rem', flexWrap: 'wrap' }}>
+            <div style={{ fontFamily: mono, fontSize: '1.25rem', fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
+            {level && (
+              <span style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+                color: level.color, fontWeight: 700, padding: '0.06rem 0.3rem',
+                border: `1px solid ${level.color}44`, borderRadius: 2, background: `${level.color}12` }}>
+                {level.label}
+              </span>
+            )}
           </div>
           <div style={{ height: 3, background: '#1e2530', borderRadius: 2, overflow: 'hidden', marginBottom: '0.3rem' }}>
             <div style={{ width: `${value}%`, height: '100%', background: color, borderRadius: 2 }} />
@@ -230,14 +245,35 @@ function MetricGauge({ label, value, reason }) {
   )
 }
 
-function TabEnergy({ t }) {
-  const profile    = t.problemProfile    || []
-  const hasProfile = profile.length > 0
+function TabEnergy({ t, onSignal, signalLoading, signalMsg }) {
+  const profile     = t.problemProfile    || []
+  const hasProfile  = profile.length > 0
   const signalsCats = t.signalsByCategory || {}
-  const hasMetrics = t.heatPressure != null
 
   return (
     <div>
+      {/* Signal Engine trigger */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
+        <button
+          onClick={onSignal}
+          disabled={signalLoading}
+          style={{
+            fontFamily: mono, fontSize: '0.6rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+            padding: '0.35rem 0.9rem', border: '1px solid #ff5c0066',
+            background: signalLoading ? 'rgba(255,92,0,0.05)' : 'rgba(255,92,0,0.1)',
+            color: '#ff5c00', borderRadius: 2, cursor: 'pointer', fontWeight: 600,
+            opacity: signalLoading ? 0.7 : 1, transition: 'all 0.15s',
+          }}
+        >
+          {signalLoading ? '⏳ Analyzujem signály...' : '🧠 Spustiť Signal Engine'}
+        </button>
+        {signalMsg && (
+          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: signalMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>
+            {signalMsg}
+          </span>
+        )}
+      </div>
+
       {/* Profil problému */}
       <SectionTitle>⚠ Profil problému</SectionTitle>
 
@@ -616,6 +652,8 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   const [lang,           setLang]           = useState('sk')
   const [emailDraft,     setEmailDraft]     = useState(() => initDraft(t))
   const [draftDirty,    setDraftDirty]    = useState(false)
+  const [signalLoading, setSignalLoading] = useState(false)
+  const [signalMsg,     setSignalMsg]     = useState('')
 
   const L = LOCALES[lang] || sk
 
@@ -634,6 +672,47 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   async function handleDelete() {
     await deleteTarget(t.id)
     onDelete?.(); onClose()
+  }
+
+  async function handleSignalEngine() {
+    setSignalLoading(true)
+    setSignalMsg('')
+    try {
+      const res = await fetch('/.netlify/functions/signal-engine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName:     t.name,
+          segment:         t.segment,
+          segmentLabel:    t.segmentLabel,
+          city:            t.city,
+          strikerFitScore: t.strikerFitScore || 50,
+          painPoints:      analysisResult?.painPoints || t.signals || [],
+          aiReasoning:     analysisResult?.reasoning  || t.aiReasoning || '',
+        }),
+      })
+      const data = await res.json().catch(() => ({ ok: false }))
+      if (!data.ok) throw new Error('Signal engine error')
+      await updateTarget(t.id, {
+        heatPressure:               data.heatPressure,
+        heatPressureReason:         data.heatPressureReason,
+        thermalDependency:          data.thermalDependency,
+        thermalDependencyReason:    data.thermalDependencyReason,
+        operatingCostPressure:      data.operatingCostPressure,
+        operatingCostPressureReason:data.operatingCostPressureReason,
+        modernizationNeed:          data.modernizationNeed,
+        modernizationNeedReason:    data.modernizationNeedReason,
+        boilerDependencyProb:       data.boilerDependencyProb,
+        boilerDependencyProbReason: data.boilerDependencyProbReason,
+        willingnessToSolve:         data.willingnessToSolve,
+        willingnessToSolveReason:   data.willingnessToSolveReason,
+      })
+      setSignalMsg(data.usedFallback ? '✓ Signály (záloha)' : '✓ AI signály vygenerované')
+    } catch (e) {
+      setSignalMsg('⚠ ' + e.message)
+    } finally {
+      setSignalLoading(false)
+    }
   }
 
   async function handleSaveDraft(draftLang, subject, body) {
@@ -734,7 +813,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         {/* Tab obsah */}
         <div style={{ padding: '1.25rem 1.4rem' }}>
           {activeTab === 'overview' && <TabOverview t={t} />}
-          {activeTab === 'energy'   && <TabEnergy   t={t} />}
+          {activeTab === 'energy'   && <TabEnergy   t={t} onSignal={handleSignalEngine} signalLoading={signalLoading} signalMsg={signalMsg} />}
           {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} emailDraft={emailDraft} onSaveDraft={handleSaveDraft} onQueueDraft={handleQueueEmail} onDraftDirty={setDraftDirty} defaultDraftLang={defaultDraftLang(t)} />}
           {activeTab === 'sources'  && <TabSources  t={t} />}
           {activeTab === 'roi'      && <TabROI      t={t} />}

@@ -37,6 +37,9 @@
 [functions.translate-draft]
   timeout = 26
 
+[functions.signal-engine]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
