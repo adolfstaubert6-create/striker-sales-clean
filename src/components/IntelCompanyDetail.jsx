@@ -182,22 +182,27 @@ function ProblemCard({ p, idx }) {
   )
 }
 
-function MetricGauge({ label, value, description }) {
-  if (value == null) return (
-    <div style={{ textAlign: 'center', padding: '0.65rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
-      <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
-      <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#1e2530' }}>—</div>
-    </div>
-  )
-  const color = value >= 70 ? '#ff5c00' : value >= 50 ? '#ffaa00' : '#4b5563'
+function MetricGauge({ label, value, reason }) {
+  const isEmpty = value == null
+  const color   = !isEmpty ? (value >= 70 ? '#ff5c00' : value >= 50 ? '#ffaa00' : '#4b5563') : '#1e2530'
   return (
-    <div style={{ textAlign: 'center', padding: '0.65rem', background: '#0d1117', border: `1px solid ${value >= 70 ? color + '33' : '#1e2530'}`, borderRadius: 3 }}>
+    <div style={{ padding: '0.7rem 0.8rem', background: '#0d1117', border: `1px solid ${!isEmpty && value >= 70 ? color + '33' : '#1e2530'}`, borderRadius: 3 }}>
       <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.3rem' }}>{label}</div>
-      <div style={{ fontFamily: mono, fontSize: '1.4rem', fontWeight: 700, color, lineHeight: 1 }}>{value}%</div>
-      <div style={{ height: 3, background: '#1e2530', borderRadius: 2, overflow: 'hidden', margin: '0.2rem 0' }}>
-        <div style={{ width: `${value}%`, height: '100%', background: color, borderRadius: 2 }} />
-      </div>
-      {description && <div style={{ fontFamily: mono, fontSize: '0.42rem', color: '#374151', lineHeight: 1.4 }}>{description}</div>}
+      {isEmpty ? (
+        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#1e2530' }}>—</div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', marginBottom: '0.25rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '1.35rem', fontWeight: 700, color, lineHeight: 1 }}>{value}%</div>
+          </div>
+          <div style={{ height: 3, background: '#1e2530', borderRadius: 2, overflow: 'hidden', marginBottom: '0.3rem' }}>
+            <div style={{ width: `${value}%`, height: '100%', background: color, borderRadius: 2 }} />
+          </div>
+          {reason && (
+            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280', lineHeight: 1.45 }}>{reason}</div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -230,12 +235,13 @@ function TabEnergy({ t }) {
 
       {/* AI metriky */}
       <SectionTitle>AI Metriky energetickej záťaže</SectionTitle>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '0.5rem', marginBottom: '1.25rem' }}>
-        <MetricGauge label="Heat Pressure"         value={t.heatPressure}         description="Tlak tepelnej spotreby" />
-        <MetricGauge label="Thermal Dependency"    value={t.thermalDependency}    description="Závislosť od tepla" />
-        <MetricGauge label="Operating Cost"        value={t.operatingCostPressure}description="Nákladový tlak" />
-        <MetricGauge label="Modernization Need"    value={t.modernizationNeed}    description="Potreba obnovy" />
-        <MetricGauge label="Boiler Dependency"     value={t.boilerDependencyProb} description="Závislosť na kotle" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.65rem', marginBottom: '1.25rem' }}>
+        <MetricGauge label="Heat Pressure"        value={t.heatPressure}          reason={t.heatPressureReason} />
+        <MetricGauge label="Thermal Dependency"   value={t.thermalDependency}     reason={t.thermalDependencyReason} />
+        <MetricGauge label="Operating Cost"       value={t.operatingCostPressure} reason={t.operatingCostPressureReason} />
+        <MetricGauge label="Modernization Need"   value={t.modernizationNeed}     reason={t.modernizationNeedReason} />
+        <MetricGauge label="Boiler Dependency"    value={t.boilerDependencyProb}  reason={t.boilerDependencyProbReason} />
+        <MetricGauge label="Willingness To Solve" value={t.willingnessToSolve}    reason={t.willingnessToSolveReason} />
       </div>
 
       {/* Signály podľa kategórie */}
@@ -580,10 +586,17 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         // Nové Problem Profile polia
         problemProfile:         data.problemProfile           || [],
         heatPressure:           data.heatPressure             ?? null,
-        thermalDependency:      data.thermalDependency        ?? null,
-        operatingCostPressure:  data.operatingCostPressure    ?? null,
-        modernizationNeed:      data.modernizationNeed        ?? null,
-        boilerDependencyProb:   data.boilerDependencyProb     ?? null,
+        thermalDependency:           data.thermalDependency           ?? null,
+        thermalDependencyReason:     data.thermalDependencyReason     || '',
+        operatingCostPressure:       data.operatingCostPressure       ?? null,
+        operatingCostPressureReason: data.operatingCostPressureReason || '',
+        modernizationNeed:           data.modernizationNeed           ?? null,
+        modernizationNeedReason:     data.modernizationNeedReason     || '',
+        boilerDependencyProb:        data.boilerDependencyProb        ?? null,
+        boilerDependencyProbReason:  data.boilerDependencyProbReason  || '',
+        willingnessToSolve:          data.willingnessToSolve          ?? null,
+        willingnessToSolveReason:    data.willingnessToSolveReason    || '',
+        heatPressureReason:          data.heatPressureReason          || '',
       })
       setGatherMsg(`✓ ${data.webPagesCount} stránok · ${(data.signals||[]).length} signálov · ${(data.problemProfile||[]).length} problémov detekovaných`)
     } catch (e) { setGatherMsg('⚠ ' + e.message) }

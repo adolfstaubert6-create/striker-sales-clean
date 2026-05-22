@@ -126,91 +126,105 @@ async function gatherWebPages(baseUrl) {
 // ── Claude AI — real business intelligence ────────────────────────────────────
 
 async function analyzeWithClaude({ companyName, segmentLabel, city, country, pages, signalsByCategory, currentScores }) {
-  const hasContent = pages.length > 0
-  const webContent = hasContent
-    ? pages.map(p => `### ${p.title || p.url}\n${p.content}`).join('\n\n---\n\n').slice(0, 7000)
-    : `Web firmy nebol dostupný. Analyzuj na základe segmentu a lokality.`
-
+  const hasContent   = pages.length > 0
+  const webContent   = hasContent
+    ? pages.map(p => `### ${p.title || p.url}\n${p.content}`).join('\n\n---\n\n').slice(0, 6000)
+    : 'Web firmy nebol dostupný.'
   const signalSummary = Object.entries(signalsByCategory)
-    .map(([k, v]) => `${v.label}: ${v.found.slice(0, 5).join(', ')}`)
-    .join('\n') || 'Žiadne signály detekované'
+    .map(([, v]) => `${v.label}: ${v.found.slice(0, 5).join(', ')}`)
+    .join(' | ') || 'žiadne'
 
-  const prompt = `Si STRIKER INTELLIGENCE AI — B2B business analysis engine pre kavitačnú vykurovaciu technológiu.
+  const prompt = `Si STRIKER INTELLIGENCE AI. Analyzuj firmu a vráť VÝLUČNE valid JSON bez markdown.
 
-STRIKER: 45kW el. vstup → 120-160kW teplo (COP 2.7-3.5), cena 8 000-10 000 EUR, ROI 6-36 mes.
-Ideálne pre: hotely s wellness, práčovne, pivovary, nemocnice, potravinárstvo.
+STRIKER technológia: 45kW → 120-160kW teplo, cena 8000-10000 EUR, ROI 6-36 mesiacov.
 
-━━━ ANALYZOVANÁ FIRMA ━━━
-Firma: ${companyName}
-Segment: ${segmentLabel}
-Lokalita: ${[city, country].filter(Boolean).join(', ')}
-Aktuálne skóre: urgency=${currentScores.urgency}, buyingIntent=${currentScores.buyingIntent}, fit=${currentScores.strikerFit}
+FIRMA: ${companyName}
+SEGMENT: ${segmentLabel}
+LOKALITA: ${[city, country].filter(Boolean).join(', ')}
+SIGNÁLY: ${signalSummary}
 
-━━━ DETEKOVANÉ SIGNÁLY Z WEBU ━━━
-${signalSummary}
-
-━━━ SKUTOČNÝ OBSAH WEBU ━━━
+WEB OBSAH:
 ${webContent}
 
-━━━ TVOJA ÚLOHA ━━━
+POKYNY:
+- Analýza musí byť KONKRÉTNA pre túto firmu, nie generická
+- Ak web chýba: odhadni podľa segmentu, označ ako "AI odhad"
+- Vygeneruj 2-4 konkrétne energetické problémy pre problemProfile
+- Každá metrika musí mať číslo 0-100 A textové vysvetlenie prečo
 
-KRITICKÉ: Analýza musí byť ŠPECIFICKÁ pre túto konkrétnu firmu na základe toho čo sa SKUTOČNE nachádza na webe.
-Nie generická. Nie template. Konkrétna.
-
-Ak web nebol dostupný, odhadni na základe segmentu + lokality + veľkosti — ale jasne označ že ide o odhad.
-
-Vráť VÝLUČNE valid JSON (žiadny markdown), VŠETOK TEXT PO SLOVENSKY:
+JSON VÝSTUP (všetok text po slovensky):
 {
-  "websiteSummary": "<Čo táto konkrétna firma robí — 2-3 vety z obsahu webu. Ak web chýba: odhad na základe segmentu.>",
-  "extractedKeywords": ["<max 8 kľúčových slov>"],
-  "estimatedHeatDemand": "<Konkrétny odhad tepelnej potreby napr. '~120-180 kW — hotel s bazénom, saunou a 80 izbami'>",
-  "estimatedBusinessSize": "<Veľkosť firmy na základe webu>",
-  "estimatedEnergyIntensity": "<nízka|stredná|vysoká|veľmi vysoká> — <dôvod>",
-  "estimatedROI": "<Odhad ROI pre STRIKER napr. '8-15 mesiacov · úspora ~800-1 200 EUR/mesiac'>",
-  "aiReasoning": "<Prečo je táto firma dobrý target — 2-3 vety KONKRÉTNE>",
-  "businessOpportunity": "<Konkrétna obchodná príležitosť — 1-2 vety>",
-  "isRealPressure": <true|false>,
-  "pressureLevel": "nízky|stredný|vysoký|kritický",
-  "pressureExplanation": "<Konkrétny dôvod — 1-2 vety>",
-  "timingAssessment": "<Je teraz vhodný čas? — 1 veta>",
-  "signals": ["<signál 1>","<signál 2>","<signál 3>","<signál 4>"],
-  "keyEvidence": ["<citácia z webu 1>","<citácia 2>"],
-  "strikerArgument": "<Najsilnejší predajný argument — 1 veta>",
-  "urgencyBoost": <int -20 to 30>,
-  "buyingIntentBoost": <int -20 to 30>,
-  "energyFindings": "<Energetické náklady — 1-2 vety>",
-  "modernizationFindings": "<Modernizácia — 1-2 vety>",
-  "esgFindings": "<ESG — 1-2 vety>",
+  "websiteSummary": "2-3 vety čo táto firma robí",
+  "extractedKeywords": ["max 6 kľúčových slov z webu"],
+  "estimatedHeatDemand": "napr. ~150 kW — práčovňa s kontinuálnym ohrevom",
+  "estimatedBusinessSize": "napr. Stredná firma · 50-150 zamestnancov",
+  "estimatedEnergyIntensity": "veľmi vysoká — nepretržitý ohrev vody 24/7",
+  "estimatedROI": "napr. 8-14 mesiacov · úspora ~900 EUR/mesiac",
+  "aiReasoning": "2-3 vety prečo je firma dobrý STRIKER target",
+  "businessOpportunity": "1-2 vety konkrétna príležitosť",
+  "isRealPressure": true,
+  "pressureLevel": "vysoký",
+  "pressureExplanation": "1-2 vety prečo reálny tlak alebo nie",
+  "timingAssessment": "1 veta či je teraz vhodný čas",
+  "signals": ["signál 1", "signál 2", "signál 3"],
+  "keyEvidence": ["priama citácia z webu alebo fakt 1", "fakt 2"],
+  "strikerArgument": "1 veta najsilnejší argument",
+  "urgencyBoost": 15,
+  "buyingIntentBoost": 10,
+  "energyFindings": "1-2 vety o energetických nákladoch",
+  "modernizationFindings": "1-2 vety o modernizácii",
+  "esgFindings": "1-2 vety o ESG signáloch",
 
   "problemProfile": [
     {
-      "problem": "<Konkrétny energetický problém — max 8 slov>",
-      "confidence": <int 0-100>,
-      "source": "<URL stránky kde bol text nájdený, alebo 'segment_analysis' ak web chýba>",
-      "detectedText": "<Doslová citácia z webu ktorá naznačuje problém, alebo null>",
-      "aiReasoning": "<Prečo si AI myslí že firma má tento problém — 1-2 vety konkrétne>",
-      "severity": "critical|high|medium|low",
-      "strikerSolution": "<Ako konkrétne STRIKER rieši práve tento problém — 1 veta>"
+      "problem": "max 8 slov — konkrétny problém",
+      "confidence": 88,
+      "source": "https://firma.de/services alebo segment_analysis",
+      "detectedText": "priama citácia z webu alebo null ak web chýbal",
+      "aiReasoning": "1-2 vety prečo si AI myslí že tento problém existuje",
+      "severity": "high",
+      "strikerSolution": "1 veta ako STRIKER rieši tento konkrétny problém"
+    },
+    {
+      "problem": "druhý konkrétny problém",
+      "confidence": 72,
+      "source": "segment_analysis",
+      "detectedText": null,
+      "aiReasoning": "1-2 vety reasoning",
+      "severity": "medium",
+      "strikerSolution": "1 veta riešenie"
     }
   ],
 
-  "heatPressure": <int 0-100, tlak vysokej spotreby tepla>,
-  "thermalDependency": <int 0-100, závislosť prevádzky od tepla>,
-  "operatingCostPressure": <int 0-100, tlak prevádzkových nákladov>,
-  "modernizationNeed": <int 0-100, potreba modernizácie kotolne>,
-  "boilerDependencyProb": <int 0-100, pravdepodobnosť závislosti na kotli>
+  "heatPressure": 85,
+  "heatPressureReason": "1 veta prečo toto číslo — napr. práčovňa spotrebuje teplo nepretržite",
+  "thermalDependency": 90,
+  "thermalDependencyReason": "1 veta — napr. bez tepla prevádzka stojí",
+  "operatingCostPressure": 75,
+  "operatingCostPressureReason": "1 veta — napr. energie tvoria 35%+ nákladov",
+  "modernizationNeed": 65,
+  "modernizationNeedReason": "1 veta — napr. kotolňa staršia ako 10 rokov",
+  "boilerDependencyProb": 80,
+  "boilerDependencyProbReason": "1 veta — napr. segment typicky používa plynový kotol",
+  "willingnessToSolve": 70,
+  "willingnessToSolveReason": "1 veta — napr. ESG záväzky a rastúce ceny motivujú k zmene"
 }`
 
   const res  = await fetch('https://api.anthropic.com/v1/messages', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
-    body:    JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] }),
+    body:    JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 3000, messages: [{ role: 'user', content: prompt }] }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error?.message || `Claude ${res.status}`)
 
   const raw = (data.content?.[0]?.text || '').trim().replace(/^```json\s*/i,'').replace(/```\s*$/i,'').trim()
-  return JSON.parse(raw)
+  try {
+    return JSON.parse(raw)
+  } catch (parseErr) {
+    console.error('[intel-gather] JSON parse failed. Raw:', raw.slice(0, 500))
+    throw new Error('Claude vrátil nevalidný JSON: ' + parseErr.message)
+  }
 }
 
 // ── Score calculation based on real signals ───────────────────────────────────
@@ -323,12 +337,19 @@ exports.handler = async (event) => {
         sources,
 
         // Problem Profile — s confidence, zdrojom, citáciou a AI reasoning
-        problemProfile:          ai.problemProfile          || [],
-        heatPressure:            ai.heatPressure            ?? null,
-        thermalDependency:       ai.thermalDependency       ?? null,
-        operatingCostPressure:   ai.operatingCostPressure   ?? null,
-        modernizationNeed:       ai.modernizationNeed       ?? null,
-        boilerDependencyProb:    ai.boilerDependencyProb    ?? null,
+        problemProfile:             ai.problemProfile             || [],
+        heatPressure:               ai.heatPressure               ?? null,
+        heatPressureReason:         ai.heatPressureReason         || '',
+        thermalDependency:          ai.thermalDependency          ?? null,
+        thermalDependencyReason:    ai.thermalDependencyReason    || '',
+        operatingCostPressure:      ai.operatingCostPressure      ?? null,
+        operatingCostPressureReason:ai.operatingCostPressureReason|| '',
+        modernizationNeed:          ai.modernizationNeed          ?? null,
+        modernizationNeedReason:    ai.modernizationNeedReason    || '',
+        boilerDependencyProb:       ai.boilerDependencyProb       ?? null,
+        boilerDependencyProbReason: ai.boilerDependencyProbReason || '',
+        willingnessToSolve:         ai.willingnessToSolve         ?? null,
+        willingnessToSolveReason:   ai.willingnessToSolveReason   || '',
 
         aiInterpretation: {
           isRealPressure:        ai.isRealPressure,
