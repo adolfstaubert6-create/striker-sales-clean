@@ -7,7 +7,8 @@ import { subscribeTargets } from '../services/intelTargetService.js'
 import IntelSummaryPanel  from './IntelSummaryPanel.jsx'
 import IntelAgentPanel    from './IntelAgentPanel.jsx'
 import IntelTargetCard    from './IntelTargetCard.jsx'
-import IntelCompanyDetail from './IntelCompanyDetail.jsx'
+import IntelCompanyDetail          from './IntelCompanyDetail.jsx'
+import ClientIntelligenceDashboard from './ClientIntelligenceDashboard.jsx'
 
 const mono = "'IBM Plex Mono',monospace"
 
@@ -127,11 +128,10 @@ export default function DashboardB() {
         ))
       )}
 
-      {/* 6. Detail modal — rovnaký trigger ako CompanyDetailModal */}
+      {/* 6. Client Intelligence Dashboard — full-page cockpit */}
       {selected && (
-        <IntelCompanyDetail
+        <ClientIntelligenceDashboard
           target={selected.target}
-          initialTab={selected.tab || 'overview'}
           onClose={closeDetail}
           onDelete={closeDetail}
         />
