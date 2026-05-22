@@ -34,6 +34,9 @@
 [functions.ai-analysis]
   timeout = 26
 
+[functions.translate-draft]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

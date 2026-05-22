@@ -36,15 +36,19 @@ const base = {
   },
 }
 
-function flagBtn(active, locked) {
+function flagBtnStyle(active, locked) {
   return {
-    fontSize: '1rem', lineHeight: 1, padding: '0.2rem 0.28rem',
-    border: `1px solid ${active ? '#ff5c00' : '#1e2530'}`,
-    background: active ? 'rgba(255,92,0,0.12)' : 'transparent',
-    borderRadius: 3, cursor: locked ? 'default' : 'pointer',
-    boxShadow: active ? '0 0 10px rgba(255,92,0,0.35)' : 'none',
+    fontSize: '1.35rem',       // large enough to see clearly
+    lineHeight: 1,
+    padding: '0.15rem 0.22rem',
+    border: `1.5px solid ${active ? '#ff5c00' : '#1e2530'}`,
+    background: active ? 'rgba(255,92,0,0.14)' : 'transparent',
+    borderRadius: 4,
+    cursor: locked ? 'default' : 'pointer',
+    boxShadow: active ? '0 0 10px rgba(255,92,0,0.4), inset 0 0 6px rgba(255,92,0,0.1)' : 'none',
     transition: 'all 0.18s ease',
-    opacity: locked && !active ? 0.35 : 1,
+    opacity: locked && !active ? 0.3 : 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
   }
 }
 
@@ -73,46 +77,88 @@ function btn(variant, extra = {}) {
 export default function EmailDraftEditor({
   draft = {},
   onSave,
-  onQueue,         // optional: queue for approval
-  onDirtyChange,   // optional: notify parent of unsaved state
+  onQueue,
+  onDirtyChange,
   defaultLang = 'de',
 }) {
-  const [activeLang,   setActiveLang]   = useState(defaultLang)
-  const [editing,      setEditing]      = useState(false)
-  const [editSubject,  setEditSubject]  = useState('')
-  const [editBody,     setEditBody]     = useState('')
-  const [saving,       setSaving]       = useState(false)
-  const [copied,       setCopied]       = useState(false)
-  const [saved,        setSaved]        = useState(false)   // ✅ After-save flash
-  const [queued,       setQueued]       = useState(false)   // ✅ Queue confirmation
-  const [queueing,     setQueueing]     = useState(false)
-  const [isDirty,      setIsDirty]      = useState(false)   // • Unsaved indicator
+  const [activeLang,  setActiveLang]  = useState(defaultLang)
+  const [editing,     setEditing]     = useState(false)
+  const [editSubject, setEditSubject] = useState('')
+  const [editBody,    setEditBody]    = useState('')
+  const [saving,      setSaving]      = useState(false)
+  const [copied,      setCopied]      = useState(false)
+  const [saved,       setSaved]       = useState(false)
+  const [queued,      setQueued]      = useState(false)
+  const [queueing,    setQueueing]    = useState(false)
+  const [isDirty,     setIsDirty]     = useState(false)
+  const [translating, setTranslating] = useState(false)
+  // localDraft mirrors `draft` prop + any unsaved translated content
+  const [localDraft,  setLocalDraft]  = useState(draft)
 
-  const cur        = draft[activeLang] || EMPTY
+  // Sync localDraft when parent draft prop changes
+  useEffect(() => { setLocalDraft(draft) }, [draft])
+
+  const cur        = localDraft[activeLang] || EMPTY
   const hasContent = !!(cur.subject || cur.body)
 
-  // Track unsaved changes while editing
+  // Track unsaved changes
   useEffect(() => {
     if (!editing) { setIsDirty(false); return }
     const dirty = editSubject !== (cur.subject || '') || editBody !== (cur.body || '')
     setIsDirty(dirty)
   }, [editing, editSubject, editBody, cur.subject, cur.body])
 
-  // Notify parent of dirty state
   useEffect(() => { onDirtyChange?.(isDirty) }, [isDirty])
 
-  // ── Actions ──
+  // ── Lang switch with auto-translate ──────────────────────────────────────────
 
-  function switchLang(code) {
+  async function switchLang(code) {
     if (code === activeLang) return
+
     if (editing && isDirty) {
       if (!window.confirm('Máte neuložené zmeny. Chcete ich zahodiť?')) return
+      setEditing(false)
+      setIsDirty(false)
+    } else if (editing) {
+      setEditing(false)
     }
-    setEditing(false)
-    setIsDirty(false)
+
     setActiveLang(code)
     setQueued(false)
+    setSaved(false)
+
+    // Auto-translate only if target language has no content yet
+    const target = localDraft[code] || EMPTY
+    if (target.subject || target.body) return   // already has content — do not overwrite
+
+    // Find best source to translate from
+    const srcLang  = activeLang
+    const srcDraft = localDraft[srcLang] || EMPTY
+    if (!srcDraft.subject && !srcDraft.body) return   // nothing to translate from
+
+    setTranslating(true)
+    try {
+      const res = await fetch('/.netlify/functions/translate-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: srcDraft.subject, text: srcDraft.body, targetLang: code }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        // Fill localDraft for target lang (not saved to Firebase yet — user must save)
+        setLocalDraft(prev => ({
+          ...prev,
+          [code]: { subject: data.subject, body: data.body },
+        }))
+      }
+    } catch (e) {
+      console.error('[EmailDraftEditor] translate failed:', e.message)
+    } finally {
+      setTranslating(false)
+    }
   }
+
+  // ── Edit ─────────────────────────────────────────────────────────────────────
 
   function startEdit() {
     setEditSubject(cur.subject || '')
@@ -123,9 +169,7 @@ export default function EmailDraftEditor({
   }
 
   function cancelEdit() {
-    if (isDirty) {
-      if (!window.confirm('Zahodiť neuložené zmeny?')) return
-    }
+    if (isDirty && !window.confirm('Zahodiť neuložené zmeny?')) return
     setEditing(false)
     setIsDirty(false)
   }
@@ -133,7 +177,11 @@ export default function EmailDraftEditor({
   async function saveEdit() {
     setSaving(true)
     try {
-      await onSave(activeLang, editSubject.trim(), editBody.trim())
+      const subject = editSubject.trim()
+      const body    = editBody.trim()
+      await onSave(activeLang, subject, body)
+      // Sync localDraft after save
+      setLocalDraft(prev => ({ ...prev, [activeLang]: { subject, body } }))
       setEditing(false)
       setIsDirty(false)
       setSaved(true)
@@ -144,6 +192,8 @@ export default function EmailDraftEditor({
       setSaving(false)
     }
   }
+
+  // ── Queue ────────────────────────────────────────────────────────────────────
 
   async function handleQueue() {
     if (!onQueue) return
@@ -158,6 +208,8 @@ export default function EmailDraftEditor({
     }
   }
 
+  // ── Copy ─────────────────────────────────────────────────────────────────────
+
   function copyDraft() {
     const text = cur.subject ? `Subject: ${cur.subject}\n\n${cur.body}` : cur.body
     navigator.clipboard.writeText(text).then(() => {
@@ -166,7 +218,7 @@ export default function EmailDraftEditor({
     }).catch(() => {})
   }
 
-  // ── Render ──
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div style={base.root}>
@@ -175,33 +227,38 @@ export default function EmailDraftEditor({
       <div style={base.header}>
         <span style={base.headerLabel}>EMAIL DRAFT</span>
 
-        {/* Flag switcher */}
-        <div style={{ display: 'flex', gap: '0.18rem' }}>
+        {/* Flag language switcher — only flags, no text */}
+        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
           {LANGS.map(code => (
-            <button key={code} onClick={() => switchLang(code)}
-              style={flagBtn(activeLang === code, editing && isDirty && code !== activeLang)}
-              title={code.toUpperCase()}>
+            <button
+              key={code}
+              onClick={() => switchLang(code)}
+              style={flagBtnStyle(activeLang === code, translating || (editing && isDirty && code !== activeLang))}
+              title={code.toUpperCase()}
+              disabled={translating}
+            >
               {FLAGS[code]}
             </button>
           ))}
         </div>
 
-        {/* Unsaved indicator */}
-        {isDirty && (
+        {/* Status indicators */}
+        {translating && (
+          <span style={{ fontSize: '0.5rem', color: '#ffaa00', letterSpacing: '0.5px', animation: 'pulse 1s infinite' }}>
+            ⏳ Prekladám email...
+          </span>
+        )}
+        {!translating && isDirty && (
           <span style={{ fontSize: '0.5rem', color: '#ffaa00', letterSpacing: '0.5px' }}>
             • Upravené – neuložené
           </span>
         )}
-
-        {/* Saved flash */}
-        {saved && !editing && (
+        {!translating && saved && !editing && (
           <span style={{ fontSize: '0.5rem', color: '#00cc88', letterSpacing: '0.5px' }}>
             ✅ Uložené
           </span>
         )}
-
-        {/* Queued badge */}
-        {queued && !editing && (
+        {!translating && queued && !editing && (
           <span style={{ fontSize: '0.5rem', color: '#00cc88', letterSpacing: '0.5px' }}>
             ✅ Email pripravený na schválenie
           </span>
@@ -212,18 +269,20 @@ export default function EmailDraftEditor({
         {/* Action buttons */}
         {!editing ? (
           <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-            {hasContent && (
+            {hasContent && !translating && (
               <button onClick={copyDraft} style={btn(copied ? 'copied' : 'copy')}>
                 {copied ? '✓ OK' : '📋 Kopírovať'}
               </button>
             )}
-            {hasContent && onQueue && (
+            {hasContent && onQueue && !translating && (
               <button onClick={handleQueue} disabled={queueing}
                 style={btn(queued ? 'queued' : 'queue', { opacity: queueing ? 0.65 : 1 })}>
                 {queued ? '✓ Queue' : '📤 Na schválenie'}
               </button>
             )}
-            <button onClick={startEdit} style={btn('edit')}>✏️ Upraviť</button>
+            {!translating && (
+              <button onClick={startEdit} style={btn('edit')}>✏️ Upraviť</button>
+            )}
           </div>
         ) : (
           <div style={{ display: 'flex', gap: '0.25rem' }}>
@@ -238,7 +297,11 @@ export default function EmailDraftEditor({
 
       {/* ── Body ── */}
       <div style={base.body}>
-        {!editing ? (
+        {translating ? (
+          <div style={{ fontSize: '0.62rem', color: '#ffaa00', textAlign: 'center', padding: '1.5rem 0', fontStyle: 'italic' }}>
+            ⏳ Prekladám email do {({ de: 'nemčiny', sk: 'slovenčiny', en: 'angličtiny' })[activeLang] || activeLang}...
+          </div>
+        ) : !editing ? (
           hasContent ? (
             <>
               {cur.subject && (

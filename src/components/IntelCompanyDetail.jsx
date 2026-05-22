@@ -302,25 +302,28 @@ function TabEnergy({ t }) {
 }
 
 const LANG_CODES = ['sk', 'de']
+const LANG_FLAGS = { sk: '🇸🇰', de: '🇩🇪', en: '🇬🇧' }
 
 function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLang, L, emailDraft, onSaveDraft, onQueueDraft, onDraftDirty, defaultDraftLang }) {
   const r = analysisResult
-  const btnStyle = (active) => ({
-    fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1.5px', textTransform: 'uppercase',
-    padding: '0.18rem 0.5rem', border: `1px solid ${active ? '#ffaa00' : '#1e2530'}`,
-    background: active ? 'rgba(255,170,0,0.15)' : 'transparent',
-    color: active ? '#ffaa00' : '#4b5563', borderRadius: 2, cursor: 'pointer', fontWeight: active ? 700 : 400,
+  const flagStyle = (active) => ({
+    fontSize: '1.35rem', lineHeight: 1, padding: '0.15rem 0.22rem',
+    border: `1.5px solid ${active ? '#ffaa00' : '#1e2530'}`,
+    background: active ? 'rgba(255,170,0,0.14)' : 'transparent',
+    borderRadius: 4, cursor: 'pointer',
+    boxShadow: active ? '0 0 10px rgba(255,170,0,0.4)' : 'none',
+    transition: 'all 0.18s ease',
   })
 
   return (
     <div>
       {/* Language switcher + AI button row */}
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
-        {/* Lang switcher */}
+        {/* AI analysis lang — flags only */}
         <div style={{ display: 'flex', gap: '0.2rem', marginRight: '0.5rem' }}>
           {LANG_CODES.map(code => (
-            <button key={code} onClick={() => setLang(code)} style={btnStyle(lang === code)}>
-              {code.toUpperCase()}
+            <button key={code} onClick={() => setLang(code)} style={flagStyle(lang === code)} title={code.toUpperCase()}>
+              {LANG_FLAGS[code]}
             </button>
           ))}
         </div>
