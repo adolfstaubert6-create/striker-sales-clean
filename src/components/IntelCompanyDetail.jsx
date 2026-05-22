@@ -249,6 +249,7 @@ function TabEnergy({ t, onSignal, signalLoading, signalMsg }) {
   const profile     = t.problemProfile    || []
   const hasProfile  = profile.length > 0
   const signalsCats = t.signalsByCategory || {}
+  const isLive      = t.reviewsSource === 'serpapi'
 
   return (
     <div>
@@ -265,14 +266,52 @@ function TabEnergy({ t, onSignal, signalLoading, signalMsg }) {
             opacity: signalLoading ? 0.7 : 1, transition: 'all 0.15s',
           }}
         >
-          {signalLoading ? '⏳ Analyzujem signály...' : '🧠 Spustiť Signal Engine'}
+          {signalLoading ? '⏳ Analyzujem signály...' : '🔍 Signal Engine'}
         </button>
         {signalMsg && (
-          <span style={{ fontFamily: mono, fontSize: '0.6rem', color: signalMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>
+          <span style={{ fontFamily: mono, fontSize: '0.6rem',
+            color: (signalMsg.startsWith('✓') || signalMsg.startsWith('✅')) ? '#00cc88' : '#ef4444' }}>
             {signalMsg}
           </span>
         )}
       </div>
+
+      {/* LIVE DATA card */}
+      {isLive && (
+        <div style={{ marginBottom: '1.1rem', padding: '0.65rem 0.85rem',
+          background: 'rgba(0,204,136,0.04)', border: '1px solid rgba(0,204,136,0.2)',
+          borderLeft: '3px solid #00cc88', borderRadius: 3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2px', textTransform: 'uppercase',
+              color: '#00cc88', fontWeight: 700, padding: '0.05rem 0.35rem',
+              border: '1px solid #00cc8844', borderRadius: 2, background: 'rgba(0,204,136,0.1)' }}>
+              🔴 LIVE DATA
+            </span>
+            <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151' }}>
+              Google recenzie
+            </span>
+            {t.reviewRating && (
+              <span style={{ fontFamily: mono, fontSize: '0.55rem', color: '#ffaa00' }}>
+                ★ {t.reviewRating} ({t.reviewCount || 0} recenzií)
+              </span>
+            )}
+          </div>
+          {t.reviewSummary && (
+            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', lineHeight: 1.55, marginBottom: '0.35rem' }}>
+              {t.reviewSummary}
+            </div>
+          )}
+          {(t.liveSignals || []).length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
+              {(t.liveSignals || []).slice(0, 10).map((s, i) => (
+                <span key={i} style={{ fontFamily: mono, fontSize: '0.47rem', padding: '0.04rem 0.3rem',
+                  border: '1px solid rgba(0,204,136,0.3)', borderRadius: 2,
+                  color: '#00cc88', background: 'rgba(0,204,136,0.07)' }}>{s}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Profil problému */}
       <SectionTitle>⚠ Profil problému</SectionTitle>
@@ -290,7 +329,20 @@ function TabEnergy({ t, onSignal, signalLoading, signalMsg }) {
       )}
 
       {/* AI metriky */}
-      <SectionTitle>AI Metriky energetickej záťaže</SectionTitle>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#374151' }}>
+          AI Metriky energetickej záťaže
+        </span>
+        {isLive ? (
+          <span style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+            color: '#00cc88', padding: '0.04rem 0.3rem', border: '1px solid #00cc8833',
+            borderRadius: 2, background: 'rgba(0,204,136,0.08)' }}>LIVE</span>
+        ) : t.reviewsSource === 'simulated' ? (
+          <span style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+            color: '#6b7280', padding: '0.04rem 0.3rem', border: '1px solid #374151',
+            borderRadius: 2 }}>SIM</span>
+        ) : null}
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.65rem', marginBottom: '1.25rem' }}>
         <MetricGauge label="Teplotný tlak"          value={t.heatPressure}          reason={t.heatPressureReason} />
         <MetricGauge label="Závislosť od tepla"     value={t.thermalDependency}     reason={t.thermalDependencyReason} />
@@ -675,24 +727,37 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   }
 
   async function handleSignalEngine() {
+    // Cache check — skip API if data is fresh (< 24h)
+    const CACHE_TTL = 24 * 60 * 60 * 1000
+    const cachedAt  = t.reviewsCachedAt ? new Date(t.reviewsCachedAt).getTime() : 0
+    if (Date.now() - cachedAt < CACHE_TTL && t.heatPressure != null) {
+      const src = t.reviewsSource === 'serpapi' ? 'Google Reviews' : 'AI simulácia'
+      setSignalMsg(`✓ Z cache (${src}) · obnova za ${Math.round((CACHE_TTL - (Date.now() - cachedAt)) / 3600000)}h`)
+      return
+    }
+
     setSignalLoading(true)
     setSignalMsg('')
     try {
-      const res = await fetch('/.netlify/functions/signal-engine', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyName:     t.name,
-          segment:         t.segment,
-          segmentLabel:    t.segmentLabel,
-          city:            t.city,
-          strikerFitScore: t.strikerFitScore || 50,
-          painPoints:      analysisResult?.painPoints || t.signals || [],
-          aiReasoning:     analysisResult?.reasoning  || t.aiReasoning || '',
-        }),
+      const payload = {
+        companyName:     t.name,
+        segment:         t.segment,
+        segmentLabel:    t.segmentLabel,
+        city:            t.city,
+        country:         t.country || 'DE',
+        strikerFitScore: t.strikerFitScore || 50,
+        painPoints:      analysisResult?.painPoints || t.signals || [],
+        aiReasoning:     analysisResult?.reasoning  || t.aiReasoning || '',
+      }
+
+      // Try live SerpAPI reviews first
+      const res  = await fetch('/.netlify/functions/serpapi-reviews', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => ({ ok: false }))
       if (!data.ok) throw new Error('Signal engine error')
+
       await updateTarget(t.id, {
         heatPressure:               data.heatPressure,
         heatPressureReason:         data.heatPressureReason,
@@ -706,8 +771,20 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         boilerDependencyProbReason: data.boilerDependencyProbReason,
         willingnessToSolve:         data.willingnessToSolve,
         willingnessToSolveReason:   data.willingnessToSolveReason,
+        reviewsSource:              data.reviewsSource   || 'simulated',
+        reviewsCachedAt:            data.reviewsCachedAt || new Date().toISOString(),
+        reviewRating:               data.reviewRating    || null,
+        reviewCount:                data.reviewCount     || null,
+        reviewSummary:              data.reviewSummary   || null,
+        liveSignals:                data.liveSignals     || [],
       })
-      setSignalMsg(data.usedFallback ? '✓ Signály (záloha)' : '✓ AI signály vygenerované')
+
+      const isLive = data.reviewsSource === 'serpapi'
+      setSignalMsg(
+        isLive
+          ? `✅ LIVE · ${data.reviewCount || 0} Google recenzií · ${(data.liveSignals||[]).length} signálov`
+          : '✓ AI simulácia (Google recenzie nedostupné)'
+      )
     } catch (e) {
       setSignalMsg('⚠ ' + e.message)
     } finally {

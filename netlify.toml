@@ -40,6 +40,9 @@
 [functions.signal-engine]
   timeout = 26
 
+[functions.serpapi-reviews]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
