@@ -149,7 +149,7 @@ async function firecrawlPage(url, timeoutMs = 18000) {
 
   if (!data.success) { console.warn(`[firecrawl] success=false for ${url}:`, data.error || ''); return null }
 
-  const content = (data.data?.markdown || '').slice(0, 3000)
+  const content = (data.data?.markdown || '').slice(0, 1500)
   if (content.trim().length < 80) return null
   return { url, title: data.data?.metadata?.title || '', content }
 }
@@ -187,144 +187,113 @@ async function gatherWebPages(baseUrl) {
   return { pages, scanMode: pages.length >= 2 ? 'full' : 'homepage_only' }
 }
 
-// ── Claude AI — real business intelligence ────────────────────────────────────
+// ── Static fallback — used when Claude times out ──────────────────────────────
 
-// Short fallback prompt for no-web scenario — faster, fewer tokens
-function buildNoWebPrompt(companyName, segmentLabel, city, country, currentScores) {
-  return `Si STRIKER INTELLIGENCE AI. Vráť VÝLUČNE valid JSON bez markdown.
+function buildFallback(companyName, segment, segmentLabel) {
+  const seg = (segment || '').toLowerCase()
+  const isLaundry = seg.includes('waesch') || seg.includes('praco') || seg.includes('laund') || seg.includes('textil')
+  const isHotel   = seg.includes('hotel') || seg.includes('gastro') || seg.includes('resort')
 
-STRIKER: 45kW → 120-160kW teplo, 8000-10000 EUR, ROI 6-36 mes.
-
-FIRMA: ${companyName}
-SEGMENT: ${segmentLabel}
-LOKALITA: ${[city, country].filter(Boolean).join(', ')}
-FIT SCORE: ${currentScores.strikerFit}/100
-WEB: nedostupný — odhadni podľa segmentu
-
-JSON (slovensky, stručne):
-{"websiteSummary":"AI odhad — web nedostupný. 2 vety o firme podľa segmentu.","extractedKeywords":[],"estimatedHeatDemand":"odhad kW","estimatedBusinessSize":"odhad veľkosti","estimatedEnergyIntensity":"úroveň","estimatedROI":"X-Y mesiacov","aiReasoning":"2 vety prečo STRIKER target","businessOpportunity":"1 veta","isRealPressure":true,"pressureLevel":"stredný","pressureExplanation":"1 veta","timingAssessment":"1 veta","signals":["signál 1","signál 2"],"keyEvidence":[],"strikerArgument":"1 veta","urgencyBoost":5,"buyingIntentBoost":5,"energyFindings":"1 veta","modernizationFindings":"1 veta","esgFindings":"1 veta","problemProfile":[{"problem":"max 8 slov","confidence":65,"source":"segment_analysis","detectedText":null,"aiReasoning":"1 veta","severity":"medium","strikerSolution":"1 veta"},{"problem":"druhý problém","confidence":60,"source":"segment_analysis","detectedText":null,"aiReasoning":"1 veta","severity":"medium","strikerSolution":"1 veta"}],"heatPressure":70,"heatPressureReason":"1 veta","thermalDependency":70,"thermalDependencyReason":"1 veta","operatingCostPressure":65,"operatingCostPressureReason":"1 veta","modernizationNeed":60,"modernizationNeedReason":"1 veta","boilerDependencyProb":70,"boilerDependencyProbReason":"1 veta","willingnessToSolve":65,"willingnessToSolveReason":"1 veta"}`
-}
-
-async function analyzeWithClaude({ companyName, segmentLabel, city, country, pages, signalsByCategory, currentScores }) {
-  const hasContent   = pages.length > 0
-  const webContent   = hasContent
-    ? pages.map(p => `### ${p.title || p.url}\n${p.content}`).join('\n\n---\n\n').slice(0, 6000)
-    : 'Web firmy nebol dostupný.'
-  const signalSummary = Object.entries(signalsByCategory)
-    .map(([, v]) => `${v.label}: ${v.found.slice(0, 5).join(', ')}`)
-    .join(' | ') || 'žiadne'
-
-  const prompt = `Si STRIKER INTELLIGENCE AI. Analyzuj firmu a vráť VÝLUČNE valid JSON bez markdown.
-
-STRIKER technológia: 45kW → 120-160kW teplo, cena 8000-10000 EUR, ROI 6-36 mesiacov.
-
-FIRMA: ${companyName}
-SEGMENT: ${segmentLabel}
-LOKALITA: ${[city, country].filter(Boolean).join(', ')}
-SIGNÁLY: ${signalSummary}
-
-WEB OBSAH:
-${webContent}
-
-POKYNY:
-- Analýza musí byť KONKRÉTNA pre túto firmu, nie generická
-- Ak web chýba: odhadni podľa segmentu, označ ako "AI odhad"
-- Vygeneruj 2-4 konkrétne energetické problémy pre problemProfile
-- Každá metrika musí mať číslo 0-100 A textové vysvetlenie prečo
-
-JSON VÝSTUP (všetok text po slovensky):
-{
-  "websiteSummary": "2-3 vety čo táto firma robí",
-  "extractedKeywords": ["max 6 kľúčových slov z webu"],
-  "estimatedHeatDemand": "napr. ~150 kW — práčovňa s kontinuálnym ohrevom",
-  "estimatedBusinessSize": "napr. Stredná firma · 50-150 zamestnancov",
-  "estimatedEnergyIntensity": "veľmi vysoká — nepretržitý ohrev vody 24/7",
-  "estimatedROI": "napr. 8-14 mesiacov · úspora ~900 EUR/mesiac",
-  "aiReasoning": "2-3 vety prečo je firma dobrý STRIKER target",
-  "businessOpportunity": "1-2 vety konkrétna príležitosť",
-  "isRealPressure": true,
-  "pressureLevel": "vysoký",
-  "pressureExplanation": "1-2 vety prečo reálny tlak alebo nie",
-  "timingAssessment": "1 veta či je teraz vhodný čas",
-  "signals": ["signál 1", "signál 2", "signál 3"],
-  "keyEvidence": ["priama citácia z webu alebo fakt 1", "fakt 2"],
-  "strikerArgument": "1 veta najsilnejší argument",
-  "urgencyBoost": 15,
-  "buyingIntentBoost": 10,
-  "energyFindings": "1-2 vety o energetických nákladoch",
-  "modernizationFindings": "1-2 vety o modernizácii",
-  "esgFindings": "1-2 vety o ESG signáloch",
-
-  "problemProfile": [
-    {
-      "problem": "max 8 slov — konkrétny problém",
-      "confidence": 88,
-      "source": "https://firma.de/services alebo segment_analysis",
-      "detectedText": "priama citácia z webu alebo null ak web chýbal",
-      "aiReasoning": "1-2 vety prečo si AI myslí že tento problém existuje",
-      "severity": "high",
-      "strikerSolution": "1 veta ako STRIKER rieši tento konkrétny problém"
-    },
-    {
-      "problem": "druhý konkrétny problém",
-      "confidence": 72,
-      "source": "segment_analysis",
-      "detectedText": null,
-      "aiReasoning": "1-2 vety reasoning",
-      "severity": "medium",
-      "strikerSolution": "1 veta riešenie"
-    }
-  ],
-
-  "heatPressure": 85,
-  "heatPressureReason": "1 veta prečo toto číslo — napr. práčovňa spotrebuje teplo nepretržite",
-  "thermalDependency": 90,
-  "thermalDependencyReason": "1 veta — napr. bez tepla prevádzka stojí",
-  "operatingCostPressure": 75,
-  "operatingCostPressureReason": "1 veta — napr. energie tvoria 35%+ nákladov",
-  "modernizationNeed": 65,
-  "modernizationNeedReason": "1 veta — napr. kotolňa staršia ako 10 rokov",
-  "boilerDependencyProb": 80,
-  "boilerDependencyProbReason": "1 veta — napr. segment typicky používa plynový kotol",
-  "willingnessToSolve": 70,
-  "willingnessToSolveReason": "1 veta — napr. ESG záväzky a rastúce ceny motivujú k zmene"
-}`
-
-  const claudeT0 = Date.now()
-  console.log(`[CLAUDE] START — model=${CLAUDE_MODEL} max_tokens=3000 web_chars=${pages.map(p=>p.content.length).reduce((a,b)=>a+b,0)}`)
-
-  const claudeFetch = fetch('https://api.anthropic.com/v1/messages', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
-    body:    JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 3000, messages: [{ role: 'user', content: prompt }] }),
-  })
-  const claudeTimeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Claude timeout 45s')), 45000)
-  )
-
-  let res
-  try {
-    res = await Promise.race([claudeFetch, claudeTimeout])
-  } catch (e) {
-    console.error(`[CLAUDE] FAILED after ${Date.now()-claudeT0}ms:`, e.message)
-    throw e
+  const profile = isLaundry ? {
+    heatPressure: 88, thermalDependency: 92, operatingCostPressure: 84,
+    modernizationNeed: 70, boilerDependencyProb: 85, willingnessToSolve: 72,
+    estimatedHeatDemand: '~150-200 kW',
+    problemProfile: [
+      { problem: 'Sehr hoher Dampf- und Wärmebedarf', confidence: 82, source: 'segment_analysis', detectedText: null, aiReasoning: 'Wäschereien benötigen konstant Wärme.', severity: 'high', strikerSolution: 'STRIKER ersetzt bis 70% des Gasverbrauchs.' },
+      { problem: 'Energiekosten als Hauptkostenfaktor', confidence: 78, source: 'segment_analysis', detectedText: null, aiReasoning: 'Energie macht 30-40% der Betriebskosten aus.', severity: 'high', strikerSolution: 'ROI unter 12 Monaten typisch.' }
+    ]
+  } : isHotel ? {
+    heatPressure: 74, thermalDependency: 78, operatingCostPressure: 70,
+    modernizationNeed: 65, boilerDependencyProb: 74, willingnessToSolve: 68,
+    estimatedHeatDemand: '~80-130 kW',
+    problemProfile: [
+      { problem: 'Hoher Warmwasserverbrauch', confidence: 72, source: 'segment_analysis', detectedText: null, aiReasoning: 'Hotels verbrauchen typisch viel Warmwasser.', severity: 'high', strikerSolution: 'STRIKER liefert 120-160kW bei 45kW Strom.' },
+      { problem: 'Hohe Heizkosten', confidence: 65, source: 'segment_analysis', detectedText: null, aiReasoning: 'Heizbedarf ist konstant hoch.', severity: 'medium', strikerSolution: 'COP 2.7-3.5 senkt Heizkosten um bis 70%.' }
+    ]
+  } : {
+    heatPressure: 65, thermalDependency: 65, operatingCostPressure: 65,
+    modernizationNeed: 60, boilerDependencyProb: 65, willingnessToSolve: 62,
+    estimatedHeatDemand: '~60-100 kW',
+    problemProfile: [
+      { problem: 'Steigende Energiekosten', confidence: 62, source: 'segment_analysis', detectedText: null, aiReasoning: 'Steigende Energiepreise belasten alle Betriebe.', severity: 'medium', strikerSolution: 'STRIKER reduziert Wärmekosten um bis 70%.' }
+    ]
   }
 
-  console.log(`[CLAUDE] HTTP response ${res.status} after ${Date.now()-claudeT0}ms`)
+  return {
+    websiteSummary: `AI odhad — ${companyName} (${segmentLabel || segment}). Web nebol dostupný.`,
+    extractedKeywords: [],
+    estimatedHeatDemand: profile.estimatedHeatDemand,
+    estimatedBusinessSize: 'Stredná firma',
+    estimatedEnergyIntensity: isLaundry ? 'veľmi vysoká' : 'stredná',
+    estimatedROI: isLaundry ? '8-14 mesiacov' : '10-20 mesiacov',
+    aiReasoning: `${companyName} je potenciálny STRIKER klient v segmente ${segmentLabel || segment}.`,
+    businessOpportunity: 'Úspora energetických nákladov až 70% s STRIKER technológiou.',
+    isRealPressure: true, pressureLevel: isLaundry ? 'vysoký' : 'stredný',
+    pressureExplanation: 'AI odhad podľa segmentu.', timingAssessment: 'Kontakt odporúčaný.',
+    signals: ['energia', 'teplo', 'úspora'],
+    keyEvidence: [], strikerArgument: 'Úspora 70% nákladov na teplo, ROI do 18 mesiacov.',
+    urgencyBoost: 5, buyingIntentBoost: 5,
+    energyFindings: 'AI odhad — segment s vysokou spotrebou energie.',
+    modernizationFindings: 'AI odhad.', esgFindings: 'AI odhad.',
+    heatPressureReason:          `Segment ${segment} má typicky vysoký tepelný tlak.`,
+    thermalDependencyReason:     'AI odhad podľa segmentu.',
+    operatingCostPressureReason: 'Energie tvoria významnú časť nákladov.',
+    modernizationNeedReason:     'AI odhad.',
+    boilerDependencyProbReason:  'Segment typicky používa plynový kotol.',
+    willingnessToSolveReason:    'Motivácia úsporou nákladov.',
+    problemProfile: profile.problemProfile,
+    heatPressure: profile.heatPressure, thermalDependency: profile.thermalDependency,
+    operatingCostPressure: profile.operatingCostPressure, modernizationNeed: profile.modernizationNeed,
+    boilerDependencyProb: profile.boilerDependencyProb, willingnessToSolve: profile.willingnessToSolve,
+  }
+}
 
-  const data = await res.json().catch(e => { throw new Error(`Claude JSON parse: ${e.message}`) })
-  if (!res.ok) throw new Error(data.error?.message || `Claude ${res.status}`)
+// Returns { result, usedFallback }
+async function analyzeWithClaude({ companyName, segmentLabel, city, country, pages, signalsByCategory, currentScores, segment }) {
+  // Limit web content to 1500 chars — enough context, much less tokens
+  const webContent = pages.length > 0
+    ? pages.map(p => p.content).join('\n').slice(0, 1500)
+    : null
 
-  const raw = (data.content?.[0]?.text || '').trim().replace(/^```json\s*/i,'').replace(/```\s*$/i,'').trim()
-  console.log(`[CLAUDE] DONE ${Date.now()-claudeT0}ms — response length: ${raw.length} chars`)
+  // Top 5 signals only
+  const topSignals = Object.values(signalsByCategory)
+    .flatMap(v => v.found).slice(0, 5).join(', ') || 'none'
+
+  const prompt = `STRIKER AI. Return ONLY valid JSON, no markdown, no text outside JSON.
+STRIKER: 45kW elec → 120-160kW heat, price 8000-10000 EUR, ROI 6-36 months.
+Company: ${companyName} | Segment: ${segmentLabel || segment} | Location: ${[city, country].filter(Boolean).join(', ')}
+Fit score: ${currentScores.strikerFit}/100 | Signals: ${topSignals}
+Web (${webContent ? webContent.length + ' chars' : 'unavailable'}): ${webContent || 'Not available — estimate from segment.'}
+Return JSON (text in Slovak/German, short):
+{"websiteSummary":"2 sentences","extractedKeywords":["kw1","kw2"],"estimatedHeatDemand":"~X kW","estimatedBusinessSize":"size","estimatedEnergyIntensity":"level","estimatedROI":"X-Y months","aiReasoning":"2 sentences why STRIKER fit","businessOpportunity":"1 sentence","isRealPressure":true,"pressureLevel":"vysoký","pressureExplanation":"1 sentence","timingAssessment":"1 sentence","signals":["s1","s2","s3"],"keyEvidence":["e1"],"strikerArgument":"1 sentence","urgencyBoost":10,"buyingIntentBoost":8,"energyFindings":"1 sentence","modernizationFindings":"1 sentence","esgFindings":"1 sentence","problemProfile":[{"problem":"max 7 words","confidence":78,"source":"web or segment_analysis","detectedText":null,"aiReasoning":"1 sentence","severity":"high","strikerSolution":"1 sentence"},{"problem":"second problem","confidence":65,"source":"segment_analysis","detectedText":null,"aiReasoning":"1 sentence","severity":"medium","strikerSolution":"1 sentence"}],"heatPressure":80,"heatPressureReason":"1 sentence","thermalDependency":78,"thermalDependencyReason":"1 sentence","operatingCostPressure":72,"operatingCostPressureReason":"1 sentence","modernizationNeed":65,"modernizationNeedReason":"1 sentence","boilerDependencyProb":75,"boilerDependencyProbReason":"1 sentence","willingnessToSolve":68,"willingnessToSolveReason":"1 sentence"}`
+
+  const claudeT0 = Date.now()
+  console.log(`[CLAUDE] START max_tokens=1000 web=${webContent ? webContent.length : 0}chars signals="${topSignals}"`)
 
   try {
+    const fetchP = fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 1000, messages: [{ role: 'user', content: prompt }] }),
+    })
+    const timeoutP = new Promise((_, rej) => setTimeout(() => rej(new Error('Claude timeout 20s')), 20000))
+
+    const res = await Promise.race([fetchP, timeoutP])
+    console.log(`[CLAUDE] HTTP ${res.status} in ${Date.now()-claudeT0}ms`)
+
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error?.message || `Claude HTTP ${res.status}`)
+
+    const raw = (data.content?.[0]?.text || '').trim().replace(/^```json\s*/i,'').replace(/```\s*$/i,'').trim()
+    console.log(`[CLAUDE] DONE ${Date.now()-claudeT0}ms — ${raw.length} chars`)
+
     const parsed = JSON.parse(raw)
-    console.log('[CLAUDE] JSON parse OK — keys:', Object.keys(parsed).join(', '))
-    return parsed
-  } catch (parseErr) {
-    console.error('[CLAUDE] JSON parse FAILED. Raw preview:', raw.slice(0, 300))
-    throw new Error('Claude vrátil nevalidný JSON: ' + parseErr.message)
+    console.log('[CLAUDE] JSON OK')
+    return { result: parsed, usedFallback: false }
+
+  } catch (e) {
+    console.error(`[CLAUDE] FAILED after ${Date.now()-claudeT0}ms: ${e.message} — using segment fallback`)
+    return { result: buildFallback(companyName, segment, segmentLabel), usedFallback: true }
   }
 }
 
@@ -482,36 +451,13 @@ exports.handler = async (event) => {
     const allDetectedSignals = Object.entries(signalsByCategory).flatMap(([, v]) => v.found)
     console.log(`[PIPELINE] STEP 2 DONE — signals: ${allDetectedSignals.length}`)
 
-    // ── STEP 3: Claude AI — short prompt + 18s timeout when no web data ──
-    console.log(`[PIPELINE] STEP 3 — Claude AI${!baseUrl ? ' (no-web prompt, 18s limit)' : ''}`)
-    let ai
-
-    if (!baseUrl) {
-      // No-web fast path: simple prompt, 1000 tokens, 18s timeout
-      const noWebPrompt = buildNoWebPrompt(companyName, segmentLabel || segment, city, country, currentScores)
-      const claudeT0 = Date.now()
-      console.log('[CLAUDE-NOWEB] START')
-      const fcNoWeb = fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 1000, messages: [{ role: 'user', content: noWebPrompt }] }),
-      })
-      const toNoWeb = new Promise((_, rej) => setTimeout(() => rej(new Error('Claude no-web timeout 18s')), 18000))
-      const rNoWeb = await Promise.race([fcNoWeb, toNoWeb])
-      console.log(`[CLAUDE-NOWEB] HTTP ${rNoWeb.status} in ${Date.now()-claudeT0}ms`)
-      const dNoWeb = await rNoWeb.json()
-      if (!rNoWeb.ok) throw new Error(dNoWeb.error?.message || `Claude ${rNoWeb.status}`)
-      const rawNoWeb = (dNoWeb.content?.[0]?.text || '').trim().replace(/^```json\s*/i,'').replace(/```\s*$/i,'').trim()
-      console.log(`[CLAUDE-NOWEB] DONE — ${rawNoWeb.length} chars`)
-      try { ai = JSON.parse(rawNoWeb) }
-      catch (e) { throw new Error('Claude no-web JSON parse failed: ' + e.message) }
-    } else {
-      ai = await analyzeWithClaude({
-        companyName, segmentLabel: segmentLabel || segment, city, country,
-        pages, signalsByCategory, currentScores,
-      })
-    }
-    console.log(`[PIPELINE] STEP 3 DONE — problemProfile=${(ai.problemProfile||[]).length} items`)
+    // ── STEP 3: Claude AI — 1000 tokens, 20s hard timeout, fallback on fail ──
+    console.log(`[PIPELINE] STEP 3 — Claude AI (max_tokens=1000, timeout=20s)`)
+    const { result: ai, usedFallback: claudeFallback } = await analyzeWithClaude({
+      companyName, segmentLabel: segmentLabel || segment, city, country,
+      pages, signalsByCategory, currentScores, segment,
+    })
+    console.log(`[PIPELINE] STEP 3 DONE — usedFallback=${claudeFallback} problemProfile=${(ai.problemProfile||[]).length}`)
 
     // ── STEP 4: Score calculation ──
     console.log(`[PIPELINE] STEP 4 — Score calculation`)
@@ -537,6 +483,7 @@ exports.handler = async (event) => {
     const writeOk = await fsWrite(FS_PROJECT, FS_KEY, 'intelligence_targets', targetId, {
         gatherStatus:    'done',
         gatherTimestamp: new Date().toISOString(),
+        gatherFallback:  claudeFallback || false,
 
         webPagesCount:   pages.length,
         crawlStatus:     crawlError ? `error: ${crawlError.slice(0, 80)}` : scanMode,
