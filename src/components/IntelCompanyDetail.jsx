@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
 import { INTEL_STATUS_LIST, REC_META, INTEL_STATUSES, scoreColor } from '../constants/intelMeta.js'
 import { updateTarget, deleteTarget, addContact, removeContact } from '../services/intelTargetService.js'
+import { sk } from '../locales/sk.js'
+import { de } from '../locales/de.js'
+
+const LOCALES = { sk, de }
 
 const mono = "'IBM Plex Mono',monospace"
 const sans = "'IBM Plex Sans',sans-serif"
@@ -279,19 +283,39 @@ function TabEnergy({ t }) {
   )
 }
 
-function TabAI({ t, onGather, gathering, gatherMsg, analysisResult }) {
+const LANG_CODES = ['sk', 'de']
+
+function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLang, L }) {
   const r = analysisResult
+  const btnStyle = (active) => ({
+    fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+    padding: '0.18rem 0.5rem', border: `1px solid ${active ? '#ffaa00' : '#1e2530'}`,
+    background: active ? 'rgba(255,170,0,0.15)' : 'transparent',
+    color: active ? '#ffaa00' : '#4b5563', borderRadius: 2, cursor: 'pointer', fontWeight: active ? 700 : 400,
+  })
+
   return (
     <div>
-      {/* Button + status */}
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.25rem' }}>
+      {/* Language switcher + AI button row */}
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
+        {/* Lang switcher */}
+        <div style={{ display: 'flex', gap: '0.2rem', marginRight: '0.5rem' }}>
+          {LANG_CODES.map(code => (
+            <button key={code} onClick={() => setLang(code)} style={btnStyle(lang === code)}>
+              {code.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        {/* AI button */}
         <button onClick={onGather} disabled={gathering}
           style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1.5px', textTransform: 'uppercase',
             padding: '0.35rem 0.9rem', border: '1px solid #ffaa0066',
             background: gathering ? 'rgba(255,170,0,0.05)' : 'rgba(255,170,0,0.1)',
             color: '#ffaa00', borderRadius: 2, cursor: 'pointer', fontWeight: 600, opacity: gathering ? 0.7 : 1 }}>
-          {gathering ? '⏳ Analyzujem...' : '🧠 AI Analýza'}
+          {gathering ? L.analyzing : L.aiBtn}
         </button>
+
         {gatherMsg && (
           <span style={{ fontFamily: mono, fontSize: '0.6rem', color: gatherMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>
             {gatherMsg}
@@ -309,15 +333,17 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult }) {
               color: r.score >= 75 ? '#00cc88' : r.score >= 55 ? '#ffaa00' : '#ef4444' }}>
               {r.score}
             </div>
-            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280' }}>/100 · STRIKER FIT</div>
+            <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280' }}>/100 · {L.scoreSuffix}</div>
             {r.usedFallback && (
               <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#6b7280',
-                padding: '0.06rem 0.3rem', border: '1px solid #1e2530', borderRadius: 2 }}>FALLBACK</span>
+                padding: '0.06rem 0.3rem', border: '1px solid #1e2530', borderRadius: 2 }}>
+                {L.fallbackBadge}
+              </span>
             )}
           </div>
 
           {/* Pain points */}
-          <SectionTitle>Pain Points</SectionTitle>
+          <SectionTitle>{L.sections.painPoints}</SectionTitle>
           <ul style={{ margin: '0 0 1rem', paddingLeft: '1.1rem' }}>
             {(r.painPoints || []).map((p, i) => (
               <li key={i} style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', marginBottom: '0.2rem', lineHeight: 1.5 }}>{p}</li>
@@ -327,9 +353,9 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult }) {
           {/* Reasoning + Argument + Opportunity */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '1rem' }}>
             {[
-              { label: 'AI Reasoning',          value: r.reasoning      },
-              { label: 'Hlavný argument',        value: r.mainArgument   },
-              { label: 'Príležitosť',            value: r.opportunity    },
+              { label: L.sections.reasoning,  value: r.reasoning    },
+              { label: L.sections.argument,   value: r.mainArgument },
+              { label: L.sections.opportunity, value: r.opportunity  },
             ].map(({ label, value }) => value ? (
               <div key={label} style={{ padding: '0.55rem 0.7rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
                 <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.25rem' }}>{label}</div>
@@ -341,7 +367,14 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult }) {
           {/* Email draft */}
           {r.draft && (
             <div>
-              <SectionTitle>Email Draft</SectionTitle>
+              <SectionTitle>
+                {L.sections.draft}
+                {L.draftNote && (
+                  <span style={{ fontWeight: 400, fontSize: '0.45rem', color: '#4b5563', marginLeft: '0.5rem' }}>
+                    {L.draftNote}
+                  </span>
+                )}
+              </SectionTitle>
               <pre style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', background: '#0d1117',
                 border: '1px solid #1e2530', borderRadius: 3, padding: '0.75rem 0.85rem',
                 whiteSpace: 'pre-wrap', lineHeight: 1.7, margin: 0 }}>
@@ -354,7 +387,7 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult }) {
 
       {!r && !gathering && (
         <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic' }}>
-          Klikni "🧠 AI Analýza" pre vygenerovanie sales analýzy.
+          {L.placeholder}
         </div>
       )}
     </div>
@@ -564,6 +597,9 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   const [gathering,      setGathering]      = useState(false)
   const [gatherMsg,      setGatherMsg]      = useState('')
   const [analysisResult, setAnalysisResult] = useState(null)
+  const [lang,           setLang]           = useState('sk')
+
+  const L = LOCALES[lang] || sk   // active locale
 
   // Sync tab keď initialTab sa zmení
   useEffect(() => { setActiveTab(initialTab) }, [initialTab])
@@ -596,14 +632,15 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
           segment:      t.segment,
           segmentLabel: t.segmentLabel,
           fitScore:     t.strikerFitScore || 50,
+          language:     lang,
         }),
       })
       const data = await res.json().catch(() => ({ ok: false, error: 'Invalid JSON' }))
       if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setAnalysisResult(data)
-      setGatherMsg(data.usedFallback ? '✓ AI analýza (fallback)' : '✓ AI analýza hotová')
+      setGatherMsg(data.usedFallback ? L.doneFallback : L.done)
     } catch (e) {
-      setGatherMsg('⚠ ' + e.message)
+      setGatherMsg(L.error + ': ' + e.message)
     } finally {
       setGathering(false)
     }
@@ -649,7 +686,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         <div style={{ padding: '1.25rem 1.4rem' }}>
           {activeTab === 'overview' && <TabOverview t={t} />}
           {activeTab === 'energy'   && <TabEnergy   t={t} />}
-          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} />}
+          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} />}
           {activeTab === 'sources'  && <TabSources  t={t} />}
           {activeTab === 'roi'      && <TabROI      t={t} />}
           {activeTab === 'crm'      && <TabCRM      t={t} onStatusChange={handleStatusChange} saving={saving} />}
