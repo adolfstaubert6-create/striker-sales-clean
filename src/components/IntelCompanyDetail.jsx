@@ -7,6 +7,7 @@ import { en } from '../locales/en.js'
 import EmailDraftEditor from './EmailDraftEditor.jsx'
 import NextBestAction   from './NextBestAction.jsx'
 import ProgressBar      from './ProgressBar.jsx'
+import ClientCard       from './ClientCard.jsx'
 
 const LOCALES = { sk, de, en }
 
@@ -31,6 +32,7 @@ const sans = "'IBM Plex Sans',sans-serif"
 
 const TABS = [
   { key: 'overview', label: 'Prehľad'       },
+  { key: 'klient',   label: '🕵️ Klient'     },
   { key: 'energy',   label: 'Energia'        },
   { key: 'ai',       label: 'AI Analýza'     },
   { key: 'sources',  label: 'Dôkazy'         },
@@ -715,6 +717,9 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   const [signalMsg,       setSignalMsg]       = useState('')
   const [aiTimeoutMsg,    setAiTimeoutMsg]    = useState(null)
   const [signalTimeoutMsg,setSignalTimeoutMsg]= useState(null)
+  const [clientCardData,  setClientCardData]  = useState(t.clientCard || null)
+  const [clientCardLoading,setClientCardLoading]= useState(false)
+  const [clientCardFallback,setClientCardFallback]= useState(false)
 
   const L = LOCALES[lang] || sk
 
@@ -800,6 +805,47 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
       setSignalMsg('⚠ ' + e.message)
     } finally {
       setSignalLoading(false)
+    }
+  }
+
+  async function handleClientCard() {
+    setClientCardLoading(true)
+    setClientCardFallback(false)
+    try {
+      const res = await fetch('/.netlify/functions/client-card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:                 t.name,
+          segment:              t.segment,
+          segmentLabel:         t.segmentLabel,
+          city:                 t.city,
+          country:              t.country || 'DE',
+          fitScore:             t.strikerFitScore || 50,
+          painPoints:           analysisResult?.painPoints || t.signals || [],
+          aiReasoning:          analysisResult?.reasoning  || t.aiReasoning || '',
+          reviewSummary:        t.reviewSummary  || null,
+          liveSignals:          t.liveSignals    || [],
+          reviewsSource:        t.reviewsSource  || 'simulated',
+          heatPressure:         t.heatPressure,
+          thermalDependency:    t.thermalDependency,
+          operatingCostPressure:t.operatingCostPressure,
+          modernizationNeed:    t.modernizationNeed,
+          boilerDependencyProb: t.boilerDependencyProb,
+          willingnessToSolve:   t.willingnessToSolve,
+        }),
+      })
+      const data = await res.json().catch(() => ({ ok: false }))
+      if (!data.ok) throw new Error('Client card error')
+      const { ok, usedFallback, ...card } = data
+      setClientCardData(card)
+      setClientCardFallback(!!usedFallback)
+      // Cache to Firebase
+      await updateTarget(t.id, { clientCard: card, clientCardAt: new Date().toISOString() })
+    } catch (e) {
+      console.error('[client-card]', e.message)
+    } finally {
+      setClientCardLoading(false)
     }
   }
 
@@ -902,6 +948,15 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         {/* Tab obsah */}
         <div style={{ padding: '1.25rem 1.4rem' }}>
           {activeTab === 'overview' && <TabOverview t={t} />}
+          {activeTab === 'klient'   && (
+            <ClientCard
+              target={t}
+              onGenerate={handleClientCard}
+              loading={clientCardLoading}
+              data={clientCardData}
+              fallback={clientCardFallback}
+            />
+          )}
           {activeTab === 'energy'   && <TabEnergy   t={t} onSignal={handleSignalEngine} signalLoading={signalLoading} signalMsg={signalMsg} signalTimeoutMsg={signalTimeoutMsg} />}
           {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} emailDraft={emailDraft} onSaveDraft={handleSaveDraft} onQueueDraft={handleQueueEmail} onDraftDirty={setDraftDirty} defaultDraftLang={defaultDraftLang(t)} aiTimeoutMsg={aiTimeoutMsg} />}
           {activeTab === 'sources'  && <TabSources  t={t} />}

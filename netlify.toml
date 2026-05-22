@@ -43,6 +43,9 @@
 [functions.serpapi-reviews]
   timeout = 26
 
+[functions.client-card]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
