@@ -1,20 +1,45 @@
 /**
- * Real contact finder — scrapes company website + SerpAPI Google search.
- * Returns only verified contacts with source URL + confidence.
- * Never invents names or emails.
+ * Contact Enrichment Engine v2 — aggressive extraction + structured matching.
+ * Extracts emails/phones via regex first, then Claude associates with names.
+ * Never invents emails. Marks type: PERSONAL / GENERAL / UNKNOWN.
  */
 
-const CLAUDE_KEY   = process.env.ANTHROPIC_API_KEY
+const CLAUDE_KEY    = process.env.ANTHROPIC_API_KEY
 const FIRECRAWL_KEY = process.env.FIRECRAWL_API_KEY
-const SERPAPI_KEY  = process.env.SERPAPI_API_KEY
-const CLAUDE_MODEL = 'claude-sonnet-4-6'
+const SERPAPI_KEY   = process.env.SERPAPI_API_KEY
+const CLAUDE_MODEL  = 'claude-sonnet-4-6'
 
-// Contact pages to try scraping
 const CONTACT_PATHS = [
   '/impressum', '/kontakt', '/kontakt.html', '/kontakt.php',
-  '/contact', '/contact-us', '/about', '/team',
-  '/ueber-uns', '/about-us', '/ansprechpartner',
+  '/contact', '/contact-us', '/team', '/ueber-uns',
+  '/about', '/about-us', '/ansprechpartner', '/footer',
 ]
+
+// ── Pre-extraction: regex before Claude ───────────────────────────────────────
+
+const EMAIL_RE  = /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g
+const PHONE_RE  = /(?:(?:\+49|0049|0)[0-9\s()\-\/\.]{6,20})/g
+
+const GENERAL_PREFIXES = ['info','kontakt','contact','office','verwaltung','direktion',
+  'reception','anfrage','sekretariat','buchung','reservierung','hallo','service',
+  'hello','mail','post','hotel','team','support']
+
+function extractEmails(text) {
+  const found = text.match(EMAIL_RE) || []
+  return [...new Set(found)].filter(e => e.length < 80)
+}
+
+function extractPhones(text) {
+  const found = text.match(PHONE_RE) || []
+  return [...new Set(found.map(p => p.trim().replace(/\s+/g,' ')))]
+    .filter(p => p.replace(/\D/g,'').length >= 7)
+    .slice(0, 8)
+}
+
+function isGeneralEmail(email) {
+  const local = email.split('@')[0].toLowerCase()
+  return GENERAL_PREFIXES.some(p => local === p || local.startsWith(p + '.') || local.startsWith(p + '-'))
+}
 
 function normalizeUrl(url) {
   if (!url) return null
@@ -22,118 +47,118 @@ function normalizeUrl(url) {
   return url.startsWith('http') ? url : `https://${url}`
 }
 
-// ── Firecrawl scrape one page ─────────────────────────────────────────────────
+// ── Firecrawl ─────────────────────────────────────────────────────────────────
 
-async function scrapePage(url, timeoutMs = 7000) {
+async function scrapePage(url, ms = 7000) {
   if (!FIRECRAWL_KEY) return null
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const ctrl = new AbortController()
+  const t    = setTimeout(() => ctrl.abort(), ms)
   try {
     const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FIRECRAWL_KEY}` },
-      body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true }),
-      signal: controller.signal,
+      body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: false }),
+      signal: ctrl.signal,
     })
-    clearTimeout(timer)
+    clearTimeout(t)
     if (!res.ok) return null
     const ct = res.headers.get('content-type') || ''
     if (!ct.includes('application/json')) return null
     const data = await res.json()
     if (!data.success || !data.data?.markdown) return null
-    const text = data.data.markdown.slice(0, 2500)
-    return text.trim().length > 50 ? { url, text } : null
-  } catch {
-    clearTimeout(timer)
-    return null
-  }
+    const text = data.data.markdown.slice(0, 3000)
+    return text.trim().length > 30 ? { url, text } : null
+  } catch { clearTimeout(t); return null }
 }
 
-// ── Scrape company website for contacts ───────────────────────────────────────
-
-async function scrapeWebsiteContacts(baseUrl) {
+async function scrapeWebsite(baseUrl) {
   const pages = []
-  const t0 = Date.now()
-
-  // Try homepage first
-  const home = await scrapePage(baseUrl, 6000)
+  const t0    = Date.now()
+  const home  = await scrapePage(baseUrl, 6000)
   if (home) pages.push(home)
 
-  // Try contact-specific pages (max 2, within time budget)
   for (const path of CONTACT_PATHS) {
-    if (Date.now() - t0 > 10000) break  // 10s budget
-    if (pages.length >= 3) break
+    if (Date.now() - t0 > 11000 || pages.length >= 4) break
     const p = await scrapePage(baseUrl + path, 5000)
     if (p) pages.push(p)
   }
-
   return pages
 }
 
-// ── SerpAPI search for company contacts ───────────────────────────────────────
+// ── SerpAPI ───────────────────────────────────────────────────────────────────
 
-async function serpApiContacts(companyName, city, apiKey) {
-  const q   = encodeURIComponent(`"${companyName}" ${city} Ansprechpartner OR Kontakt OR Geschäftsführer`)
+async function serpSearch(companyName, city, apiKey) {
+  const q   = encodeURIComponent(`"${companyName}" ${city} Geschäftsführer OR Ansprechpartner OR Kontakt OR Impressum`)
   const url = `https://serpapi.com/search.json?engine=google&q=${q}&api_key=${apiKey}&hl=de&gl=de&num=5`
   try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 6000)
-    const res = await fetch(url, { signal: controller.signal })
-    clearTimeout(timer)
+    const ctrl = new AbortController()
+    const t    = setTimeout(() => ctrl.abort(), 6000)
+    const res  = await fetch(url, { signal: ctrl.signal })
+    clearTimeout(t)
     if (!res.ok) return null
     const data = await res.json()
-    const snippets = (data.organic_results || [])
-      .map(r => `${r.title}: ${r.snippet || ''}`)
-      .join('\n')
-      .slice(0, 1500)
-    return snippets || null
-  } catch {
-    return null
-  }
+    return (data.organic_results || []).map(r => `${r.title}: ${r.snippet || ''}`).join('\n').slice(0, 1500) || null
+  } catch { return null }
 }
 
-// ── Claude contact extraction ─────────────────────────────────────────────────
+// ── Claude — associate names with pre-extracted emails/phones ─────────────────
 
-async function extractContacts(pages, serpSnippets, companyName) {
-  const webText = pages.map(p => `### Source: ${p.url}\n${p.text}`).join('\n\n---\n\n')
-  const serpText = serpSnippets ? `### Google Search Results:\n${serpSnippets}` : ''
-  const combined = `${webText}\n\n${serpText}`.slice(0, 4000)
+async function claudeExtract(pages, serpText, companyName, allEmails, allPhones) {
+  const webText   = pages.map(p => `### Source: ${p.url}\n${p.text}`).join('\n\n---\n\n')
+  const serpBlock = serpText ? `### Google Snippets:\n${serpText}` : ''
+  const combined  = `${webText}\n\n${serpBlock}`.slice(0, 4500)
 
-  const prompt = `Extract REAL contact persons from this German company data.
-Company: ${companyName}
+  const emailList = allEmails.join(', ') || 'none found'
+  const phoneList = allPhones.join(', ') || 'none found'
+
+  const prompt = `Contact extraction for German company: "${companyName}"
+
+Pre-extracted from HTML/text (these are REAL, use them):
+EMAILS FOUND: ${emailList}
+PHONES FOUND: ${phoneList}
+
+Full source text:
+${combined}
+
+TASK: Extract real contact persons and match them to the pre-extracted emails/phones above.
 
 STRICT RULES:
-- ONLY include contacts where you found an actual name from the source text
-- ONLY include emails that appear literally in the text (not guessed)
-- DO NOT invent, guess, or construct any names or emails
-- If no real person found, return empty contacts array
-- generalEmail: only if explicitly found in text (e.g. info@firma.de)
-- confidence: HIGH=email+name on website, MEDIUM=name on website no email, LOW=name in Google snippet only
+1. ONLY use emails from the EMAILS FOUND list — never construct new ones
+2. ONLY use phones from the PHONES FOUND list — never construct new ones
+3. ONLY include a person if their name appears literally in the text
+4. Match person names to nearby emails/phones from the lists above
+5. If a name exists but no personal email matches → use closest general email OR leave email null
+6. generalEmail: pick best general email (info@, kontakt@, etc.) from the list above
 
-Source text:
-${combined}
+Contact types:
+- PERSONAL: specific person name + their personal email clearly found
+- GENERAL: general email (info@, kontakt@) associated with a name, or standalone
+- UNKNOWN: name found but no email association possible
 
 Return ONLY valid JSON:
 {
   "contacts": [
     {
       "name": "Real Name From Text",
-      "role": "position if found or null",
-      "email": "email@if.found or null",
-      "phone": "+49... if found or null",
-      "source": "exact URL where found",
-      "confidence": "HIGH"
+      "role": "position or null",
+      "email": "email from pre-extracted list or null",
+      "emailType": "PERSONAL|GENERAL|null",
+      "phone": "phone from pre-extracted list or null",
+      "source": "URL where name was found",
+      "confidence": "HIGH|MEDIUM|LOW"
     }
   ],
-  "generalEmail": "info@firma.de or null"
+  "generalEmail": "best general email from list or null",
+  "allPhones": ["all found phones"],
+  "allEmails": ["all found emails"]
 }`
 
-  const fetchP = fetch('https://api.anthropic.com/v1/messages', {
+  const fetchP   = fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 900, messages: [{ role: 'user', content: prompt }] }),
   })
-  const timeoutP = new Promise((_, rej) => setTimeout(() => rej(new Error('Claude timeout')), 10000))
+  const timeoutP = new Promise((_, rej) => setTimeout(() => rej(new Error('Claude timeout')), 12000))
 
   const res  = await Promise.race([fetchP, timeoutP])
   const data = await res.json()
@@ -142,12 +167,40 @@ Return ONLY valid JSON:
   const raw    = (data.content?.[0]?.text || '').trim().replace(/^```json\s*/i,'').replace(/```\s*$/i,'').trim()
   const parsed = JSON.parse(raw)
 
-  // Filter out any contact with null name or obviously fake data
+  // Filter: must have real name, length > 2, not generic word
+  const FAKE_NAMES = ['ansprechpartner','kontakt','contact','impressum','team','management']
   const contacts = (parsed.contacts || []).filter(c =>
-    c.name && c.name.length > 2 && c.source && !c.name.toLowerCase().includes('ansprechpartner')
+    c.name && c.name.length > 2 && c.source &&
+    !FAKE_NAMES.some(f => c.name.toLowerCase().includes(f))
   )
 
-  return { contacts, generalEmail: parsed.generalEmail || null }
+  return {
+    contacts,
+    generalEmail: parsed.generalEmail || null,
+    allPhones:    parsed.allPhones    || allPhones,
+    allEmails:    parsed.allEmails    || allEmails,
+  }
+}
+
+// ── Fallback: build structured result from raw regex extraction ───────────────
+
+function buildFallback(allEmails, allPhones, baseUrl) {
+  const generalEmails = allEmails.filter(isGeneralEmail)
+  const personalEmails = allEmails.filter(e => !isGeneralEmail(e))
+
+  const contacts = []
+
+  // Personal emails → UNKNOWN contacts (no name)
+  personalEmails.slice(0, 3).forEach(email => {
+    contacts.push({ name: null, role: null, email, emailType: 'PERSONAL', phone: allPhones[0] || null, source: baseUrl || 'web', confidence: 'MEDIUM' })
+  })
+
+  return {
+    contacts,
+    generalEmail: generalEmails[0] || null,
+    allPhones,
+    allEmails,
+  }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -166,34 +219,56 @@ exports.handler = async (event) => {
 
   const t0      = Date.now()
   const baseUrl = normalizeUrl(website)
-  console.log(`[find-contacts] START "${companyName}" url=${baseUrl || 'none'}`)
+  console.log(`[find-contacts] START "${companyName}" url=${baseUrl||'none'}`)
 
-  // Hard 15s timeout on entire operation
   const hardTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('hard timeout 15s')), 15000))
 
   async function run() {
-    const [pages, serpSnippets] = await Promise.all([
-      baseUrl ? scrapeWebsiteContacts(baseUrl) : Promise.resolve([]),
-      SERPAPI_KEY ? serpApiContacts(companyName, city, SERPAPI_KEY) : Promise.resolve(null),
+    // 1. Scrape + SerpAPI in parallel
+    const [pages, serpText] = await Promise.all([
+      baseUrl ? scrapeWebsite(baseUrl) : Promise.resolve([]),
+      SERPAPI_KEY ? serpSearch(companyName, city, SERPAPI_KEY) : Promise.resolve(null),
     ])
 
-    console.log(`[find-contacts] scraped ${pages.length} pages, serp=${!!serpSnippets}`)
+    // 2. Pre-extract ALL emails + phones via regex
+    const allText    = pages.map(p => p.text).join('\n') + '\n' + (serpText || '')
+    const allEmails  = extractEmails(allText)
+    const allPhones  = extractPhones(allText)
 
-    if (!pages.length && !serpSnippets) {
-      return { contacts: [], generalEmail: null, sourceNote: 'Žiadne zdroje dostupné', foundAt: new Date().toISOString() }
+    console.log(`[find-contacts] pages=${pages.length} emails=${allEmails.length} phones=${allPhones.length}`)
+
+    // 3. Claude extraction (if available)
+    let result
+    if (CLAUDE_KEY && (pages.length || serpText)) {
+      try {
+        result = await claudeExtract(pages, serpText, companyName, allEmails, allPhones)
+      } catch (e) {
+        console.warn(`[find-contacts] Claude failed (${e.message}) — regex fallback`)
+        result = buildFallback(allEmails, allPhones, baseUrl)
+      }
+    } else {
+      result = buildFallback(allEmails, allPhones, baseUrl)
     }
 
-    if (!CLAUDE_KEY) {
-      return { contacts: [], generalEmail: null, sourceNote: 'Claude nedostupný — manuálne zadanie', foundAt: new Date().toISOString() }
+    // 4. If no named contacts but emails exist → create GENERAL entries
+    if (!result.contacts.length && allEmails.length) {
+      const genEmails  = allEmails.filter(isGeneralEmail)
+      const persEmails = allEmails.filter(e => !isGeneralEmail(e))
+
+      persEmails.slice(0, 2).forEach(email => {
+        result.contacts.push({ name: null, role: null, email, emailType: 'PERSONAL', phone: allPhones[0] || null, source: baseUrl || 'web', confidence: 'MEDIUM' })
+      })
+      if (!result.generalEmail && genEmails.length) result.generalEmail = genEmails[0]
     }
 
-    const result = await extractContacts(pages, serpSnippets, companyName)
-    console.log(`[find-contacts] found ${result.contacts.length} contacts in ${Date.now()-t0}ms`)
+    console.log(`[find-contacts] DONE ${Date.now()-t0}ms contacts=${result.contacts.length} generalEmail=${result.generalEmail}`)
 
     return {
       contacts:    result.contacts,
       generalEmail:result.generalEmail,
-      sourceNote:  pages.length ? `Firecrawl: ${pages.map(p => p.url).join(', ')}` : 'SerpAPI Google',
+      allPhones:   result.allPhones   || allPhones,
+      allEmails:   result.allEmails   || allEmails,
+      sourceNote:  pages.length ? `Firecrawl: ${pages.length} stránok` : serpText ? 'SerpAPI' : 'žiadne zdroje',
       foundAt:     new Date().toISOString(),
     }
   }
@@ -205,7 +280,7 @@ exports.handler = async (event) => {
     console.error(`[find-contacts] failed: ${e.message}`)
     return {
       statusCode: 200, headers: CORS,
-      body: JSON.stringify({ ok: true, contacts: [], generalEmail: null, sourceNote: 'Hľadanie zlyhalo: ' + e.message.slice(0, 80), foundAt: new Date().toISOString() }),
+      body: JSON.stringify({ ok: true, contacts: [], generalEmail: null, allPhones: [], allEmails: [], sourceNote: 'Zlyhanie: ' + e.message.slice(0,60), foundAt: new Date().toISOString() }),
     }
   }
 }

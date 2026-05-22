@@ -618,28 +618,62 @@ function TabROI({ t }) {
 }
 
 const CONF_COLORS = { HIGH: '#00cc88', MEDIUM: '#ffaa00', LOW: '#6b7280' }
+const TYPE_META = {
+  PERSONAL: { label: 'PERSONAL', color: '#00cc88' },
+  GENERAL:  { label: 'GENERAL',  color: '#ffaa00' },
+  UNKNOWN:  { label: 'UNKNOWN',  color: '#6b7280' },
+}
 
 function ContactCard({ c, onRemove }) {
-  const conf = CONF_COLORS[c.confidence] || '#6b7280'
+  const conf     = CONF_COLORS[c.confidence] || '#6b7280'
+  const typeMeta = TYPE_META[c.emailType] || null
+
   return (
     <div style={{ padding: '0.6rem 0.75rem', background: '#0d1117', border: `1px solid ${conf}22`, borderLeft: `3px solid ${conf}`, borderRadius: 3, marginBottom: '0.4rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.4rem' }}>
         <div style={{ flex: 1 }}>
+          {/* Role */}
           {c.role && <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.1rem' }}>{c.role}</div>}
-          <div style={{ fontFamily: sans, fontSize: '0.85rem', fontWeight: 600, color: '#e8eaed', marginBottom: '0.1rem' }}>{c.name}</div>
-          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-            {c.email && <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: '#00cc88' }}>✉ {c.email}</a>}
-            {c.phone && <span style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280' }}>📞 {c.phone}</span>}
+
+          {/* Name or UNKNOWN indicator */}
+          {c.name
+            ? <div style={{ fontFamily: sans, fontSize: '0.85rem', fontWeight: 600, color: '#e8eaed', marginBottom: '0.1rem' }}>{c.name}</div>
+            : <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic', marginBottom: '0.1rem' }}>Meno neznáme</div>
+          }
+
+          {/* Email row */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.1rem' }}>
+            {c.email ? (
+              <>
+                <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: '#00cc88' }}>✉ {c.email}</a>
+                {typeMeta && (
+                  <span style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+                    color: typeMeta.color, padding: '0.03rem 0.28rem', border: `1px solid ${typeMeta.color}44`, borderRadius: 2, background: `${typeMeta.color}12` }}>
+                    {typeMeta.label}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', fontStyle: 'italic' }}>Email nenájdený.</span>
+            )}
           </div>
-          {c.source && (
-            <div style={{ marginTop: '0.25rem' }}>
-              <a href={c.source} target="_blank" rel="noreferrer"
-                style={{ fontFamily: mono, fontSize: '0.46rem', color: '#374151', wordBreak: 'break-all' }}>
-                🔗 {c.source.replace(/^https?:\/\//, '').slice(0, 55)}
-              </a>
-            </div>
+
+          {/* Phone */}
+          {c.phone && <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280', marginBottom: '0.1rem' }}>📞 {c.phone}</div>}
+
+          {/* Source */}
+          {c.source && c.source !== 'manuálne zadanie' && (
+            <a href={c.source.startsWith('http') ? c.source : '#'} target="_blank" rel="noreferrer"
+              style={{ fontFamily: mono, fontSize: '0.46rem', color: '#374151', wordBreak: 'break-all', display: 'block', marginTop: '0.2rem' }}>
+              🔗 {c.source.replace(/^https?:\/\//, '').slice(0, 55)}
+            </a>
+          )}
+          {c.source === 'manuálne zadanie' && (
+            <span style={{ fontFamily: mono, fontSize: '0.44rem', color: '#374151' }}>✎ manuálne zadanie</span>
           )}
         </div>
+
+        {/* Right side: confidence + remove */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem', flexShrink: 0 }}>
           {c.confidence && (
             <span style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.5px', textTransform: 'uppercase',
@@ -664,7 +698,9 @@ function TabCRM({ t, onStatusChange, saving }) {
   const [newCt,          setNewCt]          = useState({ role: '', name: '', email: '', phone: '' })
   const [findLoading,    setFindLoading]    = useState(false)
   const [findMsg,        setFindMsg]        = useState('')
-  const [foundContacts,  setFoundContacts]  = useState(null)   // null=not searched, []=none found
+  const [foundContacts,  setFoundContacts]  = useState(null)
+  const [allPhones,      setAllPhones]      = useState(t.allPhones || [])
+  const [allEmails,      setAllEmails]      = useState(t.allEmails || [])
 
   async function handleFindContacts() {
     setFindLoading(true)
@@ -679,13 +715,20 @@ function TabCRM({ t, onStatusChange, saving }) {
       const data = await res.json().catch(() => ({ ok: false }))
       if (!data.ok) throw new Error('Hľadanie zlyhalo')
       setFoundContacts(data.contacts || [])
-      if (data.generalEmail && !t.email) {
-        await updateTarget(t.id, { email: data.generalEmail })
-      }
+      setAllPhones(data.allPhones || [])
+      setAllEmails(data.allEmails || [])
+      // Cache raw results to Firebase
+      const upd = { allPhones: data.allPhones || [], allEmails: data.allEmails || [] }
+      if (data.generalEmail && !t.email) upd.email = data.generalEmail
+      await updateTarget(t.id, upd)
+
+      const total = (data.contacts || []).length
+      const phones = (data.allPhones || []).length
+      const emails = (data.allEmails || []).length
       setFindMsg(
-        data.contacts?.length
-          ? `✅ Nájdené ${data.contacts.length} kontakt(y) · ${data.sourceNote || ''}`
-          : `ℹ Nenašla sa overená kontaktná osoba. ${data.generalEmail ? '· Email: ' + data.generalEmail : ''}`
+        total
+          ? `✅ ${total} kontakt(y) · ${emails} email(y) · ${phones} tel. · ${data.sourceNote || ''}`
+          : `ℹ Nenašla sa overená kontaktná osoba. ${emails ? emails + ' email(y) nájdených.' : ''}`
       )
     } catch (e) {
       setFindMsg('⚠ ' + e.message)
@@ -767,6 +810,34 @@ function TabCRM({ t, onStatusChange, saving }) {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Raw extraction results */}
+      {(allPhones.length > 0 || allEmails.length > 0) && (
+        <div style={{ marginBottom: '0.75rem', padding: '0.6rem 0.75rem', background: '#070a0e', border: '1px solid #1e2530', borderRadius: 3 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.35rem' }}>
+            Extrahované z webu
+          </div>
+          {allEmails.length > 0 && (
+            <div style={{ marginBottom: '0.2rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+              {allEmails.slice(0, 6).map((e, i) => (
+                <a key={i} href={`mailto:${e}`}
+                  style={{ fontFamily: mono, fontSize: '0.52rem', color: '#00cc88', padding: '0.04rem 0.3rem', border: '1px solid #00cc8833', borderRadius: 2, background: 'rgba(0,204,136,0.05)' }}>
+                  ✉ {e}
+                </a>
+              ))}
+            </div>
+          )}
+          {allPhones.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+              {allPhones.slice(0, 4).map((p, i) => (
+                <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280', padding: '0.04rem 0.3rem', border: '1px solid #374151', borderRadius: 2 }}>
+                  📞 {p}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
