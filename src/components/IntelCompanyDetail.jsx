@@ -3,8 +3,26 @@ import { INTEL_STATUS_LIST, REC_META, INTEL_STATUSES, scoreColor } from '../cons
 import { updateTarget, deleteTarget, addContact, removeContact } from '../services/intelTargetService.js'
 import { sk } from '../locales/sk.js'
 import { de } from '../locales/de.js'
+import { en } from '../locales/en.js'
+import EmailDraftEditor from './EmailDraftEditor.jsx'
 
-const LOCALES = { sk, de }
+const LOCALES = { sk, de, en }
+
+function defaultDraftLang(target) {
+  const c = (target?.country || '').toLowerCase()
+  if (c === 'sk') return 'sk'
+  if (['de', 'at', 'ch'].includes(c)) return 'de'
+  return 'de'
+}
+
+function initDraft(target) {
+  const d = target?.emailDraft || {}
+  return {
+    sk: d.sk || { subject: '', body: '' },
+    de: d.de || { subject: '', body: '' },
+    en: d.en || { subject: '', body: '' },
+  }
+}
 
 const mono = "'IBM Plex Mono',monospace"
 const sans = "'IBM Plex Sans',sans-serif"
@@ -285,7 +303,7 @@ function TabEnergy({ t }) {
 
 const LANG_CODES = ['sk', 'de']
 
-function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLang, L }) {
+function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLang, L, emailDraft, onSaveDraft, defaultDraftLang }) {
   const r = analysisResult
   const btnStyle = (active) => ({
     fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1.5px', textTransform: 'uppercase',
@@ -364,32 +382,24 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLan
             ) : null)}
           </div>
 
-          {/* Email draft */}
-          {r.draft && (
-            <div>
-              <SectionTitle>
-                {L.sections.draft}
-                {L.draftNote && (
-                  <span style={{ fontWeight: 400, fontSize: '0.45rem', color: '#4b5563', marginLeft: '0.5rem' }}>
-                    {L.draftNote}
-                  </span>
-                )}
-              </SectionTitle>
-              <pre style={{ fontFamily: mono, fontSize: '0.6rem', color: '#9ca3af', background: '#0d1117',
-                border: '1px solid #1e2530', borderRadius: 3, padding: '0.75rem 0.85rem',
-                whiteSpace: 'pre-wrap', lineHeight: 1.7, margin: 0 }}>
-                {r.draft}
-              </pre>
-            </div>
-          )}
+          {/* Email draft editor replaces static preview */}
         </div>
       )}
 
       {!r && !gathering && (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic' }}>
+        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic', marginBottom: '1.25rem' }}>
           {L.placeholder}
         </div>
       )}
+
+      {/* Email Draft Editor — always visible */}
+      <div style={{ marginTop: r ? '1.25rem' : 0 }}>
+        <EmailDraftEditor
+          draft={emailDraft}
+          onSave={onSaveDraft}
+          defaultLang={defaultDraftLang}
+        />
+      </div>
     </div>
   )
 }
@@ -598,8 +608,9 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   const [gatherMsg,      setGatherMsg]      = useState('')
   const [analysisResult, setAnalysisResult] = useState(null)
   const [lang,           setLang]           = useState('sk')
+  const [emailDraft,     setEmailDraft]     = useState(() => initDraft(t))
 
-  const L = LOCALES[lang] || sk   // active locale
+  const L = LOCALES[lang] || sk
 
   // Sync tab keď initialTab sa zmení
   useEffect(() => { setActiveTab(initialTab) }, [initialTab])
@@ -616,6 +627,12 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   async function handleDelete() {
     await deleteTarget(t.id)
     onDelete?.(); onClose()
+  }
+
+  async function handleSaveDraft(draftLang, subject, body) {
+    const updated = { ...emailDraft, [draftLang]: { subject, body } }
+    setEmailDraft(updated)
+    await updateTarget(t.id, { emailDraft: updated })
   }
 
   async function handleGather() {
@@ -639,6 +656,13 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
       if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`)
       setAnalysisResult(data)
       setGatherMsg(data.usedFallback ? L.doneFallback : L.done)
+      // Pre-fill email draft for the analysis language
+      if (data.subject || data.draft) {
+        setEmailDraft(prev => ({
+          ...prev,
+          [lang]: { subject: data.subject || '', body: data.draft || '' },
+        }))
+      }
     } catch (e) {
       setGatherMsg(L.error + ': ' + e.message)
     } finally {
@@ -686,7 +710,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         <div style={{ padding: '1.25rem 1.4rem' }}>
           {activeTab === 'overview' && <TabOverview t={t} />}
           {activeTab === 'energy'   && <TabEnergy   t={t} />}
-          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} />}
+          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} analysisResult={analysisResult} lang={lang} setLang={setLang} L={L} emailDraft={emailDraft} onSaveDraft={handleSaveDraft} defaultDraftLang={defaultDraftLang(t)} />}
           {activeTab === 'sources'  && <TabSources  t={t} />}
           {activeTab === 'roi'      && <TabROI      t={t} />}
           {activeTab === 'crm'      && <TabCRM      t={t} onStatusChange={handleStatusChange} saving={saving} />}
