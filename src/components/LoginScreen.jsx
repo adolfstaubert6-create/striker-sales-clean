@@ -1,18 +1,40 @@
 import { useState } from 'react'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { auth } from '../firebase.js'
 
-const USERS = { Staubert: 'Staubert2026', Szabo: 'Szabo2026' }
+// Mapovanie username → Firebase Auth email
+// Firebase Auth používatelia musia byť vytvorení v Firebase Console
+const USERNAME_MAP = {
+  staubert: 'staubert@striker-sales.internal',
+  szabo:    'szabo@striker-sales.internal',
+}
 
-export default function LoginScreen({ onLogin }) {
+export default function LoginScreen() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError]       = useState(false)
+  const [error,    setError]    = useState(false)
+  const [loading,  setLoading]  = useState(false)
 
-  function doLogin() {
-    if (USERS[username] && USERS[username] === password) {
-      onLogin(username)
-    } else {
+  async function doLogin() {
+    const key   = username.trim().toLowerCase()
+    const email = USERNAME_MAP[key]
+
+    if (!email) {
       setError(true)
       setPassword('')
+      return
+    }
+
+    setLoading(true)
+    setError(false)
+    try {
+      await signInWithEmailAndPassword(auth, email, password)
+      // onAuthStateChanged v App.jsx automaticky detekuje prihlásenie
+    } catch {
+      setError(true)
+      setPassword('')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -48,6 +70,7 @@ export default function LoginScreen({ onLogin }) {
           value={username}
           onChange={e => { setUsername(e.target.value); setError(false) }}
           onKeyDown={e => e.key === 'Enter' && document.getElementById('pwd-input').focus()}
+          disabled={loading}
         />
         <input
           id="pwd-input"
@@ -58,6 +81,7 @@ export default function LoginScreen({ onLogin }) {
           value={password}
           onChange={e => { setPassword(e.target.value); setError(false) }}
           onKeyDown={onKey}
+          disabled={loading}
         />
 
         {error && (
@@ -66,8 +90,8 @@ export default function LoginScreen({ onLogin }) {
           </div>
         )}
 
-        <button onClick={doLogin} style={btnStyle}>
-          Prihlásiť sa →
+        <button onClick={doLogin} style={{ ...btnStyle, opacity: loading ? 0.7 : 1 }} disabled={loading}>
+          {loading ? 'Prihlasovanie...' : 'Prihlásiť sa →'}
         </button>
       </div>
     </div>
@@ -78,11 +102,11 @@ const inputStyle = {
   width: '100%', background: 'var(--bg)', border: '1px solid var(--border)',
   color: 'var(--text)', fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.85rem',
   padding: '0.6rem 0.8rem', borderRadius: '2px', outline: 'none',
-  marginBottom: '0.75rem', display: 'block'
+  marginBottom: '0.75rem', display: 'block',
 }
 
 const btnStyle = {
   width: '100%', background: 'var(--accent)', border: 'none', color: 'white',
   fontFamily: "'IBM Plex Mono', monospace", fontSize: '0.8rem', letterSpacing: '2px',
-  textTransform: 'uppercase', padding: '0.7rem', borderRadius: '2px', cursor: 'pointer'
+  textTransform: 'uppercase', padding: '0.7rem', borderRadius: '2px', cursor: 'pointer',
 }

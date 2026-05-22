@@ -1,4 +1,4 @@
-import { getAuth, onAuthStateChanged } from 'firebase/auth'
+import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth'
 import { useState, useEffect } from 'react'
 
 const mono = "'IBM Plex Mono', monospace"
@@ -71,6 +71,12 @@ export default function Header({ view, setView, currentUser, division, setDivisi
               {userEmail}
             </span>
           )}
+          <button
+            onClick={() => signOut(getAuth())}
+            style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.22rem 0.6rem', border: '1px solid #1e2530', background: 'transparent', color: '#374151', borderRadius: '2px', cursor: 'pointer', marginLeft: '0.5rem' }}
+            title="Odhlásiť sa">
+            ⎋ Logout
+          </button>
         </nav>
       </div>
     </header>
