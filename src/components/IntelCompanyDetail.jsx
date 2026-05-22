@@ -279,15 +279,27 @@ function TabEnergy({ t }) {
   )
 }
 
-function TabAI({ t, onGather, gathering, gatherMsg }) {
+function TabAI({ t, onGather, gathering, gatherMsg, gatherPhase }) {
   return (
     <div>
-      {/* Gather button */}
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.25rem' }}>
-        <button onClick={onGather} disabled={gathering} style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.35rem 0.9rem', border: '1px solid #ffaa0066', background: gathering ? 'rgba(255,170,0,0.05)' : 'rgba(255,170,0,0.1)', color: '#ffaa00', borderRadius: 2, cursor: 'pointer', fontWeight: 600, opacity: gathering ? 0.7 : 1 }}>
-          {gathering ? '⏳ Firecrawl beží...' : '🔍 Spustiť Firecrawl analýzu'}
-        </button>
-        {gatherMsg && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: gatherMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>{gatherMsg}</span>}
+      {/* Gather button + live status */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem' }}>
+          <button onClick={onGather} disabled={gathering} style={{ fontFamily: mono, fontSize: '0.62rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.35rem 0.9rem', border: '1px solid #ffaa0066', background: gathering ? 'rgba(255,170,0,0.05)' : 'rgba(255,170,0,0.1)', color: '#ffaa00', borderRadius: 2, cursor: 'pointer', fontWeight: 600, opacity: gathering ? 0.7 : 1 }}>
+            {gathering ? '⏳ Analyzujem...' : '🔍 Spustiť Firecrawl analýzu'}
+          </button>
+          {gatherMsg && (
+            <span style={{ fontFamily: mono, fontSize: '0.6rem', color: gatherMsg.startsWith('✓') ? '#00cc88' : '#ef4444' }}>
+              {gatherMsg}
+            </span>
+          )}
+        </div>
+        {/* Live phase indicator počas zbierania */}
+        {gathering && gatherPhase && (
+          <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#374151', paddingLeft: '0.2rem' }}>
+            {gatherPhase}
+          </div>
+        )}
       </div>
 
       <SectionTitle>AI Reasoning</SectionTitle>
@@ -536,6 +548,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
   const [confirmDel,  setConfirmDel]  = useState(false)
   const [gathering,   setGathering]   = useState(false)
   const [gatherMsg,   setGatherMsg]   = useState('')
+  const [gatherPhase, setGatherPhase] = useState('')
 
   // Sync tab keď initialTab sa zmení (napr. CRM/EMAIL button na karte)
   useEffect(() => { setActiveTab(initialTab) }, [initialTab])
@@ -556,7 +569,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
 
   async function handleGather() {
     if (!t.web) { setGatherMsg('⚠ Zadaj web URL'); return }
-    setGathering(true); setGatherMsg('')
+    setGathering(true); setGatherMsg(''); setGatherPhase('🌐 Načítavam web firmy...')
     try {
       const res = await fetch('/.netlify/functions/intelligence-gather', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -579,6 +592,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
       }
 
       if (!data.ok) throw new Error(data.error || `Function vrátila ok:false`)
+      setGatherPhase('🧠 AI generuje Problem Profile...')
       const mergedSignals = [...new Set([...(t.signals||[]), ...(data.signals||[])])]
       await updateTarget(t.id, {
         signals:                mergedSignals,
@@ -613,9 +627,14 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         willingnessToSolveReason:    data.willingnessToSolveReason    || '',
         heatPressureReason:          data.heatPressureReason          || '',
       })
-      setGatherMsg(`✓ ${data.webPagesCount} stránok · ${(data.signals||[]).length} signálov · ${(data.problemProfile||[]).length} problémov detekovaných`)
+      const modeLabel = data.crawlStatus === 'homepage_only'   ? ' · lightweight scan (1 stránka)'
+                      : data.crawlStatus === 'homepage_failed' ? ' · bez web dát (timeout)'
+                      : data.crawlStatus === 'full'            ? ` · ${data.webPagesCount} stránok`
+                      : data.crawlStatus?.startsWith('error')  ? ` · Firecrawl chyba — AI odhad`
+                      : ''
+      setGatherMsg(`✓ AI analýza hotová${modeLabel} · ${(data.signals||[]).length} signálov · ${(data.problemProfile||[]).length} problémov`)
     } catch (e) { setGatherMsg('⚠ ' + e.message) }
-    finally { setGathering(false) }
+    finally { setGathering(false); setGatherPhase('') }
   }
 
   return (
@@ -658,7 +677,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         <div style={{ padding: '1.25rem 1.4rem' }}>
           {activeTab === 'overview' && <TabOverview t={t} />}
           {activeTab === 'energy'   && <TabEnergy   t={t} />}
-          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} />}
+          {activeTab === 'ai'       && <TabAI       t={t} onGather={handleGather} gathering={gathering} gatherMsg={gatherMsg} gatherPhase={gatherPhase} />}
           {activeTab === 'sources'  && <TabSources  t={t} />}
           {activeTab === 'roi'      && <TabROI      t={t} />}
           {activeTab === 'crm'      && <TabCRM      t={t} onStatusChange={handleStatusChange} saving={saving} />}

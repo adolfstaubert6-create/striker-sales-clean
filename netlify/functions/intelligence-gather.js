@@ -74,16 +74,17 @@ function calcSignalScore(signalsByCategory, baseScore) {
 
 // ── Firecrawl ─────────────────────────────────────────────────────────────────
 
-const PAGES_TO_TRY = [
-  { path: '',                label: 'Hlavná stránka' },
-  { path: '/ueber-uns',      label: 'O spoločnosti'  },
-  { path: '/about',          label: 'About'          },
-  { path: '/nachhaltigkeit', label: 'ESG'            },
-  { path: '/sustainability',  label: 'Sustainability'  },
-  { path: '/karriere',       label: 'Kariéra'        },
-  { path: '/leistungen',     label: 'Služby'         },
-  { path: '/services',       label: 'Services'       },
+// Podstránky pre voliteľný second-pass (len ak homepage prebehol rýchlo)
+const SUBPAGES = [
+  '/ueber-uns', '/about', '/nachhaltigkeit', '/sustainability',
+  '/leistungen', '/services',
 ]
+
+function normalizeUrl(url) {
+  if (!url) return null
+  url = url.trim().replace(/\/$/, '')
+  return url.startsWith('http') ? url : 'https://' + url
+}
 
 async function withTimeout(fn, ms) {
   let timer
@@ -92,14 +93,12 @@ async function withTimeout(fn, ms) {
   catch { clearTimeout(timer); return null }
 }
 
-function normalizeUrl(url) {
-  if (!url) return null
-  url = url.trim().replace(/\/$/, '')
-  return url.startsWith('http') ? url : 'https://' + url
-}
-
-async function firecrawlPage(url) {
+// Scrape jednej stránky s AbortController timeout
+async function firecrawlPage(url, timeoutMs = 18000) {
   if (!FIRECRAWL_KEY || !url) return null
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   let res
   try {
@@ -107,55 +106,72 @@ async function firecrawlPage(url) {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${FIRECRAWL_KEY}` },
       body:    JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true }),
+      signal:  controller.signal,
     })
   } catch (fetchErr) {
-    console.error(`[firecrawl] Network error for ${url}:`, fetchErr.message)
+    clearTimeout(timer)
+    const msg = fetchErr.name === 'AbortError' ? `timeout (>${timeoutMs}ms)` : fetchErr.message
+    console.error(`[firecrawl] Fetch error for ${url}: ${msg}`)
     return null
   }
+  clearTimeout(timer)
 
-  // Log status pre debug
   const ct = res.headers.get('content-type') || ''
-  console.log(`[firecrawl] ${url} → status=${res.status} content-type=${ct}`)
+  console.log(`[firecrawl] ${url} → status=${res.status} ct=${ct.split(';')[0]}`)
 
   if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    console.error(`[firecrawl] ${res.status} for ${url} — body preview: ${errText.slice(0, 200)}`)
+    const preview = await res.text().catch(() => '').then(t => t.slice(0, 150))
+    console.error(`[firecrawl] ${res.status} for ${url} — ${preview}`)
     return null
   }
 
-  // Overenie Content-Type pred JSON.parse
   if (!ct.includes('application/json')) {
-    const rawText = await res.text().catch(() => '')
-    console.error(`[firecrawl] Non-JSON response for ${url}. Content-Type: ${ct}. Preview: ${rawText.slice(0, 300)}`)
+    const preview = await res.text().catch(() => '').then(t => t.slice(0, 150))
+    console.error(`[firecrawl] Non-JSON (${ct}) for ${url} — ${preview}`)
     return null
   }
 
   let data
-  try {
-    data = await res.json()
-  } catch (jsonErr) {
-    console.error(`[firecrawl] JSON parse failed for ${url}:`, jsonErr.message)
-    return null
-  }
+  try { data = await res.json() }
+  catch (e) { console.error(`[firecrawl] JSON parse error for ${url}:`, e.message); return null }
 
-  if (!data.success) {
-    console.warn(`[firecrawl] success=false for ${url}:`, data.error || 'no error msg')
-    return null
-  }
+  if (!data.success) { console.warn(`[firecrawl] success=false for ${url}:`, data.error || ''); return null }
 
   const content = (data.data?.markdown || '').slice(0, 3000)
   if (content.trim().length < 80) return null
   return { url, title: data.data?.metadata?.title || '', content }
 }
 
+// Stratégia: homepage first, potom 1 podstránka ak čas dovolí
 async function gatherWebPages(baseUrl) {
-  if (!FIRECRAWL_KEY || !baseUrl) return []
-  const results = await Promise.all(
-    PAGES_TO_TRY.slice(0, 6).map(p =>
-      withTimeout(() => firecrawlPage(baseUrl + p.path), 8000)
-    )
-  )
-  return results.filter(Boolean)
+  if (!FIRECRAWL_KEY || !baseUrl) return { pages: [], scanMode: 'no_key' }
+
+  // Krok 1: Homepage (18s timeout)
+  console.log('[firecrawl] Phase 1: homepage scrape')
+  const t0 = Date.now()
+  const homepage = await withTimeout(() => firecrawlPage(baseUrl, 18000), 20000)
+
+  if (!homepage) {
+    console.warn('[firecrawl] Homepage failed — AI bude pracovať bez web dát')
+    return { pages: [], scanMode: 'homepage_failed' }
+  }
+
+  const pages = [homepage]
+  const elapsed = Date.now() - t0
+  console.log(`[firecrawl] Homepage OK (${elapsed}ms). Čas zostatok: ${22000 - elapsed}ms`)
+
+  // Krok 2: Jedna podstránka ak zostalo dosť času (max 10s)
+  if (elapsed < 12000) {
+    const subPath = SUBPAGES[0] // /ueber-uns ako prvý kandidát
+    console.log(`[firecrawl] Phase 2: quick scan ${subPath}`)
+    const sub = await withTimeout(() => firecrawlPage(baseUrl + subPath, 8000), 9000)
+    if (sub) { pages.push(sub); console.log('[firecrawl] Subpage OK') }
+    else { console.log('[firecrawl] Subpage skipped/timeout') }
+  } else {
+    console.log('[firecrawl] Subpage skipped — not enough time budget')
+  }
+
+  return { pages, scanMode: pages.length >= 2 ? 'full' : 'homepage_only' }
 }
 
 // ── Claude AI — real business intelligence ────────────────────────────────────
@@ -320,14 +336,18 @@ exports.handler = async (event) => {
   // ────────────────────────────────────────────────────────────────────────────
 
   try {
-    // 1. Scrape web pages — zachytí akékoľvek Firecrawl chyby
-    let pages = []
+    // 1. Scrape web pages — homepage first, subpage ak čas dovolí
+    let pages    = []
+    let scanMode = 'no_url'
     let crawlError = null
     try {
-      pages = await withTimeout(() => gatherWebPages(baseUrl), 20000) || []
-      console.log(`[intel-gather] Scraped: ${pages.length} pages`)
+      const crawlResult = await withTimeout(() => gatherWebPages(baseUrl), 25000)
+      pages    = crawlResult?.pages    || []
+      scanMode = crawlResult?.scanMode || 'timeout'
+      console.log(`[intel-gather] Scrape done: ${pages.length} pages, mode=${scanMode}`)
     } catch (crawlErr) {
       crawlError = crawlErr.message
+      scanMode   = 'error'
       console.error('[intel-gather] Firecrawl error (pokračujem bez webu):', crawlErr.message)
     }
 
@@ -363,7 +383,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         ok: true, elapsed: `${elapsed}s`,
         webPagesCount:   pages.length,
-        crawlStatus:     pages.length > 0 ? 'success' : crawlError ? `error: ${crawlError.slice(0,80)}` : (FIRECRAWL_KEY ? 'no_content' : 'no_api_key'),
+        crawlStatus:     crawlError ? `error: ${crawlError.slice(0, 80)}` : scanMode,
         crawlTimestamp:  new Date().toISOString(),
 
         // Real signal data
