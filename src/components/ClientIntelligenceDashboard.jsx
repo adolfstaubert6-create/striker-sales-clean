@@ -7,332 +7,297 @@ import EmailDraftEditor from './EmailDraftEditor.jsx'
 const mono = "'IBM Plex Mono',monospace"
 const sans = "'IBM Plex Sans',sans-serif"
 
-// ── Tokens ────────────────────────────────────────────────────────────────────
-const T = {
-  bg:      '#07090c',
-  panel:   '#0d1117',
-  card:    '#111418',
-  border:  '#1a1f2a',
-  orange:  '#ff5c00',
-  amber:   '#ffaa00',
-  green:   '#00cc88',
-  red:     '#ef4444',
-  purple:  '#818cf8',
-  text:    '#e8eaed',
-  sub:     '#9ca3af',
-  dim:     '#6b7280',
-  ghost:   '#374151',
+// ── Design tokens ──────────────────────────────────────────────────────────────
+const C = {
+  bg: '#06080b', panel: '#0d1117', card: '#111418',
+  border: '#1a1f2a', border2: '#21262d',
+  orange: '#ff5c00', amber: '#ffaa00', green: '#00cc88',
+  red: '#ef4444', purple: '#818cf8',
+  text: '#e8eaed', sub: '#9ca3af', dim: '#6b7280', ghost: '#374151',
 }
 
-// ── Data source badge ─────────────────────────────────────────────────────────
-const DS = {
-  live:      { label: 'ŽIVÉ DÁTA',       color: T.green  },
-  ai:        { label: 'AI ODHAD',        color: T.amber  },
-  verified:  { label: 'OVERENÝ ÚDAJ',   color: T.purple },
-  unknown:   { label: 'NEOVERENÉ',       color: T.ghost  },
-}
-
-function Badge({ type = 'unknown' }) {
-  const d = DS[type] || DS.unknown
+// ── Data badge ─────────────────────────────────────────────────────────────────
+function Badge({ type = 'unknown', small }) {
+  const M = {
+    live:     { label: 'ŽIVÉ DÁTA',       color: C.green  },
+    ai:       { label: 'AI ODHAD',        color: C.amber  },
+    verified: { label: 'OVERENÝ ÚDAJ',   color: C.purple },
+    unknown:  { label: 'NEOVERENÉ',       color: C.ghost  },
+    personal: { label: 'OSOBNÝ',          color: C.green  },
+    general:  { label: 'VŠEOBECNÝ',       color: C.amber  },
+  }
+  const m = M[type] || M.unknown
   return (
-    <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.5px', textTransform: 'uppercase',
-      color: d.color, padding: '0.03rem 0.28rem', border: `1px solid ${d.color}44`,
-      borderRadius: 2, background: `${d.color}10`, flexShrink: 0 }}>
-      {d.label}
+    <span style={{ fontFamily: mono, fontSize: small ? '0.36rem' : '0.39rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: m.color, padding: '0.03rem 0.3rem', border: `1px solid ${m.color}44`, borderRadius: 2, background: `${m.color}10`, whiteSpace: 'nowrap', flexShrink: 0 }}>
+      {m.label}
     </span>
   )
 }
 
-// ── Left nav ──────────────────────────────────────────────────────────────────
-const NAV = [
-  { key: 'overview',  icon: '◈', label: 'Prehľad'          },
-  { key: 'problem',   icon: '⚡', label: 'Problém klienta'  },
-  { key: 'signals',   icon: '◉', label: 'Signály'           },
-  { key: 'contacts',  icon: '◎', label: 'Kontakty'          },
-  { key: 'email',     icon: '✉', label: 'Email'             },
-  { key: 'analysis',  icon: '◆', label: 'AI Analýza'        },
-]
+// ── Section heading ────────────────────────────────────────────────────────────
+function SH({ label, source, action }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.1rem' }}>
+      <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost }}>{label}</span>
+      {source && <Badge type={source} />}
+      {action && <span style={{ flex: 1 }} />}
+      {action}
+    </div>
+  )
+}
 
 // ── KPI card ──────────────────────────────────────────────────────────────────
-function KPI({ label, value, unit = '', source, color, note }) {
-  const hasVal = value != null && value !== ''
-  const col = color || (typeof value === 'number' ? (value >= 70 ? T.orange : value >= 45 ? T.amber : T.dim) : T.dim)
+function KPI({ label, value, unit = '', source, color, note, max = 100 }) {
+  const has = value != null && value !== ''
+  const num = typeof value === 'number'
+  const col = color || (num ? (value >= 70 ? C.orange : value >= 45 ? C.amber : C.dim) : C.dim)
   return (
-    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 6, padding: '1rem', flex: 1, minWidth: 130 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-        <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.ghost }}>{label}</div>
-        {source && <Badge type={source} />}
+    <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 6, padding: '1.1rem 1.2rem', flex: 1, minWidth: 130, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, lineHeight: 1.4 }}>{label}</div>
+        {source && <Badge type={source} small />}
       </div>
-      {hasVal ? (
+      {has ? (
         <>
-          <div style={{ fontFamily: mono, fontSize: '1.6rem', fontWeight: 700, color: col, lineHeight: 1, marginBottom: '0.3rem' }}>
-            {typeof value === 'number' ? value : value}{unit}
+          <div style={{ fontFamily: mono, fontSize: '1.7rem', fontWeight: 700, color: col, lineHeight: 1 }}>
+            {num ? value : value}{unit}
           </div>
-          {typeof value === 'number' && (
-            <div style={{ height: 3, background: T.border, borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, value)}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.5s ease' }} />
+          {num && (
+            <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.min(100, (value / max) * 100)}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.5s ease', boxShadow: `0 0 6px ${col}66` }} />
             </div>
           )}
-          {note && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: T.dim, marginTop: '0.3rem', lineHeight: 1.4 }}>{note}</div>}
+          {note && <div style={{ fontFamily: mono, fontSize: '0.46rem', color: C.dim, lineHeight: 1.4, marginTop: '0.1rem' }}>{note}</div>}
         </>
       ) : (
-        <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', marginTop: '0.25rem' }}>Dáta zatiaľ neoverené</div>
+        <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.ghost, fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>
       )}
     </div>
   )
 }
 
-// ── Section heading ───────────────────────────────────────────────────────────
-function SH({ children }) {
-  return <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: T.ghost, marginBottom: '1rem' }}>{children}</div>
+// ── Metric row ─────────────────────────────────────────────────────────────────
+function MRow({ label, value, reason, source }) {
+  if (value == null) return null
+  const col = value >= 70 ? C.orange : value >= 45 ? C.amber : C.dim
+  return (
+    <div style={{ marginBottom: '0.85rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.sub }}>{label}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {source && <Badge type={source} small />}
+          <span style={{ fontFamily: mono, fontSize: '0.7rem', fontWeight: 700, color: col }}>{value}</span>
+        </div>
+      </div>
+      <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ width: `${value}%`, height: '100%', background: col, borderRadius: 2, boxShadow: `0 0 6px ${col}55` }} />
+      </div>
+      {reason && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: C.ghost, marginTop: '0.22rem', lineHeight: 1.45 }}>{reason}</div>}
+    </div>
+  )
 }
 
-// ── Contact row ───────────────────────────────────────────────────────────────
-function CRow({ c, onRemove, action }) {
-  const initials = (c.name || c.email || '?').charAt(0).toUpperCase()
-  const avatarColors = [T.orange, T.purple, T.green, T.amber]
-  const ac = avatarColors[(initials.charCodeAt(0) || 0) % avatarColors.length]
-  const conf = { HIGH: T.green, MEDIUM: T.amber, LOW: T.dim }[c.confidence] || T.dim
+// ── Contact card ───────────────────────────────────────────────────────────────
+function ContactCard({ c, onRemove, onSave }) {
+  const init  = (c.name || c.email || '?').charAt(0).toUpperCase()
+  const cols  = [C.orange, C.purple, C.green, C.amber, '#60a5fa']
+  const ac    = cols[(init.charCodeAt(0) || 0) % cols.length]
+  const confC = { HIGH: C.green, MEDIUM: C.amber, LOW: C.dim }[c.confidence] || C.dim
 
   return (
-    <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'flex-start', padding: '0.75rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, marginBottom: '0.4rem' }}>
-      {/* Avatar */}
-      <div style={{ width: 34, height: 34, borderRadius: '50%', background: `${ac}18`, border: `1.5px solid ${ac}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <span style={{ fontFamily: sans, fontSize: '0.85rem', fontWeight: 700, color: ac }}>{initials}</span>
+    <div style={{ display: 'flex', gap: '0.7rem', padding: '0.8rem', background: C.card, border: `1px solid ${C.border2}`, borderRadius: 5, marginBottom: '0.45rem', alignItems: 'flex-start' }}>
+      <div style={{ width: 36, height: 36, borderRadius: '50%', background: `${ac}18`, border: `1.5px solid ${ac}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ fontFamily: sans, fontSize: '0.9rem', fontWeight: 700, color: ac }}>{init}</span>
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         {c.name
-          ? <div style={{ fontFamily: sans, fontSize: '0.8rem', fontWeight: 600, color: T.text, marginBottom: '0.05rem' }}>{c.name}</div>
-          : <div style={{ fontFamily: mono, fontSize: '0.54rem', color: T.ghost, fontStyle: 'italic' }}>Meno neznáme</div>
+          ? <div style={{ fontFamily: sans, fontSize: '0.82rem', fontWeight: 600, color: C.text, marginBottom: '0.06rem' }}>{c.name}</div>
+          : <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.ghost, fontStyle: 'italic' }}>Meno neznáme</div>
         }
-        {c.role && <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: T.purple, marginBottom: '0.12rem' }}>{c.role}</div>}
+        {c.role && <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.purple, marginBottom: '0.15rem' }}>{c.role}</div>}
         {c.email
-          ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.54rem', color: T.green, display: 'block' }}>✉ {c.email}</a>
-          : <div style={{ fontFamily: mono, fontSize: '0.52rem', color: T.ghost, fontStyle: 'italic' }}>Email nenájdený</div>
+          ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.55rem', color: C.green, display: 'block', marginBottom: '0.05rem' }}>✉ {c.email}</a>
+          : <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.ghost, fontStyle: 'italic', marginBottom: '0.05rem' }}>Email nenájdený</div>
         }
-        {c.phone && <div style={{ fontFamily: mono, fontSize: '0.52rem', color: T.dim, marginTop: '0.05rem' }}>📞 {c.phone}</div>}
-        <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>
-          {c.confidence && <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: conf, padding: '0.02rem 0.25rem', border: `1px solid ${conf}44`, borderRadius: 2 }}>{c.confidence}</span>}
-          {c.emailType && c.emailType !== 'PERSONAL' && <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', textTransform: 'uppercase', color: T.amber, padding: '0.02rem 0.25rem', border: `1px solid ${T.amber}33`, borderRadius: 2 }}>{c.emailType}</span>}
+        {c.phone && <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.dim }}>📞 {c.phone}</div>}
+        <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+          {c.confidence && <Badge type={c.confidence.toLowerCase()} small />}
+          {c.emailType === 'GENERAL' && <Badge type="general" small />}
+          {c.emailType === 'PERSONAL' && <Badge type="personal" small />}
+          {c.source && c.source !== 'manuálne zadanie' && (
+            <a href={c.source.startsWith('http') ? c.source : '#'} target="_blank" rel="noreferrer"
+              style={{ fontFamily: mono, fontSize: '0.42rem', color: C.ghost }}>🔗 zdroj</a>
+          )}
         </div>
       </div>
-      {(onRemove || action) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flexShrink: 0 }}>
-          {action && <button onClick={action} style={{ fontFamily: mono, fontSize: '0.45rem', padding: '0.1rem 0.4rem', border: `1px solid ${T.green}44`, background: `${T.green}10`, color: T.green, borderRadius: 2, cursor: 'pointer' }}>+ Uložiť</button>}
-          {onRemove && <button onClick={onRemove} style={{ background: 'transparent', border: 'none', color: T.ghost, fontSize: '0.7rem', cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>}
-        </div>
-      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flexShrink: 0 }}>
+        {onSave && <button onClick={onSave} style={{ fontFamily: mono, fontSize: '0.46rem', padding: '0.1rem 0.42rem', border: `1px solid ${C.green}44`, background: `${C.green}10`, color: C.green, borderRadius: 2, cursor: 'pointer' }}>+ Uložiť</button>}
+        {onRemove && <button onClick={onRemove} style={{ background: 'transparent', border: 'none', color: C.ghost, fontSize: '0.7rem', cursor: 'pointer', padding: 0, lineHeight: 1 }}>✕</button>}
+      </div>
     </div>
   )
 }
 
-// ── Metric row (compact, labeled) ─────────────────────────────────────────────
-function MRow({ label, value, reason, source }) {
-  if (value == null) return null
-  const col = value >= 70 ? T.orange : value >= 45 ? T.amber : T.dim
+// ── Action button ──────────────────────────────────────────────────────────────
+function Btn({ children, onClick, color = C.orange, disabled, small }) {
   return (
-    <div style={{ marginBottom: '0.75rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.22rem' }}>
-        <span style={{ fontFamily: mono, fontSize: '0.52rem', color: T.sub }}>{label}</span>
-        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-          {source && <Badge type={source} />}
-          <span style={{ fontFamily: mono, fontSize: '0.65rem', fontWeight: 700, color: col }}>{value}</span>
-        </div>
-      </div>
-      <div style={{ height: 4, background: T.border, borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{ width: `${value}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.4s ease' }} />
-      </div>
-      {reason && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: T.ghost, marginTop: '0.2rem', lineHeight: 1.4 }}>{reason}</div>}
+    <button onClick={onClick} disabled={disabled}
+      style={{ fontFamily: mono, fontSize: small ? '0.5rem' : '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: small ? '0.28rem 0.7rem' : '0.38rem 0.9rem', border: `1px solid ${color}44`, background: `${color}0d`, color, borderRadius: 3, cursor: 'pointer', opacity: disabled ? 0.55 : 1, transition: 'all 0.12s', whiteSpace: 'nowrap' }}>
+      {children}
+    </button>
+  )
+}
+
+// ── Empty state ────────────────────────────────────────────────────────────────
+function Empty({ text = 'Dáta zatiaľ neoverené', action }) {
+  return (
+    <div style={{ padding: '2.5rem 1.5rem', background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, textAlign: 'center' }}>
+      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.ghost, fontStyle: 'italic', marginBottom: action ? '1rem' : 0 }}>{text}</div>
+      {action}
     </div>
   )
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+// ── Left nav ───────────────────────────────────────────────────────────────────
+const NAV = [
+  { key: 'overview',   label: 'Prehľad klienta',        icon: '○' },
+  { key: 'profile',    label: 'Profil klienta',          icon: '◈' },
+  { key: 'energy',     label: 'Energetický problém',     icon: '⚡' },
+  { key: 'signals',    label: 'Živé signály',            icon: '◉' },
+  { key: 'reviews',    label: 'Recenzie',                icon: '★' },
+  { key: 'technology', label: 'Technológie',             icon: '⚙' },
+  { key: 'finance',    label: 'Financie a návratnosť',   icon: '◇' },
+  { key: 'decision',   label: 'Rozhodovatelia',          icon: '◎' },
+  { key: 'contacts',   label: 'Kontakty',                icon: '◐' },
+  { key: 'email',      label: 'Emaily',                  icon: '✉' },
+  { key: 'followup',   label: 'Ďalší kontakt',           icon: '→' },
+  { key: 'pipeline',   label: 'Stav obchodu',            icon: '▸' },
+  { key: 'activity',   label: 'Aktivity',                icon: '◌' },
+  { key: 'sources',    label: 'Zdroje a dôkazy',         icon: '◫' },
+  { key: 'documents',  label: 'Dokumenty',               icon: '◻' },
+]
+
+// ── Dashboard ──────────────────────────────────────────────────────────────────
 export default function ClientIntelligenceDashboard({ target: initialT, onClose }) {
-  const [t, ]              = useState(initialT)
-  const [nav,              setNav]             = useState('overview')
-  const [analysisResult,   setAnalysisResult]  = useState(null)
-  const [gatherLoading,    setGatherLoading]   = useState(false)
-  const [signalLoading,    setSignalLoading]   = useState(false)
-  const [signalMsg,        setSignalMsg]       = useState('')
-  const [findLoading,      setFindLoading]     = useState(false)
-  const [findMsg,          setFindMsg]         = useState('')
-  const [foundContacts,    setFoundContacts]   = useState(null)
-  const [emailDraft,       setEmailDraft]      = useState(
+  const [t]              = useState(initialT)
+  const [nav, setNav]    = useState('overview')
+  const [analysis,  setAnalysis]  = useState(null)
+  const [gLoad,     setGLoad]     = useState(false)
+  const [sLoad,     setSLoad]     = useState(false)
+  const [sMsg,      setSMsg]      = useState('')
+  const [cLoad,     setCLoad]     = useState(false)
+  const [cMsg,      setCMsg]      = useState('')
+  const [found,     setFound]     = useState(null)
+  const [draft,     setDraft]     = useState(
     t.emailDraft || { sk: { subject: '', body: '' }, de: { subject: '', body: '' }, en: { subject: '', body: '' } }
   )
 
-  const fit     = t.strikerFitScore || t.overallScore || 0
-  const fitCol  = fit >= 80 ? T.orange : fit >= 60 ? T.amber : T.dim
-  const isLive  = t.reviewsSource === 'serpapi'
-  const hasEnergy = t.heatPressure != null
+  const fit    = t.strikerFitScore || t.overallScore || 0
+  const fitCol = fit >= 80 ? C.orange : fit >= 60 ? C.amber : C.dim
+  const live   = t.reviewsSource === 'serpapi'
+  const hasE   = t.heatPressure != null
 
-  // ── API handlers (concise) ───────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────────
 
-  async function runAnalysis() {
-    setGatherLoading(true)
+  async function doAnalysis() {
+    setGLoad(true)
     try {
       const r = await fetch('/.netlify/functions/ai-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, city: t.city, segment: t.segment, segmentLabel: t.segmentLabel, fitScore: t.strikerFitScore || 50, language: 'sk' }) })
       const d = await r.json()
-      if (d.ok) {
-        setAnalysisResult(d)
-        if (d.subject || d.draft) setEmailDraft(p => ({ ...p, sk: { subject: d.subject || '', body: d.draft || '' } }))
-      }
-    } catch {}
-    finally { setGatherLoading(false) }
+      if (d.ok) { setAnalysis(d); if (d.subject || d.draft) setDraft(p => ({ ...p, sk: { subject: d.subject || '', body: d.draft || '' } })) }
+    } catch {} finally { setGLoad(false) }
   }
 
-  async function runSignals() {
-    setSignalLoading(true); setSignalMsg('')
+  async function doSignals() {
+    setSLoad(true); setSMsg('')
     try {
-      const r = await fetch('/.netlify/functions/serpapi-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, url: t.web, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, country: t.country || 'DE', strikerFitScore: t.strikerFitScore || 50, painPoints: analysisResult?.painPoints || [], aiReasoning: analysisResult?.reasoning || '' }) })
+      const r = await fetch('/.netlify/functions/serpapi-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, url: t.web, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, country: t.country || 'DE', strikerFitScore: t.strikerFitScore || 50, painPoints: analysis?.painPoints || [], aiReasoning: analysis?.reasoning || '' }) })
       const d = await r.json()
-      if (d.ok) {
-        await updateTarget(t.id, { heatPressure: d.heatPressure, heatPressureReason: d.heatPressureReason, thermalDependency: d.thermalDependency, thermalDependencyReason: d.thermalDependencyReason, operatingCostPressure: d.operatingCostPressure, operatingCostPressureReason: d.operatingCostPressureReason, modernizationNeed: d.modernizationNeed, modernizationNeedReason: d.modernizationNeedReason, boilerDependencyProb: d.boilerDependencyProb, boilerDependencyProbReason: d.boilerDependencyProbReason, willingnessToSolve: d.willingnessToSolve, willingnessToSolveReason: d.willingnessToSolveReason, reviewsSource: d.reviewsSource, reviewsCachedAt: d.reviewsCachedAt, reviewRating: d.reviewRating, reviewCount: d.reviewCount, reviewSummary: d.reviewSummary, liveSignals: d.liveSignals || [] })
-        setSignalMsg(d.reviewsSource === 'serpapi' ? `✅ ${d.reviewCount || 0} Google recenzií · ${(d.liveSignals || []).length} signálov` : '✅ AI signálová analýza')
-      }
-    } catch (e) { setSignalMsg('⚠ ' + e.message) }
-    finally { setSignalLoading(false) }
+      if (d.ok) { await updateTarget(t.id, { heatPressure: d.heatPressure, heatPressureReason: d.heatPressureReason, thermalDependency: d.thermalDependency, thermalDependencyReason: d.thermalDependencyReason, operatingCostPressure: d.operatingCostPressure, operatingCostPressureReason: d.operatingCostPressureReason, modernizationNeed: d.modernizationNeed, modernizationNeedReason: d.modernizationNeedReason, boilerDependencyProb: d.boilerDependencyProb, boilerDependencyProbReason: d.boilerDependencyProbReason, willingnessToSolve: d.willingnessToSolve, willingnessToSolveReason: d.willingnessToSolveReason, reviewsSource: d.reviewsSource, reviewsCachedAt: d.reviewsCachedAt, reviewRating: d.reviewRating, reviewCount: d.reviewCount, reviewSummary: d.reviewSummary, liveSignals: d.liveSignals || [] }); setSMsg(d.reviewsSource === 'serpapi' ? `✅ ${d.reviewCount || 0} Google recenzií · ${(d.liveSignals || []).length} signálov` : '✅ AI signálová analýza') }
+    } catch (e) { setSMsg('⚠ ' + e.message) } finally { setSLoad(false) }
   }
 
-  async function runFindContacts() {
-    setFindLoading(true); setFindMsg('')
+  async function doContacts() {
+    setCLoad(true); setCMsg('')
     try {
       const r = await fetch('/.netlify/functions/find-contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, website: t.web, city: t.city, country: t.country || 'DE' }) })
       const d = await r.json()
-      if (d.ok) {
-        setFoundContacts(d.contacts || [])
-        if (d.generalEmail && !t.email) await updateTarget(t.id, { email: d.generalEmail })
-        setFindMsg(d.contacts?.length ? `✅ ${d.contacts.length} overených kontaktov` : 'Nenašla sa overená kontaktná osoba.')
-      }
-    } catch (e) { setFindMsg('⚠ ' + e.message) }
-    finally { setFindLoading(false) }
+      if (d.ok) { setFound(d.contacts || []); if (d.generalEmail && !t.email) await updateTarget(t.id, { email: d.generalEmail }); setCMsg(d.contacts?.length ? `✅ ${d.contacts.length} overených kontaktov` : 'Nenašla sa overená kontaktná osoba.') }
+    } catch (e) { setCMsg('⚠ ' + e.message) } finally { setCLoad(false) }
   }
 
   async function saveDraft(lang, subject, body) {
-    const updated = { ...emailDraft, [lang]: { subject, body } }
-    setEmailDraft(updated)
-    await updateTarget(t.id, { emailDraft: updated })
+    const u = { ...draft, [lang]: { subject, body } }
+    setDraft(u); await updateTarget(t.id, { emailDraft: u })
   }
 
   // ── Center sections ───────────────────────────────────────────────────────────
 
   function Center() {
+    const problem  = t.clientCard?.clientProfile || analysis?.reasoning
+    const nextStep = t.clientCard?.salesStrategy?.nextStep || analysis?.opportunity
+    const mainCt   = (t.contacts || [])[0]
 
-    if (nav === 'overview') {
-      const problem = t.clientCard?.clientProfile || analysisResult?.reasoning
-      const nextStep = t.clientCard?.salesStrategy?.nextStep || analysisResult?.opportunity
-      const mainContact = (t.contacts || [])[0]
+    // PREHĽAD KLIENTA
+    if (nav === 'overview') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <SH>Prehľad klienta</SH>
-
-          {/* Problem statement */}
-          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.orange}`, borderRadius: 4, padding: '1.1rem 1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.55rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.orange }}>Problém klienta</div>
-              <Badge type={isLive ? 'live' : problem ? 'ai' : 'unknown'} />
-            </div>
-            {problem
-              ? <p style={{ fontFamily: sans, fontSize: '0.78rem', color: T.text, lineHeight: 1.65, margin: 0 }}>{problem.split('\n\n')[0].slice(0, 200)}</p>
-              : <p style={{ fontFamily: sans, fontSize: '0.72rem', color: T.ghost, fontStyle: 'italic', margin: 0 }}>Spusti AI Analýzu alebo Signal Engine pre zistenie problému klienta.</p>
-            }
+        {/* Problem */}
+        <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1.25rem 1.4rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.orange }}>Hlavný problém klienta</span>
+            <Badge type={live ? 'live' : problem ? 'ai' : 'unknown'} />
           </div>
+          {problem
+            ? <p style={{ fontFamily: sans, fontSize: '0.8rem', color: C.text, lineHeight: 1.7, margin: 0 }}>{problem.split('\n\n')[0].slice(0, 220)}</p>
+            : <Empty text="Spusti AI Analýzu pre zistenie problému klienta." action={<Btn onClick={() => { doAnalysis(); setNav('profile') }} small>🧠 Spustiť AI Analýzu</Btn>} />
+          }
+        </div>
 
-          {/* 4 KPIs */}
+        {/* 5 KPI cards */}
+        <div>
+          <SH label="Kľúčové metriky" />
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <KPI label="STRIKER Fit"       value={fit || null}            source={fit ? 'verified' : 'unknown'} color={fitCol} />
-            <KPI label="Teplotný tlak"     value={t.heatPressure ?? null} source={hasEnergy ? (isLive ? 'live' : 'ai') : 'unknown'} />
-            <KPI label="Signály"           value={isLive ? (t.liveSignals || []).length : null} unit=" signálov" source={isLive ? 'live' : 'unknown'} color={T.green} note={isLive ? `★ ${t.reviewRating || '—'} Google` : null} />
-            <KPI label="Ochota riešiť"     value={t.willingnessToSolve ?? null} source={hasEnergy ? 'ai' : 'unknown'} />
+            <KPI label="Zhoda klienta"          value={fit || null}                   source={fit ? 'verified' : 'unknown'}            color={fitCol} max={100} />
+            <KPI label="Teplotný tlak"          value={t.heatPressure ?? null}        source={hasE ? (live ? 'live' : 'ai') : 'unknown'}                       />
+            <KPI label="Potreba modernizácie"   value={t.modernizationNeed ?? null}   source={hasE ? 'ai' : 'unknown'}                                          />
+            <KPI label="Signály z recenzií"     value={live ? (t.liveSignals || []).length : null}  unit=" sig."  source={live ? 'live' : 'unknown'} color={C.green} max={20} note={live && t.reviewRating ? `★ ${t.reviewRating} (${t.reviewCount || 0})` : null} />
+            <KPI label="Potenciál úspory"       value={t.estimatedROI ? null : null}  source="unknown"            note="Spusti AI Analýzu" />
           </div>
-
-          {/* Next step */}
-          {nextStep && (
-            <div style={{ background: `${T.green}08`, border: `1px solid ${T.green}22`, borderRadius: 4, padding: '1rem 1.25rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.green, marginBottom: '0.45rem' }}>Odporúčaný ďalší krok</div>
-              <div style={{ fontFamily: sans, fontSize: '0.8rem', color: T.text, marginBottom: '0.5rem' }}>{nextStep}</div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button onClick={() => setNav('email')} style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: `1px solid ${T.green}55`, background: `${T.green}12`, color: T.green, borderRadius: 3, cursor: 'pointer' }}>✉ Otvoriť Email</button>
-                {mainContact?.email && <a href={`mailto:${mainContact.email}`} style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: `1px solid ${T.border}`, background: 'transparent', color: T.dim, borderRadius: 3, textDecoration: 'none' }}>Kontakt: {mainContact.name || mainContact.email}</a>}
-              </div>
-            </div>
-          )}
-
-          {/* Pain points (concise) */}
-          {analysisResult?.painPoints?.length > 0 && (
-            <div>
-              <SH>Kľúčové problémy</SH>
-              {analysisResult.painPoints.slice(0, 3).map((p, i) => (
-                <div key={i} style={{ display: 'flex', gap: '0.5rem', padding: '0.55rem 0.75rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: '0.35rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: T.red, flexShrink: 0, marginTop: '0.05rem' }}>▸</span>
-                  <span style={{ fontFamily: sans, fontSize: '0.72rem', color: T.sub, lineHeight: 1.5 }}>{p}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-      )
-    }
 
-    if (nav === 'problem') return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <SH>Energetický problém</SH>
-        <div style={{ display: 'flex', gap: '0.65rem' }}>
-          <button onClick={runSignals} disabled={signalLoading}
-            style={{ fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.38rem 0.9rem', border: `1px solid ${T.orange}44`, background: signalLoading ? 'transparent' : `${T.orange}0d`, color: T.orange, borderRadius: 3, cursor: 'pointer', opacity: signalLoading ? 0.6 : 1 }}>
-            {signalLoading ? '⏳ Analyzujem...' : '⚡ Spustiť Signal Engine'}
-          </button>
-          {signalMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: signalMsg.startsWith('✅') ? T.green : T.amber, alignSelf: 'center' }}>{signalMsg}</span>}
-        </div>
-        <ProgressBar running={signalLoading} maxSecs={12} type="signal" />
-        {hasEnergy ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-            {[
-              { label: 'Teplotný tlak',       val: t.heatPressure,          reason: t.heatPressureReason },
-              { label: 'Závislosť od tepla',  val: t.thermalDependency,     reason: t.thermalDependencyReason },
-              { label: 'Prevádzkové náklady', val: t.operatingCostPressure, reason: t.operatingCostPressureReason },
-              { label: 'Potreba modernizácie', val: t.modernizationNeed,    reason: t.modernizationNeedReason },
-              { label: 'Závislosť od kotlov', val: t.boilerDependencyProb,  reason: t.boilerDependencyProbReason },
-              { label: 'Ochota riešiť',       val: t.willingnessToSolve,    reason: t.willingnessToSolveReason },
-            ].map(({ label, val, reason }) => (
-              <div key={label} style={{ padding: '0.75rem 0.9rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: '0.25rem' }}>
-                <MRow label={label} value={val} reason={reason} source={isLive ? 'live' : 'ai'} />
+        {/* Next step */}
+        {nextStep && (
+          <div style={{ background: `${C.green}07`, border: `1px solid ${C.green}22`, borderRadius: 5, padding: '1.1rem 1.3rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.green, display: 'block', marginBottom: '0.5rem' }}>Odporúčaný ďalší krok</span>
+            <div style={{ fontFamily: sans, fontSize: '0.82rem', color: C.text, marginBottom: '0.65rem', lineHeight: 1.5 }}>{nextStep}</div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <Btn onClick={() => setNav('email')} color={C.green} small>✉ Otvoriť emaily</Btn>
+              {mainCt?.email && <a href={`mailto:${mainCt.email}`} style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.7rem', border: `1px solid ${C.border2}`, background: 'transparent', color: C.dim, borderRadius: 3, textDecoration: 'none' }}>{mainCt.name || mainCt.email}</a>}
+            </div>
+          </div>
+        )}
+
+        {/* Pain points */}
+        {analysis?.painPoints?.length > 0 && (
+          <div>
+            <SH label="Kľúčové problémy" source="ai" />
+            {analysis.painPoints.slice(0, 3).map((p, i) => (
+              <div key={i} style={{ display: 'flex', gap: '0.6rem', padding: '0.65rem 0.85rem', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, marginBottom: '0.35rem' }}>
+                <span style={{ color: C.red, flexShrink: 0, fontSize: '0.7rem' }}>▸</span>
+                <span style={{ fontFamily: sans, fontSize: '0.73rem', color: C.sub, lineHeight: 1.55 }}>{p}</span>
               </div>
             ))}
           </div>
-        ) : (
-          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', padding: '1.5rem', textAlign: 'center', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4 }}>
-            Dáta zatiaľ neoverené — spusti Signal Engine.
-          </div>
         )}
-      </div>
-    )
 
-    if (nav === 'signals') return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <SH>Signály</SH>
-        {isLive && t.reviewSummary ? (
-          <div style={{ background: T.card, border: `1px solid ${T.green}33`, borderLeft: `3px solid ${T.green}`, borderRadius: 4, padding: '1rem 1.2rem' }}>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.55rem' }}>
-              <Badge type="live" />
-              {t.reviewRating && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: T.amber }}>★ {t.reviewRating} ({t.reviewCount || 0} recenzií)</span>}
-            </div>
-            <p style={{ fontFamily: sans, fontSize: '0.72rem', color: T.sub, lineHeight: 1.65, margin: 0 }}>{t.reviewSummary}</p>
-          </div>
-        ) : (
-          <div style={{ padding: '1.5rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, textAlign: 'center' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', marginBottom: '0.75rem' }}>Dáta zatiaľ neoverené</div>
-            <button onClick={() => { runSignals(); }} style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.8rem', border: `1px solid ${T.orange}44`, background: `${T.orange}0d`, color: T.orange, borderRadius: 3, cursor: 'pointer' }}>⚡ Signal Engine</button>
-          </div>
-        )}
+        {/* Live signals preview */}
         {(t.liveSignals || []).length > 0 && (
           <div>
-            <SH>Detekované kľúčové slová</SH>
+            <SH label="Posledné živé signály" source="live" />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-              {(t.liveSignals || []).map((s, i) => (
-                <span key={i} style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.1rem 0.4rem', border: `1px solid ${T.amber}44`, borderRadius: 3, color: T.amber, background: `${T.amber}0d` }}>{s}</span>
+              {(t.liveSignals || []).slice(0, 8).map((s, i) => (
+                <span key={i} style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.1rem 0.42rem', border: `1px solid ${C.amber}44`, borderRadius: 3, color: C.amber, background: `${C.amber}0d` }}>{s}</span>
               ))}
             </div>
           </div>
@@ -340,146 +305,342 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       </div>
     )
 
-    if (nav === 'contacts') return (
+    // PROFIL KLIENTA
+    if (nav === 'profile') return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <SH>Kontakty</SH>
-        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={runFindContacts} disabled={findLoading}
-            style={{ fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.38rem 0.9rem', border: `1px solid ${T.orange}44`, background: `${T.orange}0d`, color: T.orange, borderRadius: 3, cursor: 'pointer', opacity: findLoading ? 0.6 : 1 }}>
-            {findLoading ? '⏳ Hľadám...' : '🔍 Nájsť kontakty'}
-          </button>
-          {findMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: findMsg.startsWith('✅') ? T.green : T.amber }}>{findMsg}</span>}
-        </div>
-        <ProgressBar running={findLoading} maxSecs={15} type="ai" />
-        {t.email && (
-          <div style={{ padding: '0.6rem 0.8rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-            <Badge type="unknown" />
-            <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.6rem', color: T.green }}>✉ {t.email}</a>
-            <span style={{ fontFamily: mono, fontSize: '0.48rem', color: T.ghost }}>všeobecný email firmy</span>
-          </div>
-        )}
-        {(t.contacts || []).map((c, i) => <CRow key={i} c={c} onRemove={() => removeContact(t.id, i)} />)}
-        {foundContacts?.map((c, i) => (
-          <CRow key={i} c={c} action={() => { addContact(t.id, { ...c, source: c.source || 'web', confidence: c.confidence || 'MEDIUM' }); setFoundContacts(p => p.filter(fc => fc !== c)) }} />
-        ))}
-        {!t.contacts?.length && !foundContacts && !t.email && (
-          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', padding: '1.5rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, textAlign: 'center' }}>
-            Dáta zatiaľ neoverené — klikni Nájsť kontakty.
-          </div>
-        )}
-      </div>
-    )
-
-    if (nav === 'email') return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <SH>Email</SH>
-        <EmailDraftEditor draft={emailDraft} onSave={saveDraft} defaultLang="de" />
-      </div>
-    )
-
-    if (nav === 'analysis') return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <SH>AI Analýza</SH>
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-          <button onClick={runAnalysis} disabled={gatherLoading}
-            style={{ fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.38rem 0.9rem', border: `1px solid ${T.amber}44`, background: `${T.amber}0d`, color: T.amber, borderRadius: 3, cursor: 'pointer', opacity: gatherLoading ? 0.6 : 1 }}>
-            {gatherLoading ? '⏳ Analyzujem...' : '🧠 Spustiť AI Analýzu'}
-          </button>
+          <Btn onClick={doAnalysis} disabled={gLoad}>{gLoad ? '⏳ Analyzujem...' : '🧠 Generovať AI profil'}</Btn>
+          <ProgressBar running={gLoad} maxSecs={15} type="ai" />
         </div>
-        <ProgressBar running={gatherLoading} maxSecs={15} type="ai" />
-        {analysisResult ? (
-          <>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, padding: '1rem 1.25rem', textAlign: 'center' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.ghost, marginBottom: '0.3rem' }}>Score</div>
-                <div style={{ fontFamily: mono, fontSize: '2rem', fontWeight: 700, color: T.orange, lineHeight: 1 }}>{analysisResult.score}</div>
-                <div style={{ fontFamily: mono, fontSize: '0.4rem', color: T.ghost }}>/10</div>
-              </div>
-              {analysisResult.mainArgument && (
-                <div style={{ flex: 1, background: `${T.green}08`, border: `1px solid ${T.green}22`, borderRadius: 4, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ fontFamily: sans, fontSize: '0.72rem', color: T.text, lineHeight: 1.5 }}>✦ {analysisResult.mainArgument}</span>
-                </div>
-              )}
+        {problem ? (
+          <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1.3rem 1.5rem' }}>
+            <Badge type={analysis?.reasoning ? 'ai' : 'ai'} />
+            <div style={{ marginTop: '0.75rem' }}>
+              {(t.clientCard?.clientProfile || analysis?.reasoning || '').split('\n\n').slice(0, 4).map((p, i) => (
+                <p key={i} style={{ fontFamily: sans, fontSize: '0.75rem', color: i === 0 ? C.text : C.sub, lineHeight: 1.75, margin: 0, marginBottom: i < 3 ? '0.85rem' : 0 }}>{p}</p>
+              ))}
             </div>
-            {analysisResult.reasoning && (
-              <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, padding: '1rem 1.25rem' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: T.ghost, marginBottom: '0.4rem' }}>AI Reasoning <Badge type="ai" /></div>
-                <p style={{ fontFamily: sans, fontSize: '0.72rem', color: T.sub, lineHeight: 1.65, margin: 0 }}>{analysisResult.reasoning}</p>
+          </div>
+        ) : <Empty text="Dáta zatiaľ neoverené — spusti AI profil." />}
+
+        {t.clientCard?.salesStrategy && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+            {t.clientCard.salesStrategy.emphasize?.length > 0 && (
+              <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, padding: '0.9rem 1rem' }}>
+                <SH label="Zdôrazniť" />
+                {t.clientCard.salesStrategy.emphasize.map((e, i) => <div key={i} style={{ fontFamily: mono, fontSize: '0.56rem', color: C.green, marginBottom: '0.22rem' }}>✓ {e}</div>)}
               </div>
             )}
-            {analysisResult.painPoints?.length > 0 && (
-              <div>
-                <SH>Pain Points</SH>
-                {analysisResult.painPoints.map((p, i) => (
-                  <div key={i} style={{ display: 'flex', gap: '0.5rem', padding: '0.6rem 0.8rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: '0.3rem' }}>
-                    <span style={{ color: T.red, flexShrink: 0 }}>▸</span>
-                    <span style={{ fontFamily: sans, fontSize: '0.7rem', color: T.sub, lineHeight: 1.5 }}>{p}</span>
-                  </div>
-                ))}
+            {t.clientCard.risks?.length > 0 && (
+              <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, padding: '0.9rem 1rem' }}>
+                <SH label="Riziká" />
+                {t.clientCard.risks.map((r, i) => <div key={i} style={{ fontFamily: mono, fontSize: '0.56rem', color: C.dim, marginBottom: '0.22rem' }}>⚠ {r}</div>)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+
+    // ENERGETICKÝ PROBLÉM
+    if (nav === 'energy') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Btn onClick={doSignals} disabled={sLoad} color={C.orange}>{sLoad ? '⏳ Analyzujem...' : '⚡ Signal Engine'}</Btn>
+          {sMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: sMsg.startsWith('✅') ? C.green : C.amber }}>{sMsg}</span>}
+        </div>
+        <ProgressBar running={sLoad} maxSecs={12} type="signal" />
+        {hasE ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {[
+              { label: 'Teplotný tlak',       v: t.heatPressure,          r: t.heatPressureReason },
+              { label: 'Závislosť od tepla',  v: t.thermalDependency,     r: t.thermalDependencyReason },
+              { label: 'Prevádzkové náklady', v: t.operatingCostPressure, r: t.operatingCostPressureReason },
+              { label: 'Potreba modernizácie', v: t.modernizationNeed,    r: t.modernizationNeedReason },
+              { label: 'Závislosť od kotlov', v: t.boilerDependencyProb,  r: t.boilerDependencyProbReason },
+              { label: 'Ochota riešiť',       v: t.willingnessToSolve,    r: t.willingnessToSolveReason },
+            ].map(({ label, v, r }) => (
+              <div key={label} style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, padding: '0.85rem 1rem' }}>
+                <MRow label={label} value={v} reason={r} source={live ? 'live' : 'ai'} />
+              </div>
+            ))}
+          </div>
+        ) : <Empty text="Dáta zatiaľ neoverené — spusti Signal Engine." action={<Btn onClick={doSignals} color={C.orange} small>⚡ Signal Engine</Btn>} />}
+      </div>
+    )
+
+    // ŽIVÉ SIGNÁLY
+    if (nav === 'signals') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Btn onClick={doSignals} disabled={sLoad} color={C.orange}>{sLoad ? '⏳' : '⚡ Načítať signály'}</Btn>
+          {sMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: sMsg.startsWith('✅') ? C.green : C.amber }}>{sMsg}</span>}
+        </div>
+        <ProgressBar running={sLoad} maxSecs={12} type="signal" />
+        {live && t.reviewSummary
+          ? (
+            <div style={{ background: C.card, border: `1px solid ${C.green}33`, borderLeft: `3px solid ${C.green}`, borderRadius: 5, padding: '1.1rem 1.3rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.6rem' }}>
+                <Badge type="live" />
+                {t.reviewRating && <span style={{ fontFamily: mono, fontSize: '0.6rem', color: C.amber }}>★ {t.reviewRating} ({t.reviewCount || 0})</span>}
+              </div>
+              <p style={{ fontFamily: sans, fontSize: '0.75rem', color: C.sub, lineHeight: 1.7, margin: 0 }}>{t.reviewSummary}</p>
+            </div>
+          )
+          : <Empty text="Dáta zatiaľ neoverené" action={<Btn onClick={doSignals} color={C.orange} small>⚡ Načítať signály</Btn>} />
+        }
+        {(t.liveSignals || []).length > 0 && (
+          <div>
+            <SH label="Detekované kľúčové slová" source="live" />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+              {(t.liveSignals || []).map((s, i) => (
+                <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', padding: '0.1rem 0.42rem', border: `1px solid ${C.amber}44`, borderRadius: 3, color: C.amber, background: `${C.amber}0d` }}>{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {Object.keys(t.signalsByCategory || {}).length > 0 && (
+          <div>
+            <SH label="Kategórie signálov" source="live" />
+            {Object.entries(t.signalsByCategory).map(([k, v]) => (
+              <div key={k} style={{ marginBottom: '0.55rem' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: C.purple, marginBottom: '0.18rem' }}>{v.label || k} ({v.count || 0})</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
+                  {(v.found || []).slice(0, 7).map((kw, i) => <span key={i} style={{ fontFamily: mono, fontSize: '0.48rem', padding: '0.04rem 0.3rem', border: `1px solid ${C.purple}33`, borderRadius: 2, color: C.purple, background: `${C.purple}0d` }}>{kw}</span>)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+
+    // RECENZIE
+    if (nav === 'reviews') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH label="Recenzie" source={live ? 'live' : 'unknown'} />
+        {live ? (
+          <>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <Badge type="live" />
+              {t.reviewRating && <span style={{ fontFamily: mono, fontSize: '0.75rem', color: C.amber, fontWeight: 700 }}>★ {t.reviewRating}</span>}
+              {t.reviewCount && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: C.dim }}>({t.reviewCount} recenzií)</span>}
+            </div>
+            {t.reviewSummary && <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 5, padding: '1.1rem 1.3rem' }}><p style={{ fontFamily: sans, fontSize: '0.75rem', color: C.sub, lineHeight: 1.75, margin: 0 }}>{t.reviewSummary}</p></div>}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+              {(t.liveSignals || []).map((s, i) => <span key={i} style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.08rem 0.38rem', border: `1px solid ${C.amber}44`, borderRadius: 3, color: C.amber, background: `${C.amber}0d` }}>{s}</span>)}
+            </div>
+          </>
+        ) : <Empty text="Dáta zatiaľ neoverené" action={<Btn onClick={() => { doSignals(); }} color={C.orange} small>⚡ Načítať recenzie</Btn>} />}
+      </div>
+    )
+
+    // TECHNOLÓGIE
+    if (nav === 'technology') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH label="Technický profil" source={t.clientCard?.intelligence ? 'ai' : 'unknown'} />
+        {t.clientCard?.intelligence ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+            {t.clientCard.intelligence.buildingAge && (
+              <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, padding: '0.9rem 1rem' }}>
+                <SH label="Vek budovy" />
+                <div style={{ fontFamily: sans, fontSize: '0.78rem', color: C.text, fontWeight: 600 }}>{t.clientCard.intelligence.buildingAge.estimate}</div>
+                <div style={{ fontFamily: mono, fontSize: '0.54rem', color: C.dim, marginTop: '0.2rem' }}>{t.clientCard.intelligence.buildingAge.approximateAge}</div>
+                <div style={{ marginTop: '0.4rem' }}><Badge type={t.clientCard.intelligence.buildingAge.confidence?.toLowerCase() || 'unknown'} small /></div>
+              </div>
+            )}
+            {t.clientCard.intelligence.technologyState && (
+              <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, padding: '0.9rem 1rem' }}>
+                <SH label="Stav technológie" />
+                <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.amber, marginBottom: '0.25rem' }}>{t.clientCard.intelligence.technologyState.heatingType}</div>
+                <div style={{ fontFamily: mono, fontSize: '0.54rem', color: C.dim }}>{t.clientCard.intelligence.technologyState.estimatedAge}</div>
+                <div style={{ fontFamily: mono, fontSize: '0.54rem', color: C.red, marginTop: '0.15rem' }}>{t.clientCard.intelligence.technologyState.status}</div>
+              </div>
+            )}
+          </div>
+        ) : <Empty text="Dáta zatiaľ neoverené — generuj AI kartu klienta." />}
+      </div>
+    )
+
+    // FINANCIE A NÁVRATNOSŤ
+    if (nav === 'finance') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH label="Financie a návratnosť" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.65rem' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 5, padding: '1rem 1.1rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.5rem' }}>Cena STRIKER</div>
+            <div style={{ fontFamily: mono, fontSize: '1.3rem', fontWeight: 700, color: C.orange }}>8–10 k€</div>
+            <Badge type="verified" small />
+          </div>
+          <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 5, padding: '1rem 1.1rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.5rem' }}>Návratnosť</div>
+            <div style={{ fontFamily: mono, fontSize: '1.3rem', fontWeight: 700, color: C.green }}>6–36 mes.</div>
+            <Badge type="verified" small />
+          </div>
+          <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 5, padding: '1rem 1.1rem' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.5rem' }}>Úspora tepla</div>
+            <div style={{ fontFamily: mono, fontSize: '1.3rem', fontWeight: 700, color: C.amber }}>až 70 %</div>
+            <Badge type="verified" small />
+          </div>
+        </div>
+        {(analysis?.opportunity || t.estimatedROI) && (
+          <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 5, padding: '1rem 1.2rem' }}>
+            <SH label="AI odhad príležitosti" source="ai" />
+            <p style={{ fontFamily: sans, fontSize: '0.75rem', color: C.sub, lineHeight: 1.7, margin: 0 }}>{analysis?.opportunity || t.estimatedROI}</p>
+          </div>
+        )}
+      </div>
+    )
+
+    // ROZHODOVATELIA
+    if (nav === 'decision') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH label="Rozhodovatelia" source={t.clientCard?.decisionProfile ? 'ai' : 'unknown'} />
+        {t.clientCard?.decisionProfile ? (
+          <>
+            <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderLeft: `3px solid ${C.purple}`, borderRadius: 5, padding: '1rem 1.2rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.purple, marginBottom: '0.35rem' }}>Pravdepodobne rozhoduje</div>
+              <div style={{ fontFamily: sans, fontSize: '0.88rem', fontWeight: 600, color: C.text, marginBottom: '0.4rem' }}>{t.clientCard.decisionProfile.likelyDecisionMaker}</div>
+              <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                {(t.clientCard.decisionProfile.roles || []).map((r, i) => <span key={i} style={{ fontFamily: mono, fontSize: '0.48rem', padding: '0.06rem 0.38rem', border: `1px solid ${C.purple}44`, borderRadius: 2, color: C.purple, background: `${C.purple}0d` }}>{r}</span>)}
+              </div>
+              {t.clientCard.decisionProfile.process && <div style={{ fontFamily: mono, fontSize: '0.54rem', color: C.dim, marginTop: '0.5rem' }}>{t.clientCard.decisionProfile.process}</div>}
+            </div>
+          </>
+        ) : <Empty text="Dáta zatiaľ neoverené — generuj AI kartu klienta." />}
+        {(t.contacts || []).length > 0 && (
+          <div>
+            <SH label="Overené kontaktné osoby" source="verified" />
+            {(t.contacts || []).map((c, i) => <ContactCard key={i} c={c} />)}
+          </div>
+        )}
+      </div>
+    )
+
+    // KONTAKTY
+    if (nav === 'contacts') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Btn onClick={doContacts} disabled={cLoad}>🔍 Nájsť kontakty</Btn>
+          {cMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: cMsg.startsWith('✅') ? C.green : C.amber }}>{cMsg}</span>}
+        </div>
+        <ProgressBar running={cLoad} maxSecs={15} type="ai" />
+        {t.email && (
+          <div style={{ padding: '0.65rem 0.85rem', background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+            <Badge type="general" />
+            <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.62rem', color: C.green }}>✉ {t.email}</a>
+            <span style={{ fontFamily: mono, fontSize: '0.48rem', color: C.ghost }}>všeobecný email</span>
+          </div>
+        )}
+        {(t.contacts || []).map((c, i) => <ContactCard key={i} c={c} onRemove={() => removeContact(t.id, i)} />)}
+        {found?.map((c, i) => <ContactCard key={i} c={c} onSave={() => { addContact(t.id, { ...c, source: c.source || 'web', confidence: c.confidence || 'MEDIUM' }); setFound(p => p.filter(fc => fc !== c)) }} />)}
+        {!t.contacts?.length && !found && !t.email && <Empty text="Dáta zatiaľ neoverené — klikni Nájsť kontakty." />}
+      </div>
+    )
+
+    // EMAILY
+    if (nav === 'email') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <SH label="Emaily" />
+        <EmailDraftEditor draft={draft} onSave={saveDraft} defaultLang="de" />
+      </div>
+    )
+
+    // FOLLOW-UP
+    if (nav === 'followup') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH label="Ďalší kontakt" />
+        {t.clientCard?.salesStrategy ? (
+          <>
+            <div style={{ background: C.card, border: `1px solid ${C.green}33`, borderLeft: `3px solid ${C.green}`, borderRadius: 5, padding: '1.1rem 1.3rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.green, marginBottom: '0.4rem' }}>Odporúčaný ďalší krok</div>
+              <div style={{ fontFamily: sans, fontSize: '0.82rem', color: C.text, marginBottom: '0.5rem' }}>{t.clientCard.salesStrategy.nextStep}</div>
+              <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.dim }}>Začni: {t.clientCard.salesStrategy.startWith || 'email'} · Tón: {t.clientCard.salesStrategy.tone || '—'}</div>
+            </div>
+            {t.clientCard.salesStrategy.emphasize?.length > 0 && (
+              <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, padding: '0.9rem 1rem' }}>
+                <SH label="Zdôrazniť v komunikácii" />
+                {t.clientCard.salesStrategy.emphasize.map((e, i) => <div key={i} style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green, marginBottom: '0.25rem' }}>✓ {e}</div>)}
               </div>
             )}
           </>
-        ) : (
-          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: T.ghost, fontStyle: 'italic', padding: '1.5rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 4, textAlign: 'center' }}>
-            Dáta zatiaľ neoverené — spusti AI Analýzu.
-          </div>
-        )}
+        ) : <Empty text="Dáta zatiaľ neoverené." />}
       </div>
     )
 
-    return null
+    // STAV OBCHODU
+    if (nav === 'pipeline') return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <SH label="Stav obchodu" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+          {INTEL_STATUS_LIST.map(s => (
+            <button key={s.key} onClick={() => updateTarget(t.id, { status: s.key })}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: t.status === s.key ? s.bg : C.card, border: `1px solid ${t.status === s.key ? s.color + '55' : C.border2}`, borderLeft: `3px solid ${t.status === s.key ? s.color : 'transparent'}`, borderRadius: 4, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: mono, fontSize: '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', color: t.status === s.key ? s.color : C.dim }}>{s.label}</div>
+              </div>
+              {t.status === s.key && <span style={{ fontFamily: mono, fontSize: '0.5rem', color: s.color }}>● Aktuálny</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+
+    // Others: generic
+    const names = { activity: 'Aktivity', sources: 'Zdroje a dôkazy', documents: 'Dokumenty' }
+    return (
+      <div>
+        <SH label={names[nav] || nav} />
+        <Empty text="Dáta zatiaľ neoverené — táto sekcia bude rozvinutá v ďalšej verzii." />
+      </div>
+    )
   }
 
-  // ── Layout ────────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: T.bg, zIndex: 300, display: 'flex', overflow: 'hidden', fontFamily: sans }}>
+    <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 300, display: 'flex', overflow: 'hidden' }}>
 
       {/* ── LEFT ── */}
-      <div style={{ width: 260, flexShrink: 0, background: '#050709', borderRight: `1px solid ${T.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      <div style={{ width: 255, flexShrink: 0, background: '#040609', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
-        {/* Company image */}
-        <div style={{ height: 190, flexShrink: 0, position: 'relative', background: `linear-gradient(160deg, #0d1117 0%, ${T.orange}08 100%)`, overflow: 'hidden' }}>
+        {/* Photo / Placeholder */}
+        <div style={{ height: 185, flexShrink: 0, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
           {t.photoUrl
-            ? <img src={t.photoUrl} alt={t.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <img src={t.photoUrl} alt={t.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9 }} />
             : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontFamily: sans, fontSize: '5rem', fontWeight: 700, color: `${T.orange}30`, lineHeight: 1 }}>
-                  {(t.name || 'X').charAt(0)}
-                </span>
+              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                <div style={{ fontFamily: sans, fontSize: '5.5rem', fontWeight: 800, color: `${C.orange}25`, lineHeight: 1, letterSpacing: -4 }}>{(t.name || 'X').charAt(0).toUpperCase()}</div>
+                <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}40` }}>STRIKER INTELLIGENCE</div>
               </div>
             )
           }
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 40%, #050709 100%)' }} />
-          <button onClick={onClose} style={{ position: 'absolute', top: '0.6rem', right: '0.6rem', background: 'rgba(0,0,0,0.55)', border: `1px solid ${T.border}`, color: T.dim, borderRadius: 3, padding: '0.18rem 0.5rem', fontFamily: mono, fontSize: '0.5rem', cursor: 'pointer', letterSpacing: '1px' }}>✕ ZAVRIEŤ</button>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, #040609 100%)' }} />
+          <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
         </div>
 
         {/* Company info */}
-        <div style={{ padding: '0.9rem 1rem 0.8rem', borderBottom: `1px solid ${T.border}` }}>
-          <div style={{ fontFamily: sans, fontSize: '1rem', fontWeight: 700, color: T.text, lineHeight: 1.25, marginBottom: '0.25rem' }}>{t.name}</div>
-          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: T.dim, marginBottom: '0.2rem' }}>
-            {[t.city, t.country].filter(Boolean).join(' · ')}
-          </div>
-          <div style={{ fontFamily: mono, fontSize: '0.5rem', color: T.ghost, marginBottom: '0.55rem' }}>
-            {t.segmentLabel || t.segment || '—'}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
-            <span style={{ fontFamily: mono, fontSize: '1.5rem', fontWeight: 700, color: fitCol, lineHeight: 1 }}>{fit || '—'}</span>
+        <div style={{ padding: '0.85rem 1rem', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ fontFamily: sans, fontSize: '0.97rem', fontWeight: 700, color: C.text, lineHeight: 1.25, marginBottom: '0.22rem' }}>{t.name}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.dim, marginBottom: '0.18rem' }}>{[t.city, t.country].filter(Boolean).join(' · ')}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.5rem', color: C.ghost, marginBottom: '0.55rem' }}>{t.segmentLabel || t.segment || '—'}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '1.6rem', fontWeight: 700, color: fitCol, lineHeight: 1 }}>{fit || '—'}</span>
             <div>
-              <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: T.ghost }}>STRIKER FIT</div>
-              {isLive && <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', color: T.green, marginTop: '0.05rem' }}>🔴 ŽIVÉ DÁTA</div>}
+              <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost }}>ZHODA KLIENTA</div>
+              {live && <div style={{ fontFamily: mono, fontSize: '0.38rem', color: C.green, marginTop: '0.05rem' }}>🔴 ŽIVÉ DÁTA</div>}
             </div>
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav style={{ flex: 1, padding: '0.5rem 0' }}>
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '0.35rem 0' }}>
           {NAV.map(item => {
             const active = item.key === nav
             return (
               <button key={item.key} onClick={() => setNav(item.key)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 1rem', background: active ? `${T.orange}0d` : 'transparent', border: 'none', borderLeft: `2px solid ${active ? T.orange : 'transparent'}`, color: active ? T.text : T.dim, fontFamily: mono, fontSize: '0.58rem', letterSpacing: '0.5px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
-                <span style={{ fontSize: '0.8rem', width: 18, flexShrink: 0, textAlign: 'center', opacity: 0.7 }}>{item.icon}</span>
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.52rem 1rem', background: active ? `${C.orange}0d` : 'transparent', border: 'none', borderLeft: `2px solid ${active ? C.orange : 'transparent'}`, color: active ? C.text : C.ghost, fontFamily: mono, fontSize: '0.56rem', letterSpacing: '0.3px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
+                <span style={{ fontSize: '0.68rem', width: 16, flexShrink: 0, textAlign: 'center', opacity: 0.65 }}>{item.icon}</span>
                 {item.label}
               </button>
             )
@@ -488,60 +649,68 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '2rem 2.25rem', borderRight: `1px solid ${T.border}` }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1.75rem 2rem', borderRight: `1px solid ${C.border}` }}>
         <Center />
       </div>
 
       {/* ── RIGHT — always visible ── */}
-      <div style={{ width: 270, flexShrink: 0, overflowY: 'auto', padding: '1.25rem 1rem' }}>
+      <div style={{ width: 265, flexShrink: 0, overflowY: 'auto', padding: '1.25rem 1rem', background: C.panel, display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-        {/* Pipeline */}
-        <SH>Stav obchodu</SH>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', marginBottom: '1.5rem' }}>
-          {INTEL_STATUS_LIST.slice(0, 5).map(s => (
-            <button key={s.key} onClick={() => updateTarget(t.id, { status: s.key })}
-              style={{ display: 'block', width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.6rem', border: `1px solid ${s.color}33`, background: t.status === s.key ? s.bg : 'transparent', color: t.status === s.key ? s.color : T.ghost, borderRadius: 2, cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
-              {s.label}
-            </button>
-          ))}
+        {/* Pipeline status */}
+        <div>
+          <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Stav obchodu</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+            {INTEL_STATUS_LIST.slice(0, 5).map(s => (
+              <button key={s.key} onClick={() => updateTarget(t.id, { status: s.key })}
+                style={{ display: 'block', width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.6rem', border: `1px solid ${t.status === s.key ? s.color + '55' : C.border}`, background: t.status === s.key ? s.bg : 'transparent', color: t.status === s.key ? s.color : C.ghost, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Contacts */}
-        <SH>Kontakty</SH>
-        {t.email && !t.contacts?.length && (
-          <div style={{ padding: '0.5rem 0.65rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3, marginBottom: '0.4rem' }}>
-            <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: T.green }}>✉ {t.email}</a>
-          </div>
-        )}
-        {(t.contacts || []).slice(0, 3).map((c, i) => <CRow key={i} c={c} />)}
-        {!t.contacts?.length && !t.email && (
-          <div style={{ fontFamily: mono, fontSize: '0.55rem', color: T.ghost, fontStyle: 'italic', marginBottom: '0.75rem' }}>Dáta zatiaľ neoverené</div>
-        )}
-        <button onClick={() => { setNav('contacts'); runFindContacts() }} disabled={findLoading}
-          style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.6rem', border: `1px solid ${T.border}`, background: 'transparent', color: T.dim, borderRadius: 3, cursor: 'pointer', marginTop: '0.35rem', marginBottom: '1.5rem', opacity: findLoading ? 0.6 : 1 }}>
-          {findLoading ? '⏳' : '🔍 Nájsť kontakty'}
-        </button>
+        <div>
+          <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Kontakty</div>
+          {t.email && (
+            <div style={{ padding: '0.5rem 0.65rem', background: C.card, border: `1px solid ${C.border}`, borderRadius: 3, marginBottom: '0.4rem' }}>
+              <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green }}>✉ {t.email}</a>
+            </div>
+          )}
+          {(t.contacts || []).slice(0, 3).map((c, i) => <ContactCard key={i} c={c} />)}
+          {!t.contacts?.length && !t.email && <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.ghost, fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>}
+          <button onClick={() => { setNav('contacts'); doContacts() }} disabled={cLoad}
+            style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem', border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, borderRadius: 3, cursor: 'pointer', marginTop: '0.4rem', opacity: cLoad ? 0.6 : 1 }}>
+            {cLoad ? '⏳' : '🔍 Nájsť kontakty'}
+          </button>
+        </div>
 
         {/* Quick actions */}
-        <SH>Rýchle akcie</SH>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-          {[
-            { label: '✉ Email',          action: () => setNav('email'),    col: T.green  },
-            { label: '⚡ Signal Engine',  action: () => { runSignals(); setNav('signals') }, col: T.orange },
-            { label: '🧠 AI Analýza',    action: () => { runAnalysis(); setNav('analysis') }, col: T.amber  },
-          ].map(({ label, action, col }) => (
-            <button key={label} onClick={action}
-              style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.35rem 0.7rem', border: `1px solid ${col}33`, background: `${col}08`, color: col, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.12s' }}>
-              {label}
-            </button>
-          ))}
+        <div>
+          <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Rýchle akcie</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {[
+              { l: '✉ Emaily',          c: C.green,  a: () => setNav('email')                               },
+              { l: '⚡ Signal Engine',  c: C.orange, a: () => { doSignals(); setNav('signals') }             },
+              { l: '🧠 AI Analýza',    c: C.amber,  a: () => { doAnalysis(); setNav('profile') }            },
+              { l: '🔍 Kontakty',      c: C.purple, a: () => { setNav('contacts'); doContacts() }           },
+            ].map(({ l, c, a }) => (
+              <button key={l} onClick={a}
+                style={{ fontFamily: mono, fontSize: '0.51rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.35rem 0.7rem', border: `1px solid ${c}33`, background: `${c}07`, color: c, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
+                {l}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Data freshness */}
-        <div style={{ marginTop: '1.5rem', padding: '0.6rem 0.75rem', background: T.card, border: `1px solid ${T.border}`, borderRadius: 3 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: T.ghost, marginBottom: '0.3rem' }}>Aktuálnosť dát</div>
-          <div style={{ fontFamily: mono, fontSize: '0.54rem', color: isLive ? T.green : T.dim, marginBottom: '0.1rem' }}>{isLive ? '🔴 Živé Google dáta' : 'AI simulácia'}</div>
-          {t.reviewsCachedAt && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: T.ghost }}>{new Date(t.reviewsCachedAt).toLocaleDateString('sk-SK')}</div>}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, padding: '0.7rem 0.85rem', marginTop: 'auto' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.35rem' }}>Aktuálnosť dát</div>
+          <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', marginBottom: '0.18rem' }}>
+            <Badge type={live ? 'live' : 'ai'} small />
+            <span style={{ fontFamily: mono, fontSize: '0.52rem', color: live ? C.green : C.dim }}>{live ? 'Živé Google dáta' : 'AI simulácia'}</span>
+          </div>
+          {t.reviewsCachedAt && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: C.ghost }}>{new Date(t.reviewsCachedAt).toLocaleDateString('sk-SK')}</div>}
         </div>
       </div>
     </div>
