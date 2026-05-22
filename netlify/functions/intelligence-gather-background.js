@@ -86,11 +86,23 @@ function normalizeUrl(url) {
   return url.startsWith('http') ? url : 'https://' + url
 }
 
-async function withTimeout(fn, ms) {
+async function withTimeout(fn, ms, label = 'op') {
   let timer
-  const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), ms) })
-  try { const r = await Promise.race([fn(), timeout]); clearTimeout(timer); return r }
-  catch { clearTimeout(timer); return null }
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      console.error(`[TIMEOUT] ${label} exceeded ${ms}ms — aborting`)
+      reject(new Error(`${label} timeout after ${ms}ms`))
+    }, ms)
+  })
+  try {
+    const r = await Promise.race([fn(), timeout])
+    clearTimeout(timer)
+    return r
+  } catch (e) {
+    clearTimeout(timer)
+    console.error(`[TIMEOUT] ${label} caught:`, e.message)
+    return null
+  }
 }
 
 // Scrape jednej stránky s AbortController timeout
@@ -144,31 +156,32 @@ async function firecrawlPage(url, timeoutMs = 18000) {
 
 // Stratégia: homepage first, potom 1 podstránka ak čas dovolí
 async function gatherWebPages(baseUrl) {
-  if (!FIRECRAWL_KEY || !baseUrl) return { pages: [], scanMode: 'no_key' }
-
-  // Krok 1: Homepage (18s timeout)
-  console.log('[firecrawl] Phase 1: homepage scrape')
-  const t0 = Date.now()
-  const homepage = await withTimeout(() => firecrawlPage(baseUrl, 18000), 20000)
-
-  if (!homepage) {
-    console.warn('[firecrawl] Homepage failed — AI bude pracovať bez web dát')
-    return { pages: [], scanMode: 'homepage_failed' }
+  if (!FIRECRAWL_KEY || !baseUrl) {
+    console.warn('[FC] No Firecrawl key or URL — skipping')
+    return { pages: [], scanMode: 'no_key' }
   }
 
-  const pages = [homepage]
-  const elapsed = Date.now() - t0
-  console.log(`[firecrawl] Homepage OK (${elapsed}ms). Čas zostatok: ${22000 - elapsed}ms`)
+  const t0 = Date.now()
+  console.log(`[FC] Phase-1 START homepage: ${baseUrl}`)
+  const homepage = await withTimeout(() => firecrawlPage(baseUrl, 18000), 20000, 'FC-homepage')
+  const hp_ms = Date.now() - t0
 
-  // Krok 2: Jedna podstránka ak zostalo dosť času (max 10s)
-  if (elapsed < 12000) {
-    const subPath = SUBPAGES[0] // /ueber-uns ako prvý kandidát
-    console.log(`[firecrawl] Phase 2: quick scan ${subPath}`)
-    const sub = await withTimeout(() => firecrawlPage(baseUrl + subPath, 8000), 9000)
-    if (sub) { pages.push(sub); console.log('[firecrawl] Subpage OK') }
-    else { console.log('[firecrawl] Subpage skipped/timeout') }
+  if (!homepage) {
+    console.warn(`[FC] Phase-1 FAILED ${hp_ms}ms — proceeding without web data`)
+    return { pages: [], scanMode: 'homepage_failed' }
+  }
+  console.log(`[FC] Phase-1 DONE ${hp_ms}ms — ${homepage.content.length} chars scraped`)
+
+  const pages = [homepage]
+  if (hp_ms < 12000) {
+    const subPath = SUBPAGES[0]
+    console.log(`[FC] Phase-2 START subpage: ${subPath}`)
+    const t1 = Date.now()
+    const sub = await withTimeout(() => firecrawlPage(baseUrl + subPath, 8000), 9000, 'FC-subpage')
+    if (sub) { pages.push(sub); console.log(`[FC] Phase-2 DONE ${Date.now()-t1}ms — ${sub.content.length} chars`) }
+    else { console.log(`[FC] Phase-2 FAILED/skipped ${Date.now()-t1}ms`) }
   } else {
-    console.log('[firecrawl] Subpage skipped — not enough time budget')
+    console.log(`[FC] Phase-2 SKIPPED — homepage took ${hp_ms}ms`)
   }
 
   return { pages, scanMode: pages.length >= 2 ? 'full' : 'homepage_only' }
@@ -261,19 +274,40 @@ JSON VÝSTUP (všetok text po slovensky):
   "willingnessToSolveReason": "1 veta — napr. ESG záväzky a rastúce ceny motivujú k zmene"
 }`
 
-  const res  = await fetch('https://api.anthropic.com/v1/messages', {
+  const claudeT0 = Date.now()
+  console.log(`[CLAUDE] START — model=${CLAUDE_MODEL} max_tokens=3000 web_chars=${pages.map(p=>p.content.length).reduce((a,b)=>a+b,0)}`)
+
+  const claudeFetch = fetch('https://api.anthropic.com/v1/messages', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': CLAUDE_KEY, 'anthropic-version': '2023-06-01' },
     body:    JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 3000, messages: [{ role: 'user', content: prompt }] }),
   })
-  const data = await res.json()
+  const claudeTimeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Claude timeout 45s')), 45000)
+  )
+
+  let res
+  try {
+    res = await Promise.race([claudeFetch, claudeTimeout])
+  } catch (e) {
+    console.error(`[CLAUDE] FAILED after ${Date.now()-claudeT0}ms:`, e.message)
+    throw e
+  }
+
+  console.log(`[CLAUDE] HTTP response ${res.status} after ${Date.now()-claudeT0}ms`)
+
+  const data = await res.json().catch(e => { throw new Error(`Claude JSON parse: ${e.message}`) })
   if (!res.ok) throw new Error(data.error?.message || `Claude ${res.status}`)
 
   const raw = (data.content?.[0]?.text || '').trim().replace(/^```json\s*/i,'').replace(/```\s*$/i,'').trim()
+  console.log(`[CLAUDE] DONE ${Date.now()-claudeT0}ms — response length: ${raw.length} chars`)
+
   try {
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    console.log('[CLAUDE] JSON parse OK — keys:', Object.keys(parsed).join(', '))
+    return parsed
   } catch (parseErr) {
-    console.error('[intel-gather] JSON parse failed. Raw:', raw.slice(0, 500))
+    console.error('[CLAUDE] JSON parse FAILED. Raw preview:', raw.slice(0, 300))
     throw new Error('Claude vrátil nevalidný JSON: ' + parseErr.message)
   }
 }
@@ -327,16 +361,28 @@ function fsDoc(obj) {
   return { fields }
 }
 
-async function fsWrite(projectId, apiKey, collection, docId, data) {
+async function fsWrite(projectId, apiKey, collection, docId, data, label = '') {
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collection}/${docId}?key=${apiKey}`
-  const res = await fetch(url, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(fsDoc(data)),
-  })
-  if (!res.ok) {
-    const t = await res.text().catch(() => '')
-    console.error(`[fs] PATCH failed ${res.status}:`, t.slice(0, 200))
+  const tag = label ? `[FS:${label}]` : '[FS]'
+  console.log(`${tag} PATCH ${collection}/${docId} — fields: ${Object.keys(data).join(', ')}`)
+  const t0 = Date.now()
+  try {
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fsDoc(data)),
+    })
+    const ms = Date.now() - t0
+    if (res.ok) {
+      console.log(`${tag} OK ${res.status} in ${ms}ms`)
+    } else {
+      const body = await res.text().catch(() => '')
+      console.error(`${tag} FAILED ${res.status} in ${ms}ms — ${body.slice(0, 300)}`)
+    }
+    return res.ok
+  } catch (e) {
+    console.error(`${tag} EXCEPTION after ${Date.now()-t0}ms:`, e.message)
+    return false
   }
 }
 
@@ -388,50 +434,62 @@ exports.handler = async (event) => {
   // ────────────────────────────────────────────────────────────────────────────
 
   try {
-    // 1. Scrape web pages — homepage first, subpage ak čas dovolí
+    console.log(`[PIPELINE] START targetId=${targetId} company="${companyName}" url=${baseUrl||'none'}`)
+
+    // ── STEP 1: Firecrawl ──
+    console.log(`[PIPELINE] STEP 1 — Firecrawl scrape`)
     let pages    = []
     let scanMode = 'no_url'
     let crawlError = null
     try {
-      const crawlResult = await withTimeout(() => gatherWebPages(baseUrl), 25000)
+      const crawlResult = await withTimeout(() => gatherWebPages(baseUrl), 28000, 'gatherWebPages')
       pages    = crawlResult?.pages    || []
       scanMode = crawlResult?.scanMode || 'timeout'
-      console.log(`[intel-gather] Scrape done: ${pages.length} pages, mode=${scanMode}`)
+      console.log(`[PIPELINE] STEP 1 DONE — ${pages.length} pages, mode=${scanMode}, total_chars=${pages.reduce((a,p)=>a+p.content.length,0)}`)
     } catch (crawlErr) {
       crawlError = crawlErr.message
       scanMode   = 'error'
-      console.error('[intel-gather] Firecrawl error (pokračujem bez webu):', crawlErr.message)
+      console.error('[PIPELINE] STEP 1 ERROR:', crawlErr.message, '— continuing without web data')
     }
 
-    // 2. Signal detection from all web content
-    const allText          = pages.map(p => p.content).join(' ')
+    // ── STEP 2: Signal detection ──
+    console.log(`[PIPELINE] STEP 2 — Signal detection`)
+    const allText           = pages.map(p => p.content).join(' ')
     const signalsByCategory = detectSignals(allText)
     const allDetectedSignals = Object.entries(signalsByCategory).flatMap(([, v]) => v.found)
-    console.log(`[intel-gather] Signals: ${Object.keys(signalsByCategory).join(', ')}`)
+    console.log(`[PIPELINE] STEP 2 DONE — groups: [${Object.keys(signalsByCategory).join(', ')}] total_signals=${allDetectedSignals.length}`)
 
-    // 3. Claude AI — real business intelligence
+    // ── STEP 3: Claude AI ──
+    console.log(`[PIPELINE] STEP 3 — Claude AI analysis`)
     const ai = await analyzeWithClaude({
       companyName, segmentLabel: segmentLabel || segment, city, country,
-      pages,
-      signalsByCategory,
+      pages, signalsByCategory,
       currentScores: { urgency: urgencyScore, buyingIntent: buyingIntentScore, strikerFit: strikerFitScore, heatDemand: heatDemandScore, energyPain: energyPainScore, financialPower: financialPowerScore },
     })
+    console.log(`[PIPELINE] STEP 3 DONE — score=${ai.heatPressure} problemProfile=${(ai.problemProfile||[]).length} items`)
 
-    // 4. Signal-based score calculation
+    // ── STEP 4: Score calculation ──
+    console.log(`[PIPELINE] STEP 4 — Score calculation`)
     const updatedScores = buildUpdatedScores(ai, signalsByCategory, { urgency: urgencyScore, buyingIntent: buyingIntentScore, strikerFit: strikerFitScore, heatDemand: heatDemandScore, energyPain: energyPainScore, financialPower: financialPowerScore })
+    console.log(`[PIPELINE] STEP 4 DONE — urgency=${updatedScores.urgencyScore} fit=${updatedScores.strikerFitScore}`)
 
-    // 5. Build sources from scraped pages
+    // ── STEP 5: Sources ──
     const sources = [
       ...(ai.topSources || []).map(s => ({ type: 'web', url: s.url, title: s.title, description: s.relevance })),
       ...pages.map(p => ({ type: 'web', url: p.url, title: p.title || p.url, description: 'Obsah webu firmy' })),
     ].filter(s => s.url).slice(0, 6)
 
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1)
-    console.log(`[intel-gather-bg] DONE ${elapsed}s | pages=${pages.length} | signals=${allDetectedSignals.length}`)
+    console.log(`[PIPELINE] ALL STEPS DONE in ${elapsed}s — writing to Firestore now`)
 
-    // Write all results directly to Firestore intelligence_targets/{targetId}
-    if (FS_PROJECT && FS_KEY) {
-      await fsWrite(FS_PROJECT, FS_KEY, 'intelligence_targets', targetId, {
+    // ── STEP 6: Firebase write ──
+    console.log(`[PIPELINE] STEP 6 — Firestore write targetId=${targetId}`)
+    if (!FS_PROJECT || !FS_KEY) {
+      console.error('[PIPELINE] STEP 6 FATAL — FIREBASE_PROJECT_ID or FIREBASE_API_KEY missing!')
+      return { statusCode: 500, body: JSON.stringify({ ok: false, error: 'Firebase env vars missing' }) }
+    }
+
+    const writeOk = await fsWrite(FS_PROJECT, FS_KEY, 'intelligence_targets', targetId, {
         gatherStatus:    'done',
         gatherTimestamp: new Date().toISOString(),
 
@@ -481,22 +539,28 @@ exports.handler = async (event) => {
           esgFindings:           ai.esgFindings,
           detectedJobRoles:      signalsByCategory.job?.found || [],
         },
-      })
-      console.log(`[intel-gather-bg] Firestore write OK for targetId=${targetId}`)
+      }, 'done-results')
+
+    if (writeOk) {
+      console.log(`[PIPELINE] STEP 6 DONE — gatherStatus:done written to Firestore`)
     } else {
-      console.warn('[intel-gather-bg] No Firestore credentials — results not saved')
+      console.error(`[PIPELINE] STEP 6 FAILED — Firestore write returned false`)
     }
 
-    return { statusCode: 200, body: JSON.stringify({ ok: true }) }
+    const totalElapsed = ((Date.now() - t0) / 1000).toFixed(1)
+    console.log(`[PIPELINE] COMPLETE in ${totalElapsed}s`)
+    return { statusCode: 200, body: JSON.stringify({ ok: true, elapsed: totalElapsed }) }
 
   } catch (err) {
-    console.error('[intel-gather-bg] ERR:', err.message)
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1)
+    console.error(`[PIPELINE] FATAL ERROR after ${elapsed}s:`, err.message)
     if (FS_PROJECT && FS_KEY) {
+      console.log(`[PIPELINE] Writing error status to Firestore`)
       await fsWrite(FS_PROJECT, FS_KEY, 'intelligence_targets', targetId, {
-        gatherStatus: 'error',
-        gatherError:  err.message.slice(0, 200),
+        gatherStatus:    'error',
+        gatherError:     err.message.slice(0, 300),
         gatherTimestamp: new Date().toISOString(),
-      }).catch(() => {})
+      }, 'error-status')
     }
     return { statusCode: 500, body: JSON.stringify({ ok: false, error: err.message }) }
   }
