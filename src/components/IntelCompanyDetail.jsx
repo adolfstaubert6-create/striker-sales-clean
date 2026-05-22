@@ -8,6 +8,7 @@ import EmailDraftEditor from './EmailDraftEditor.jsx'
 import NextBestAction   from './NextBestAction.jsx'
 import ProgressBar      from './ProgressBar.jsx'
 import ClientCard       from './ClientCard.jsx'
+import AiProfilePanel   from './AiProfilePanel.jsx'
 
 const LOCALES = { sk, de, en }
 
@@ -83,13 +84,22 @@ function TextBlock({ value, placeholder }) {
 
 // ── Taby ──────────────────────────────────────────────────────────────────────
 
-function TabOverview({ t }) {
+function TabOverview({ t, analysisResult, clientCard, clientCardLoading, onGenerateClientCard }) {
   const rec      = REC_META[t.recommendation] || REC_META.monitor
   const priority = t.overallScore >= 80 ? 'EXTREME TARGET' : t.overallScore >= 70 ? 'HIGH TARGET' : t.overallScore >= 55 ? 'MEDIUM TARGET' : 'LOW PRIORITY'
   const priColor = t.overallScore >= 80 ? '#ff5c00' : t.overallScore >= 70 ? '#ffaa00' : t.overallScore >= 55 ? '#818cf8' : '#4b5563'
 
   return (
     <div>
+      {/* AI Profile Panel — always visible at the top */}
+      <AiProfilePanel
+        target={t}
+        analysisResult={analysisResult}
+        clientCard={clientCard}
+        onGenerate={onGenerateClientCard}
+        loading={clientCardLoading}
+      />
+
       <div style={{ display: 'grid', gridTemplateColumns: '5fr 2fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
         <div>
           <SectionTitle>Základné informácie</SectionTitle>
@@ -947,7 +957,7 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
 
         {/* Tab obsah */}
         <div style={{ padding: '1.25rem 1.4rem' }}>
-          {activeTab === 'overview' && <TabOverview t={t} />}
+          {activeTab === 'overview' && <TabOverview t={t} analysisResult={analysisResult} clientCard={clientCardData} clientCardLoading={clientCardLoading} onGenerateClientCard={handleClientCard} />}
           {activeTab === 'klient'   && (
             <ClientCard
               target={t}
