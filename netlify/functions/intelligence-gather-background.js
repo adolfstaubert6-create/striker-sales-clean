@@ -396,6 +396,39 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'targetId required' }) }
   }
 
+  // ── HARD TEST MODE — bypasses Claude + Firecrawl completely ─────────────────
+  // Remove this block once Firebase→onSnapshot→UI pipeline is confirmed working
+  const TEST_MODE = true
+  if (TEST_MODE) {
+    console.log('[TEST] Hard test mode — writing static data to Firebase, no Claude/Firecrawl')
+    if (FS_PROJECT && FS_KEY) {
+      const ok = await fsWrite(FS_PROJECT, FS_KEY, 'intelligence_targets', targetId, {
+        gatherStatus:    'done',
+        gatherTimestamp: new Date().toISOString(),
+        gatherFallback:  true,
+        score:           75,
+        painPoints:      ['TEST PAIN'],
+        reasoning:       'TEST OK',
+        mainArgument:    'TEST ARGUMENT',
+        opportunity:     'TEST OPPORTUNITY',
+        draft:           'TEST EMAIL',
+        aiReasoning:     'TEST OK — Firebase write confirmed',
+        websiteSummary:  'TEST MODE — bypassed Claude and Firecrawl',
+        problemProfile:  [{ problem: 'TEST PAIN', confidence: 75, source: 'test', detectedText: null, aiReasoning: 'TEST', severity: 'high', strikerSolution: 'TEST' }],
+        heatPressure: 75, thermalDependency: 75, operatingCostPressure: 75,
+        modernizationNeed: 65, boilerDependencyProb: 70, willingnessToSolve: 68,
+        heatPressureReason: 'TEST', thermalDependencyReason: 'TEST',
+        operatingCostPressureReason: 'TEST', modernizationNeedReason: 'TEST',
+        boilerDependencyProbReason: 'TEST', willingnessToSolveReason: 'TEST',
+      }, 'test-write')
+      console.log(`[TEST] Firebase write result: ${ok ? 'OK' : 'FAILED'}`)
+    } else {
+      console.error('[TEST] FIREBASE_PROJECT_ID or FIREBASE_API_KEY missing — cannot write!')
+    }
+    return { statusCode: 200, body: JSON.stringify({ ok: true, mode: 'test' }) }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Write in-progress status immediately so UI shows spinner
   if (FS_PROJECT && FS_KEY) {
     await fsWrite(FS_PROJECT, FS_KEY, 'intelligence_targets', targetId, {
