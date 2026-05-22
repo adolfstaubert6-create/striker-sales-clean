@@ -5,6 +5,7 @@ import { sk } from '../locales/sk.js'
 import { de } from '../locales/de.js'
 import { en } from '../locales/en.js'
 import EmailDraftEditor from './EmailDraftEditor.jsx'
+import NextBestAction   from './NextBestAction.jsx'
 
 const LOCALES = { sk, de, en }
 
@@ -386,6 +387,9 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLan
           </div>
 
           {/* Email draft editor replaces static preview */}
+
+          {/* Next Best Action */}
+          <NextBestAction nba={r.nextBestAction} score={r.score} />
         </div>
       )}
 

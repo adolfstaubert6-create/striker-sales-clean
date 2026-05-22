@@ -114,22 +114,59 @@ const FALLBACKS = {
   },
 }
 
+function calcPriority(score) {
+  if (score >= 86) return 'CRITICAL'
+  if (score >= 66) return 'HIGH'
+  if (score >= 41) return 'MEDIUM'
+  return 'LOW'
+}
+
+const NBA_FALLBACKS = {
+  laundry: {
+    sk: { nextStep: 'Kontaktovať telefonicky do 48 hodín', tone: 'Priamy, technicky kompetentný', risk: 'Dlhý interný schvaľovací proces', opportunity: 'Práčovňa = kritická spotreba tepla 24/7', timing: 'Ihneď — energia je aktuálna priorita' },
+    de: { nextStep: 'Telefonisch kontaktieren innerhalb 48h', tone: 'Direkt, technisch kompetent', risk: 'Langer interner Genehmigungsprozess', opportunity: 'Wäscherei = kritischer Wärmebedarf 24/7', timing: 'Sofort — Energie ist aktuell Priorität' },
+    en: { nextStep: 'Call within 48 hours', tone: 'Direct, technically competent', risk: 'Long internal approval process', opportunity: 'Laundry = critical heat demand 24/7', timing: 'Now — energy is current priority' },
+  },
+  hotel: {
+    sk: { nextStep: 'Poslať email, potom follow-up hovor', tone: 'Profesionálny, zdôrazniť ROI', risk: 'Sezónne výkyvy ovplyvnia rozhodovanie', opportunity: 'Hotelová prevádzka = stabilná potreba tepla', timing: 'Pred zimnou sezónou — nákupné okno' },
+    de: { nextStep: 'E-Mail senden, dann Follow-up-Anruf', tone: 'Professionell, ROI betonen', risk: 'Saisonale Schwankungen beeinflussen Entscheidung', opportunity: 'Hotelbetrieb = stabiler Wärmebedarf', timing: 'Vor der Wintersaison — Einkaufsfenster' },
+    en: { nextStep: 'Send email, then follow-up call', tone: 'Professional, emphasize ROI', risk: 'Seasonal fluctuations affect decisions', opportunity: 'Hotel operations = stable heat demand', timing: 'Before winter season — buying window' },
+  },
+  generic: {
+    sk: { nextStep: 'Odoslať úvodný email s kalkuláciou', tone: 'Informačný, bez tlaku', risk: 'Nízka urgentnosť — pasívny záujem', opportunity: 'Energetická efektivita je rastúci trend', timing: 'Flexibilné — reagovať na spätnú väzbu' },
+    de: { nextStep: 'Einführungs-E-Mail mit Kalkulation senden', tone: 'Informativ, ohne Druck', risk: 'Geringe Dringlichkeit — passives Interesse', opportunity: 'Energieeffizienz ist wachsender Trend', timing: 'Flexibel — auf Feedback reagieren' },
+    en: { nextStep: 'Send introductory email with calculation', tone: 'Informative, no pressure', risk: 'Low urgency — passive interest', opportunity: 'Energy efficiency is a growing trend', timing: 'Flexible — respond to feedback' },
+  },
+}
+
 function fallback(segment, segmentLabel, companyName, language = 'sk') {
   const seg = (segment || '').toLowerCase()
   const isL = seg.includes('waesch') || seg.includes('laund') || seg.includes('textil') || seg.includes('praco')
   const isH = seg.includes('hotel') || seg.includes('gastro') || seg.includes('resort')
 
-  const base = isL ? FALLBACKS.laundry : isH ? FALLBACKS.hotel : FALLBACKS.generic
-  const loc  = base[language] || base.de
+  const base    = isL ? FALLBACKS.laundry : isH ? FALLBACKS.hotel : FALLBACKS.generic
+  const nbaBase = isL ? NBA_FALLBACKS.laundry : isH ? NBA_FALLBACKS.hotel : NBA_FALLBACKS.generic
+  const loc     = base[language] || base.de
+  const nba     = nbaBase[language] || nbaBase.de
+  const score   = base.score
+  const priority = calcPriority(score)
 
   return {
-    score:        base.score,
+    score,
     subject:      loc.subject,
     painPoints:   loc.painPoints,
     reasoning:    loc.reasoning,
     mainArgument: loc.mainArgument,
     opportunity:  loc.opportunity,
     draft:        base.drafts[language] || base.drafts.de,
+    nextBestAction: {
+      nextStep:    nba.nextStep,
+      tone:        nba.tone,
+      risk:        nba.risk,
+      opportunity: nba.opportunity,
+      timing:      nba.timing,
+      priority,
+    },
   }
 }
 
@@ -143,7 +180,7 @@ STRIKER: 45kW electric → 120-160kW heat, price 8000-10000 EUR, ROI 6-36 months
 Company: ${companyName} | Segment: ${segmentLabel || segment} | City: ${city} | Fit: ${fitScore}/100
 ${promptLang}
 Return JSON with exactly these keys (no extras):
-{"score":75,"subject":"email subject line","painPoints":["pain 1","pain 2","pain 3"],"reasoning":"2 sentences why STRIKER fit","mainArgument":"strongest single argument","opportunity":"1 sentence opportunity","draft":"professional email body 80-120 words with greeting and signature"}`
+{"score":75,"subject":"email subject","painPoints":["pain 1","pain 2","pain 3"],"reasoning":"2 sentences why STRIKER fit","mainArgument":"strongest argument","opportunity":"1 sentence opportunity","draft":"email 80-120 words","nextBestAction":{"nextStep":"specific action in 6-10 words","tone":"recommended tone 5-8 words","risk":"main risk 5-8 words","opportunity":"main opportunity 5-8 words","timing":"when to contact 5-8 words","priority":"HIGH"}}`
 
   const fetchP = fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -154,7 +191,7 @@ Return JSON with exactly these keys (no extras):
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
-      max_tokens: 700,
+      max_tokens: 950,
       messages: [{ role: 'user', content: prompt }],
     }),
   })
