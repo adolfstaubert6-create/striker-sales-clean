@@ -177,38 +177,66 @@ const NAV = [
   { key: 'documents',  label: 'Dokumenty',               icon: '◻' },
 ]
 
-// ── Website screenshot via thum.io (no API key needed) ────────────────────────
-function getScreenshotUrl(t) {
-  if (t.photoUrl) return t.photoUrl
-  const raw = t.website || (t.web ? (t.web.startsWith('http') ? t.web : `https://${t.web}`) : null)
+// ── Normalize website field from any available field ─────────────────────────
+function resolveWebsite(t) {
+  const raw = t.photoUrl || t.website || t.web || t.url || t.domain || ''
   if (!raw) return null
-  const url = raw.startsWith('http') ? raw : `https://${raw}`
-  return `https://image.thum.io/get/width/510/crop/300/noanimate/${encodeURIComponent(url)}`
+  if (raw.startsWith('http')) return raw
+  return `https://${raw}`
 }
 
-// ── Hotel photo panel (screenshot or placeholder) ─────────────────────────────
+// ── Build thum.io screenshot URL ──────────────────────────────────────────────
+function getScreenshotUrl(t) {
+  const site = resolveWebsite(t)
+  if (!site) return null
+  return `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}`
+}
+
+// ── Hotel photo panel (screenshot or placeholder + debug line) ────────────────
 function HotelPhoto({ t, onClose }) {
   const [failed, setFailed] = useState(false)
-  const src = getScreenshotUrl(t)
+  const site = resolveWebsite(t)
+  const src  = site ? `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}` : null
   const showImg = src && !failed
+
+  let debugLabel, debugColor
+  if (showImg) {
+    debugLabel = `screenshot: ${site}`
+    debugColor = C.green
+  } else if (site) {
+    debugLabel = `screenshot failed — placeholder`
+    debugColor = C.amber
+  } else {
+    debugLabel = 'missing website'
+    debugColor = C.dim
+  }
+
   return (
-    <div style={{ height: 185, flexShrink: 0, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
-      {showImg && (
-        <img
-          src={src}
-          alt={t.name}
-          onError={() => setFailed(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.88 }}
-        />
-      )}
-      {!showImg && (
-        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-          <div style={{ fontFamily: sans, fontSize: '5.5rem', fontWeight: 800, color: `${C.orange}25`, lineHeight: 1, letterSpacing: -4 }}>{(t.name || 'X').charAt(0).toUpperCase()}</div>
-          <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}40` }}>STRIKER INTELLIGENCE</div>
-        </div>
-      )}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, #040609 100%)' }} />
-      <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
+    <div style={{ flexShrink: 0 }}>
+      <div style={{ height: 185, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
+        {showImg && (
+          <img
+            src={src}
+            alt={t.name}
+            onError={() => setFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.88 }}
+          />
+        )}
+        {!showImg && (
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+            <div style={{ fontFamily: sans, fontSize: '5.5rem', fontWeight: 800, color: `${C.orange}25`, lineHeight: 1, letterSpacing: -4 }}>{(t.name || 'X').charAt(0).toUpperCase()}</div>
+            <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}40` }}>STRIKER INTELLIGENCE</div>
+          </div>
+        )}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, #040609 100%)' }} />
+        <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
+      </div>
+      {/* Debug line */}
+      <div style={{ padding: '0.2rem 0.75rem', background: '#06080b', borderBottom: `1px solid ${C.border}` }}>
+        <span style={{ fontFamily: mono, fontSize: '0.36rem', color: debugColor, letterSpacing: '0.5px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {debugLabel}
+        </span>
+      </div>
     </div>
   )
 }
