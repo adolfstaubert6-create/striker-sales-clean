@@ -192,55 +192,62 @@ function getScreenshotUrl(t) {
   return `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}`
 }
 
-// ── Hotel photo panel: thum.io → Google favicon → placeholder ────────────────
+// ── Premium branded card — shown when no real image is available ──────────────
+function BrandedCard({ t, domain, faviconUrl }) {
+  const [favFailed, setFavFailed] = useState(false)
+  const initial = (t.name || 'H').charAt(0).toUpperCase()
+  return (
+    <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, #050709 0%, ${C.orange}14 40%, ${C.orange}07 70%, #050709 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.85rem' }}>
+      <div style={{ width: 76, height: 76, borderRadius: '50%', background: `radial-gradient(circle, ${C.orange}1a 0%, ${C.orange}06 100%)`, border: `1.5px solid ${C.orange}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {faviconUrl && !favFailed
+          ? <img src={faviconUrl} alt="" onError={() => setFavFailed(true)} style={{ width: 40, height: 40, objectFit: 'contain' }} />
+          : <span style={{ fontFamily: sans, fontSize: '2.1rem', fontWeight: 800, color: `${C.orange}88`, lineHeight: 1 }}>{initial}</span>
+        }
+      </div>
+      <div style={{ textAlign: 'center', padding: '0 1.2rem' }}>
+        <div style={{ fontFamily: sans, fontSize: '0.92rem', fontWeight: 700, color: C.text, lineHeight: 1.25, marginBottom: '0.28rem' }}>{t.name}</div>
+        <div style={{ fontFamily: mono, fontSize: '0.43rem', color: C.dim, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+          {[t.city, domain].filter(Boolean).join(' · ')}
+        </div>
+      </div>
+      <div style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}35` }}>STRIKER INTELLIGENCE</div>
+    </div>
+  )
+}
+
+// ── Hotel photo: photoUrl → thum.io → WP mshots → branded card ───────────────
 function HotelPhoto({ t, onClose }) {
-  const [thumFailed,    setThumFailed]    = useState(false)
-  const [faviconFailed, setFaviconFailed] = useState(false)
+  const [photoFailed,  setPhotoFailed]  = useState(false)
+  const [thumFailed,   setThumFailed]   = useState(false)
+  const [mshotsFailed, setMshotsFailed] = useState(false)
 
   const site = resolveWebsite(t)
-  const thumUrl = site ? `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}` : null
-
   let domain = null
   if (site) { try { domain = new URL(site).hostname } catch {} }
-  const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=256` : null
 
-  const showThum    = !!thumUrl && !thumFailed
-  const showFavicon = !showThum && !!faviconUrl && !faviconFailed
-  const showPlaceholder = !showThum && !showFavicon
+  const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : null
+  const thumUrl    = site   ? `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}` : null
+  const mshotsUrl  = site   ? `https://s.wordpress.com/mshots/v1/${encodeURIComponent(site)}?w=700&h=400` : null
 
-  let debugLabel, debugColor
-  if (showThum)         { debugLabel = `screenshot: ${thumUrl}`;        debugColor = C.green }
-  else if (showFavicon) { debugLabel = `favicon: ${faviconUrl}`;        debugColor = C.amber }
-  else if (site)        { debugLabel = `failed: ${thumUrl}`;            debugColor = C.red   }
-  else                  { debugLabel = 'missing website';               debugColor = C.dim   }
+  let imgSrc = null, onImgError = null
+  if (t.photoUrl && !photoFailed) {
+    imgSrc = t.photoUrl;   onImgError = () => setPhotoFailed(true)
+  } else if (thumUrl && !thumFailed) {
+    imgSrc = thumUrl;      onImgError = () => setThumFailed(true)
+  } else if (mshotsUrl && !mshotsFailed) {
+    imgSrc = mshotsUrl;    onImgError = () => setMshotsFailed(true)
+  }
 
   return (
     <div style={{ flexShrink: 0 }}>
-      <div style={{ height: 220, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
-        {showThum && (
-          <img src={thumUrl} alt={t.name} onError={() => setThumFailed(true)}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.88 }} />
+      <div style={{ height: 220, position: 'relative', overflow: 'hidden', background: '#050709' }}>
+        {imgSrc && (
+          <img src={imgSrc} alt={t.name} onError={onImgError}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.92 }} />
         )}
-        {showFavicon && (
-          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
-            <img src={faviconUrl} alt={t.name} onError={() => setFaviconFailed(true)}
-              style={{ width: 80, height: 80, objectFit: 'contain', opacity: 0.9 }} />
-            <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.sub }}>{domain}</div>
-          </div>
-        )}
-        {showPlaceholder && (
-          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-            <div style={{ fontFamily: sans, fontSize: '5.5rem', fontWeight: 800, color: `${C.orange}25`, lineHeight: 1, letterSpacing: -4 }}>{(t.name || 'X').charAt(0).toUpperCase()}</div>
-            <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}40` }}>STRIKER INTELLIGENCE</div>
-          </div>
-        )}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, #040609 100%)' }} />
+        {!imgSrc && <BrandedCard t={t} domain={domain} faviconUrl={faviconUrl} />}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 35%, #040609 100%)' }} />
         <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
-      </div>
-      <div style={{ padding: '0.2rem 0.75rem', background: '#06080b', borderBottom: `1px solid ${C.border}` }}>
-        <span style={{ fontFamily: mono, fontSize: '0.36rem', color: debugColor, letterSpacing: '0.5px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {debugLabel}
-        </span>
       </div>
     </div>
   )
