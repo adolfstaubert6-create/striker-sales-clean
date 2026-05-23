@@ -177,6 +177,42 @@ const NAV = [
   { key: 'documents',  label: 'Dokumenty',               icon: '◻' },
 ]
 
+// ── Website screenshot via thum.io (no API key needed) ────────────────────────
+function getScreenshotUrl(t) {
+  if (t.photoUrl) return t.photoUrl
+  const raw = t.website || (t.web ? (t.web.startsWith('http') ? t.web : `https://${t.web}`) : null)
+  if (!raw) return null
+  const url = raw.startsWith('http') ? raw : `https://${raw}`
+  return `https://image.thum.io/get/width/510/crop/300/noanimate/${encodeURIComponent(url)}`
+}
+
+// ── Hotel photo panel (screenshot or placeholder) ─────────────────────────────
+function HotelPhoto({ t, onClose }) {
+  const [failed, setFailed] = useState(false)
+  const src = getScreenshotUrl(t)
+  const showImg = src && !failed
+  return (
+    <div style={{ height: 185, flexShrink: 0, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
+      {showImg && (
+        <img
+          src={src}
+          alt={t.name}
+          onError={() => setFailed(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.88 }}
+        />
+      )}
+      {!showImg && (
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+          <div style={{ fontFamily: sans, fontSize: '5.5rem', fontWeight: 800, color: `${C.orange}25`, lineHeight: 1, letterSpacing: -4 }}>{(t.name || 'X').charAt(0).toUpperCase()}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}40` }}>STRIKER INTELLIGENCE</div>
+        </div>
+      )}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, #040609 100%)' }} />
+      <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
+    </div>
+  )
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 export default function ClientIntelligenceDashboard({ target: initialT, onClose }) {
   const [t]              = useState(initialT)
@@ -605,19 +641,8 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       <div style={{ width: 255, flexShrink: 0, background: '#040609', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
         {/* Photo / Placeholder */}
-        <div style={{ height: 185, flexShrink: 0, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
-          {t.photoUrl
-            ? <img src={t.photoUrl} alt={t.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9 }} />
-            : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                <div style={{ fontFamily: sans, fontSize: '5.5rem', fontWeight: 800, color: `${C.orange}25`, lineHeight: 1, letterSpacing: -4 }}>{(t.name || 'X').charAt(0).toUpperCase()}</div>
-                <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}40` }}>STRIKER INTELLIGENCE</div>
-              </div>
-            )
-          }
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, #040609 100%)' }} />
-          <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
-        </div>
+        <HotelPhoto t={t} onClose={onClose} />
+
 
         {/* Company info */}
         <div style={{ padding: '0.85rem 1rem', borderBottom: `1px solid ${C.border}` }}>

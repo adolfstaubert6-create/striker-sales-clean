@@ -73,7 +73,7 @@ function calcStrikerFit(company, segment) {
   let heat      = base.heat
   let financial = base.financial
   const urgency = base.urgency
-  const pain    = base.pain
+  let pain      = base.pain
 
   // Signal boosts
   if (LUXURY_RE.test(name))   { fit += 8;  financial += 10 }
