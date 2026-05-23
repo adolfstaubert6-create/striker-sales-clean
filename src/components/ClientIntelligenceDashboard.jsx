@@ -698,7 +698,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 300, display: 'flex', overflow: 'hidden' }}>
 
       {/* ── LEFT ── */}
-      <div style={{ width: 255, flexShrink: 0, background: '#040609', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingTop: 38 }}>
+      <div style={{ width: 255, flexShrink: 0, background: '#07090d', borderRight: `1px solid ${C.border2}`, display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingTop: 38 }}>
 
         {/* Back button — position:fixed, rendered outside scroll flow */}
         <BackBtn onClose={onClose} />
@@ -706,29 +706,28 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         {/* Photo / Placeholder */}
         <HotelPhoto t={t} photoUrl={photoUrl} loading={photoLoad} />
 
-
         {/* Company info */}
-        <div style={{ padding: '0.85rem 1rem', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ fontFamily: sans, fontSize: '0.97rem', fontWeight: 700, color: C.text, lineHeight: 1.25, marginBottom: '0.22rem' }}>{t.name}</div>
-          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.dim, marginBottom: '0.18rem' }}>{[t.city, t.country].filter(Boolean).join(' · ')}</div>
-          <div style={{ fontFamily: mono, fontSize: '0.5rem', color: C.ghost, marginBottom: '0.55rem' }}>{t.segmentLabel || t.segment || '—'}</div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-            <span style={{ fontFamily: mono, fontSize: '1.6rem', fontWeight: 700, color: fitCol, lineHeight: 1 }}>{fit || '—'}</span>
+        <div style={{ padding: '1rem 1rem 1.1rem', borderBottom: `1px solid ${C.border2}` }}>
+          <div style={{ fontFamily: sans, fontSize: '1.05rem', fontWeight: 700, color: '#f1f3f5', lineHeight: 1.25, marginBottom: '0.28rem' }}>{t.name}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#9ca3af', marginBottom: '0.2rem', letterSpacing: '0.3px' }}>{[t.city, t.country].filter(Boolean).join(' · ')}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.amber, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.75rem' }}>{t.segmentLabel || t.segment || '—'}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.55rem', background: `${fitCol}0d`, border: `1px solid ${fitCol}25`, borderRadius: 4, padding: '0.5rem 0.7rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '1.8rem', fontWeight: 700, color: fitCol, lineHeight: 1 }}>{fit || '—'}</span>
             <div>
-              <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost }}>ZHODA KLIENTA</div>
-              {live && <div style={{ fontFamily: mono, fontSize: '0.38rem', color: C.green, marginTop: '0.05rem' }}>🔴 ŽIVÉ DÁTA</div>}
+              <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#6b7280' }}>ZHODA KLIENTA</div>
+              {live && <div style={{ fontFamily: mono, fontSize: '0.4rem', color: C.green, marginTop: '0.05rem' }}>🔴 ŽIVÉ DÁTA</div>}
             </div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '0.35rem 0' }}>
+        <nav style={{ flex: 1, padding: '0.4rem 0' }}>
           {NAV.map(item => {
             const active = item.key === nav
             return (
               <button key={item.key} onClick={() => setNav(item.key)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.52rem 1rem', background: active ? `${C.orange}0d` : 'transparent', border: 'none', borderLeft: `2px solid ${active ? C.orange : 'transparent'}`, color: active ? C.text : C.ghost, fontFamily: mono, fontSize: '0.56rem', letterSpacing: '0.3px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
-                <span style={{ fontSize: '0.68rem', width: 16, flexShrink: 0, textAlign: 'center', opacity: 0.65 }}>{item.icon}</span>
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.58rem 1rem', background: active ? `${C.orange}18` : 'transparent', border: 'none', borderLeft: `2px solid ${active ? C.orange : 'transparent'}`, color: active ? '#f1f3f5' : '#8a929e', fontFamily: mono, fontSize: '0.57rem', letterSpacing: '0.2px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s', boxShadow: active ? `inset 0 0 20px ${C.orange}08` : 'none' }}>
+                <span style={{ fontSize: '0.7rem', width: 16, flexShrink: 0, textAlign: 'center', opacity: active ? 1 : 0.5, color: active ? C.orange : 'inherit' }}>{item.icon}</span>
                 {item.label}
               </button>
             )
