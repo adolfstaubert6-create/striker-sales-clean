@@ -198,7 +198,7 @@ function BrandedCard({ t }) {
 }
 
 // ── Hotel photo panel ─────────────────────────────────────────────────────────
-function HotelPhoto({ photoUrl, loading, t, onClose }) {
+function HotelPhoto({ photoUrl, loading, t }) {
   const [imgFailed, setImgFailed] = useState(false)
   const showImg = photoUrl && !imgFailed
 
@@ -216,7 +216,6 @@ function HotelPhoto({ photoUrl, loading, t, onClose }) {
         )}
         {!showImg && !loading && <BrandedCard t={t} />}
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 35%, #040609 100%)' }} />
-        <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
       </div>
     </div>
   )
@@ -705,7 +704,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         <BackBtn onClose={onClose} />
 
         {/* Photo / Placeholder */}
-        <HotelPhoto t={t} photoUrl={photoUrl} loading={photoLoad} onClose={onClose} />
+        <HotelPhoto t={t} photoUrl={photoUrl} loading={photoLoad} />
 
 
         {/* Company info */}
