@@ -213,6 +213,32 @@ function HotelPhoto({ t, onClose }) {
   )
 }
 
+// ── Back navigation button ────────────────────────────────────────────────────
+function BackBtn({ onClose }) {
+  const [hov, setHov] = useState(false)
+  return (
+    <button
+      onClick={onClose}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '0.45rem',
+        width: '100%', padding: '0.6rem 1rem',
+        background: hov ? `${C.orange}0d` : 'transparent',
+        border: 'none', borderBottom: `1px solid ${hov ? C.orange + '33' : C.border}`,
+        color: hov ? C.orange : C.dim,
+        fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px',
+        textTransform: 'uppercase', cursor: 'pointer',
+        transition: 'all 0.15s',
+        boxShadow: hov ? `0 0 10px ${C.orange}18` : 'none',
+        flexShrink: 0,
+      }}
+    >
+      ← Späť do Dashboardu
+    </button>
+  )
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 export default function ClientIntelligenceDashboard({ target: initialT, onClose }) {
   const [t]              = useState(initialT)
@@ -639,6 +665,9 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
 
       {/* ── LEFT ── */}
       <div style={{ width: 255, flexShrink: 0, background: '#040609', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+
+        {/* Back button */}
+        <BackBtn onClose={onClose} />
 
         {/* Photo / Placeholder */}
         <HotelPhoto t={t} onClose={onClose} />

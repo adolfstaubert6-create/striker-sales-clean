@@ -14,7 +14,7 @@ const mono = "'IBM Plex Mono',monospace"
 
 const FILTERS = [{ key: 'all', label: 'Všetky' }, ...INTEL_STATUS_LIST.map(s => ({ key: s.key, label: s.label }))]
 
-export default function DashboardB() {
+export default function DashboardB({ onBack }) {
   const [targets, setTargets]           = useState([])
   const [filter, setFilter]             = useState('all')
   const [search, setSearch]             = useState('')
@@ -72,6 +72,26 @@ export default function DashboardB() {
 
   return (
     <div>
+      {/* Back to main dashboard */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '0.45rem',
+            fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1.5px',
+            textTransform: 'uppercase', color: '#6b7280',
+            background: 'transparent', border: '1px solid #1a1f2a',
+            borderRadius: 3, padding: '0.32rem 0.85rem',
+            cursor: 'pointer', marginBottom: '1.1rem',
+            transition: 'color 0.15s, border-color 0.15s, box-shadow 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#ff5c00'; e.currentTarget.style.borderColor = '#ff5c0055'; e.currentTarget.style.boxShadow = '0 0 8px #ff5c0022' }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#6b7280'; e.currentTarget.style.borderColor = '#1a1f2a'; e.currentTarget.style.boxShadow = 'none' }}
+        >
+          ← Späť do Dashboardu
+        </button>
+      )}
+
       {/* 1. IntelSummaryPanel — rovnaká pozícia ako AiSummaryPanel */}
       <IntelSummaryPanel targets={targets} />
 
