@@ -192,37 +192,43 @@ function getScreenshotUrl(t) {
   return `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}`
 }
 
-// ── Hotel photo panel (screenshot or placeholder + debug line) ────────────────
+// ── Hotel photo panel: thum.io → Google favicon → placeholder ────────────────
 function HotelPhoto({ t, onClose }) {
-  const [failed, setFailed] = useState(false)
+  const [thumFailed,    setThumFailed]    = useState(false)
+  const [faviconFailed, setFaviconFailed] = useState(false)
+
   const site = resolveWebsite(t)
-  const src  = site ? `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}` : null
-  const showImg = src && !failed
+  const thumUrl = site ? `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}` : null
+
+  let domain = null
+  if (site) { try { domain = new URL(site).hostname } catch {} }
+  const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=256` : null
+
+  const showThum    = !!thumUrl && !thumFailed
+  const showFavicon = !showThum && !!faviconUrl && !faviconFailed
+  const showPlaceholder = !showThum && !showFavicon
 
   let debugLabel, debugColor
-  if (showImg) {
-    debugLabel = `screenshot: ${site}`
-    debugColor = C.green
-  } else if (site) {
-    debugLabel = `screenshot failed — placeholder`
-    debugColor = C.amber
-  } else {
-    debugLabel = 'missing website'
-    debugColor = C.dim
-  }
+  if (showThum)         { debugLabel = `screenshot: ${thumUrl}`;        debugColor = C.green }
+  else if (showFavicon) { debugLabel = `favicon: ${faviconUrl}`;        debugColor = C.amber }
+  else if (site)        { debugLabel = `failed: ${thumUrl}`;            debugColor = C.red   }
+  else                  { debugLabel = 'missing website';               debugColor = C.dim   }
 
   return (
     <div style={{ flexShrink: 0 }}>
       <div style={{ height: 220, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
-        {showImg && (
-          <img
-            src={src}
-            alt={t.name}
-            onError={() => setFailed(true)}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.88 }}
-          />
+        {showThum && (
+          <img src={thumUrl} alt={t.name} onError={() => setThumFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.88 }} />
         )}
-        {!showImg && (
+        {showFavicon && (
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
+            <img src={faviconUrl} alt={t.name} onError={() => setFaviconFailed(true)}
+              style={{ width: 80, height: 80, objectFit: 'contain', opacity: 0.9 }} />
+            <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.sub }}>{domain}</div>
+          </div>
+        )}
+        {showPlaceholder && (
           <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
             <div style={{ fontFamily: sans, fontSize: '5.5rem', fontWeight: 800, color: `${C.orange}25`, lineHeight: 1, letterSpacing: -4 }}>{(t.name || 'X').charAt(0).toUpperCase()}</div>
             <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}40` }}>STRIKER INTELLIGENCE</div>
@@ -231,7 +237,6 @@ function HotelPhoto({ t, onClose }) {
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, #040609 100%)' }} />
         <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
       </div>
-      {/* Debug line */}
       <div style={{ padding: '0.2rem 0.75rem', background: '#06080b', borderBottom: `1px solid ${C.border}` }}>
         <span style={{ fontFamily: mono, fontSize: '0.36rem', color: debugColor, letterSpacing: '0.5px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {debugLabel}
