@@ -10,7 +10,7 @@ const btn = {
   borderRadius: '2px', cursor: 'pointer', transition: 'all 0.15s',
 }
 
-export default function Header({ view, setView, currentUser, division, setDivision }) {
+export default function Header({ view, setView, currentUser, division, setDivision, onBack }) {
   const [userEmail, setUserEmail] = useState(null)
 
   useEffect(() => {
@@ -34,6 +34,24 @@ export default function Header({ view, setView, currentUser, division, setDivisi
               Sales Intelligence Platform
             </div>
           </div>
+
+          {/* Back to dashboard — B section */}
+          {onBack && (
+            <button
+              onClick={onBack}
+              style={{
+                fontFamily: mono, fontSize: '0.56rem', letterSpacing: '1.5px',
+                textTransform: 'uppercase', padding: '0.3rem 0.9rem',
+                border: '1px solid #ff5c0055', background: 'rgba(255,92,0,0.07)',
+                color: '#ff5c00', borderRadius: '2px', cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,92,0,0.14)'; e.currentTarget.style.boxShadow = '0 0 10px rgba(255,92,0,0.2)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,92,0,0.07)'; e.currentTarget.style.boxShadow = 'none' }}
+            >
+              ← Späť do Dashboardu
+            </button>
+          )}
 
           {/* Prepínač — iba Staubert, inline s logom */}
           {currentUser === 'Staubert' && (

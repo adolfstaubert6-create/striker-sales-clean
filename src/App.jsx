@@ -64,11 +64,12 @@ export default function App() {
         currentUser={currentUser}
         division={division}
         setDivision={d => { setDivision(d); setView('dashboard') }}
+        onBack={division === 'B' ? () => { setDivision('A'); setView('dashboard') } : null}
       />
       <main className="app-main" style={{ flex: 1 }}>
         {division === 'B' ? (
           <div style={{ padding: '1.25rem', maxWidth: 1100, margin: '0 auto', width: '100%' }}>
-            <DashboardB onBack={() => { setDivision('A'); setView('dashboard') }} />
+            <DashboardB />
           </div>
         ) : view === 'search' ? (
           <SearchPanel

@@ -213,7 +213,7 @@ function HotelPhoto({ t, onClose }) {
   )
 }
 
-// ── Back navigation button ────────────────────────────────────────────────────
+// ── Back navigation button — position:fixed, always visible top-left ──────────
 function BackBtn({ onClose }) {
   const [hov, setHov] = useState(false)
   return (
@@ -222,16 +222,17 @@ function BackBtn({ onClose }) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: '0.45rem',
-        width: '100%', padding: '0.6rem 1rem',
-        background: hov ? `${C.orange}0d` : 'transparent',
-        border: 'none', borderBottom: `1px solid ${hov ? C.orange + '33' : C.border}`,
-        color: hov ? C.orange : C.dim,
-        fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1.5px',
+        position: 'fixed', top: 0, left: 0, zIndex: 400,
+        width: 255,
+        display: 'flex', alignItems: 'center', gap: '0.5rem',
+        padding: '0.65rem 1rem',
+        background: hov ? '#0d1117' : '#06080b',
+        borderBottom: `2px solid ${hov ? C.orange : C.border}`,
+        color: hov ? C.orange : '#9ca3af',
+        fontFamily: mono, fontSize: '0.54rem', letterSpacing: '1.5px',
         textTransform: 'uppercase', cursor: 'pointer',
         transition: 'all 0.15s',
-        boxShadow: hov ? `0 0 10px ${C.orange}18` : 'none',
-        flexShrink: 0,
+        boxShadow: hov ? `0 2px 12px ${C.orange}22` : 'none',
       }}
     >
       ← Späť do Dashboardu
@@ -664,9 +665,9 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 300, display: 'flex', overflow: 'hidden' }}>
 
       {/* ── LEFT ── */}
-      <div style={{ width: 255, flexShrink: 0, background: '#040609', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+      <div style={{ width: 255, flexShrink: 0, background: '#040609', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingTop: 38 }}>
 
-        {/* Back button */}
+        {/* Back button — position:fixed, rendered outside scroll flow */}
         <BackBtn onClose={onClose} />
 
         {/* Photo / Placeholder */}
