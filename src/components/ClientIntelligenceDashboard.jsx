@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { updateTarget, addContact, removeContact } from '../services/intelTargetService.js'
 import { INTEL_STATUS_LIST } from '../constants/intelMeta.js'
 import ProgressBar from './ProgressBar.jsx'
@@ -177,37 +177,19 @@ const NAV = [
   { key: 'documents',  label: 'Dokumenty',               icon: '◻' },
 ]
 
-// ── Normalize website field from any available field ─────────────────────────
-function resolveWebsite(t) {
-  const raw = t.photoUrl || t.website || t.web || t.url || t.domain || ''
-  if (!raw) return null
-  if (raw.startsWith('http')) return raw
-  return `https://${raw}`
-}
 
-// ── Build thum.io screenshot URL ──────────────────────────────────────────────
-function getScreenshotUrl(t) {
-  const site = resolveWebsite(t)
-  if (!site) return null
-  return `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}`
-}
-
-// ── Premium branded card — shown when no real image is available ──────────────
-function BrandedCard({ t, domain, faviconUrl }) {
-  const [favFailed, setFavFailed] = useState(false)
+// ── Premium branded card — shown when no real photo available ─────────────────
+function BrandedCard({ t }) {
   const initial = (t.name || 'H').charAt(0).toUpperCase()
   return (
     <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, #050709 0%, ${C.orange}14 40%, ${C.orange}07 70%, #050709 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.85rem' }}>
       <div style={{ width: 76, height: 76, borderRadius: '50%', background: `radial-gradient(circle, ${C.orange}1a 0%, ${C.orange}06 100%)`, border: `1.5px solid ${C.orange}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        {faviconUrl && !favFailed
-          ? <img src={faviconUrl} alt="" onError={() => setFavFailed(true)} style={{ width: 40, height: 40, objectFit: 'contain' }} />
-          : <span style={{ fontFamily: sans, fontSize: '2.1rem', fontWeight: 800, color: `${C.orange}88`, lineHeight: 1 }}>{initial}</span>
-        }
+        <span style={{ fontFamily: sans, fontSize: '2.1rem', fontWeight: 800, color: `${C.orange}88`, lineHeight: 1 }}>{initial}</span>
       </div>
       <div style={{ textAlign: 'center', padding: '0 1.2rem' }}>
         <div style={{ fontFamily: sans, fontSize: '0.92rem', fontWeight: 700, color: C.text, lineHeight: 1.25, marginBottom: '0.28rem' }}>{t.name}</div>
         <div style={{ fontFamily: mono, fontSize: '0.43rem', color: C.dim, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
-          {[t.city, domain].filter(Boolean).join(' · ')}
+          {[t.city, t.country].filter(Boolean).join(' · ')}
         </div>
       </div>
       <div style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}35` }}>STRIKER INTELLIGENCE</div>
@@ -215,37 +197,24 @@ function BrandedCard({ t, domain, faviconUrl }) {
   )
 }
 
-// ── Hotel photo: photoUrl → thum.io → WP mshots → branded card ───────────────
-function HotelPhoto({ t, onClose }) {
-  const [photoFailed,  setPhotoFailed]  = useState(false)
-  const [thumFailed,   setThumFailed]   = useState(false)
-  const [mshotsFailed, setMshotsFailed] = useState(false)
-
-  const site = resolveWebsite(t)
-  let domain = null
-  if (site) { try { domain = new URL(site).hostname } catch {} }
-
-  const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : null
-  const thumUrl    = site   ? `https://image.thum.io/get/width/700/crop/400/noanimate/${encodeURIComponent(site)}` : null
-  const mshotsUrl  = site   ? `https://s.wordpress.com/mshots/v1/${encodeURIComponent(site)}?w=700&h=400` : null
-
-  let imgSrc = null, onImgError = null
-  if (t.photoUrl && !photoFailed) {
-    imgSrc = t.photoUrl;   onImgError = () => setPhotoFailed(true)
-  } else if (thumUrl && !thumFailed) {
-    imgSrc = thumUrl;      onImgError = () => setThumFailed(true)
-  } else if (mshotsUrl && !mshotsFailed) {
-    imgSrc = mshotsUrl;    onImgError = () => setMshotsFailed(true)
-  }
+// ── Hotel photo panel ─────────────────────────────────────────────────────────
+function HotelPhoto({ photoUrl, loading, t, onClose }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const showImg = photoUrl && !imgFailed
 
   return (
     <div style={{ flexShrink: 0 }}>
       <div style={{ height: 220, position: 'relative', overflow: 'hidden', background: '#050709' }}>
-        {imgSrc && (
-          <img src={imgSrc} alt={t.name} onError={onImgError}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.92 }} />
+        {loading && !showImg && (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, #050709 0%, ${C.orange}0a 100%)` }}>
+            <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '3px', textTransform: 'uppercase', color: `${C.orange}55` }}>Načítavam foto...</div>
+          </div>
         )}
-        {!imgSrc && <BrandedCard t={t} domain={domain} faviconUrl={faviconUrl} />}
+        {showImg && (
+          <img src={photoUrl} alt={t.name} onError={() => setImgFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        )}
+        {!showImg && !loading && <BrandedCard t={t} />}
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 35%, #040609 100%)' }} />
         <button onClick={onClose} style={{ position: 'absolute', top: '0.55rem', right: '0.55rem', background: 'rgba(0,0,0,0.6)', border: `1px solid ${C.border}`, color: C.dim, borderRadius: 3, padding: '0.16rem 0.45rem', fontFamily: mono, fontSize: '0.48rem', cursor: 'pointer', letterSpacing: '1px' }}>✕</button>
       </div>
@@ -294,6 +263,31 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
   const [draft,     setDraft]     = useState(
     t.emailDraft || { sk: { subject: '', body: '' }, de: { subject: '', body: '' }, en: { subject: '', body: '' } }
   )
+  const [photoUrl,  setPhotoUrl]  = useState(t.photoUrl || null)
+  const [photoLoad, setPhotoLoad] = useState(!t.photoUrl)
+
+  useEffect(() => {
+    if (t.photoUrl) return
+    let cancelled = false
+    async function fetchPhoto() {
+      try {
+        const r = await fetch('/.netlify/functions/hotel-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: t.name, city: t.city, country: t.country || 'DE' }),
+        })
+        const d = await r.json()
+        if (cancelled) return
+        if (d.ok && d.photoUrl) {
+          setPhotoUrl(d.photoUrl)
+          updateTarget(t.id, { photoUrl: d.photoUrl, placeId: d.placeId }).catch(() => {})
+        }
+      } catch {}
+      finally { if (!cancelled) setPhotoLoad(false) }
+    }
+    fetchPhoto()
+    return () => { cancelled = true }
+  }, [])
 
   const fit    = t.strikerFitScore || t.overallScore || 0
   const fitCol = fit >= 80 ? C.orange : fit >= 60 ? C.amber : C.dim
@@ -711,7 +705,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         <BackBtn onClose={onClose} />
 
         {/* Photo / Placeholder */}
-        <HotelPhoto t={t} onClose={onClose} />
+        <HotelPhoto t={t} photoUrl={photoUrl} loading={photoLoad} onClose={onClose} />
 
 
         {/* Company info */}
