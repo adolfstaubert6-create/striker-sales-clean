@@ -213,7 +213,7 @@ function HotelPhoto({ t, onClose }) {
 
   return (
     <div style={{ flexShrink: 0 }}>
-      <div style={{ height: 185, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
+      <div style={{ height: 220, position: 'relative', background: `linear-gradient(145deg, #0d1117 0%, ${C.orange}0a 60%, ${C.orange}05 100%)`, overflow: 'hidden' }}>
         {showImg && (
           <img
             src={src}
