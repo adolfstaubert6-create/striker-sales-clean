@@ -38,7 +38,7 @@ function Badge({ type = 'unknown', small }) {
 function SH({ label, source, action }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.1rem' }}>
-      <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost }}>{label}</span>
+      <span style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#8a96a6', fontWeight: 600 }}>{label}</span>
       {source && <Badge type={source} />}
       {action && <span style={{ flex: 1 }} />}
       {action}
@@ -48,29 +48,31 @@ function SH({ label, source, action }) {
 
 // ── KPI card ──────────────────────────────────────────────────────────────────
 function KPI({ label, value, unit = '', source, color, note, max = 100 }) {
+  const [hov, setHov] = useState(false)
   const has = value != null && value !== ''
   const num = typeof value === 'number'
   const col = color || (num ? (value >= 70 ? C.orange : value >= 45 ? C.amber : C.dim) : C.dim)
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 6, padding: '1.1rem 1.2rem', flex: 1, minWidth: 130, display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ background: hov ? '#181e28' : '#13171e', border: `1px solid ${hov ? '#2d3444' : '#252b36'}`, borderRadius: 6, padding: '1.1rem 1.2rem', flex: 1, minWidth: 130, display: 'flex', flexDirection: 'column', gap: '0.35rem', transition: 'all 0.15s' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, lineHeight: 1.4 }}>{label}</div>
+        <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#7b8899', lineHeight: 1.4 }}>{label}</div>
         {source && <Badge type={source} small />}
       </div>
       {has ? (
         <>
-          <div style={{ fontFamily: mono, fontSize: '1.7rem', fontWeight: 700, color: col, lineHeight: 1 }}>
-            {num ? value : value}{unit}
+          <div style={{ fontFamily: mono, fontSize: '1.75rem', fontWeight: 700, color: col, lineHeight: 1, textShadow: `0 0 20px ${col}44` }}>
+            {value}{unit}
           </div>
           {num && (
-            <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ width: `${Math.min(100, (value / max) * 100)}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.5s ease', boxShadow: `0 0 6px ${col}66` }} />
+            <div style={{ height: 4, background: '#1a2030', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.min(100, (value / max) * 100)}%`, height: '100%', background: col, borderRadius: 2, transition: 'width 0.5s ease', boxShadow: `0 0 8px ${col}88` }} />
             </div>
           )}
-          {note && <div style={{ fontFamily: mono, fontSize: '0.46rem', color: C.dim, lineHeight: 1.4, marginTop: '0.1rem' }}>{note}</div>}
+          {note && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: '#8a96a6', lineHeight: 1.4, marginTop: '0.1rem' }}>{note}</div>}
         </>
       ) : (
-        <div style={{ fontFamily: mono, fontSize: '0.56rem', color: C.ghost, fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>
+        <div style={{ fontFamily: mono, fontSize: '0.54rem', color: '#4b5a6d', fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>
       )}
     </div>
   )
@@ -79,20 +81,20 @@ function KPI({ label, value, unit = '', source, color, note, max = 100 }) {
 // ── Metric row ─────────────────────────────────────────────────────────────────
 function MRow({ label, value, reason, source }) {
   if (value == null) return null
-  const col = value >= 70 ? C.orange : value >= 45 ? C.amber : C.dim
+  const col = value >= 70 ? C.orange : value >= 45 ? C.amber : '#6b7a8d'
   return (
-    <div style={{ marginBottom: '0.85rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-        <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.sub }}>{label}</span>
+    <div style={{ marginBottom: '0.9rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.28rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.54rem', color: '#a0aab8' }}>{label}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           {source && <Badge type={source} small />}
-          <span style={{ fontFamily: mono, fontSize: '0.7rem', fontWeight: 700, color: col }}>{value}</span>
+          <span style={{ fontFamily: mono, fontSize: '0.75rem', fontWeight: 700, color: col, textShadow: `0 0 10px ${col}55` }}>{value}</span>
         </div>
       </div>
-      <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: 'hidden' }}>
-        <div style={{ width: `${value}%`, height: '100%', background: col, borderRadius: 2, boxShadow: `0 0 6px ${col}55` }} />
+      <div style={{ height: 5, background: '#1a2030', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ width: `${value}%`, height: '100%', background: col, borderRadius: 2, boxShadow: `0 0 8px ${col}66` }} />
       </div>
-      {reason && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: C.ghost, marginTop: '0.22rem', lineHeight: 1.45 }}>{reason}</div>}
+      {reason && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: '#5a6878', marginTop: '0.25rem', lineHeight: 1.5 }}>{reason}</div>}
     </div>
   )
 }
@@ -140,9 +142,11 @@ function ContactCard({ c, onRemove, onSave }) {
 
 // ── Action button ──────────────────────────────────────────────────────────────
 function Btn({ children, onClick, color = C.orange, disabled, small }) {
+  const [hov, setHov] = useState(false)
   return (
     <button onClick={onClick} disabled={disabled}
-      style={{ fontFamily: mono, fontSize: small ? '0.5rem' : '0.54rem', letterSpacing: '1px', textTransform: 'uppercase', padding: small ? '0.28rem 0.7rem' : '0.38rem 0.9rem', border: `1px solid ${color}44`, background: `${color}0d`, color, borderRadius: 3, cursor: 'pointer', opacity: disabled ? 0.55 : 1, transition: 'all 0.12s', whiteSpace: 'nowrap' }}>
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ fontFamily: mono, fontSize: small ? '0.51rem' : '0.55rem', letterSpacing: '1px', textTransform: 'uppercase', padding: small ? '0.3rem 0.8rem' : '0.42rem 1rem', border: `1px solid ${color}${hov ? '99' : '66'}`, background: hov ? `${color}20` : `${color}12`, color, borderRadius: 3, cursor: 'pointer', opacity: disabled ? 0.5 : 1, transition: 'all 0.12s', whiteSpace: 'nowrap', fontWeight: 600, boxShadow: hov ? `0 0 12px ${color}22` : 'none' }}>
       {children}
     </button>
   )
@@ -151,8 +155,8 @@ function Btn({ children, onClick, color = C.orange, disabled, small }) {
 // ── Empty state ────────────────────────────────────────────────────────────────
 function Empty({ text = 'Dáta zatiaľ neoverené', action }) {
   return (
-    <div style={{ padding: '2.5rem 1.5rem', background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, textAlign: 'center' }}>
-      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: C.ghost, fontStyle: 'italic', marginBottom: action ? '1rem' : 0 }}>{text}</div>
+    <div style={{ padding: '2.5rem 1.5rem', background: '#0e1117', border: '1px solid #1e2a38', borderRadius: 6, textAlign: 'center' }}>
+      <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#5a6878', fontStyle: 'italic', marginBottom: action ? '1.1rem' : 0, lineHeight: 1.6 }}>{text}</div>
       {action}
     </div>
   )
@@ -484,13 +488,13 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
 
         {/* Problem */}
-        <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1.25rem 1.4rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-            <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.orange }}>Hlavný problém klienta</span>
+        <div style={{ background: '#13171e', border: '1px solid #252b36', borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1.3rem 1.45rem', boxShadow: `0 0 24px ${C.orange}08` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.7rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.orange, fontWeight: 700 }}>Hlavný problém klienta</span>
             <Badge type={live ? 'live' : problem ? 'ai' : 'unknown'} />
           </div>
           {problem
-            ? <p style={{ fontFamily: sans, fontSize: '0.8rem', color: C.text, lineHeight: 1.7, margin: 0 }}>{problem.split('\n\n')[0].slice(0, 220)}</p>
+            ? <p style={{ fontFamily: sans, fontSize: '0.82rem', color: '#e8eef6', lineHeight: 1.75, margin: 0 }}>{problem.split('\n\n')[0].slice(0, 220)}</p>
             : <Empty text="Spusti AI Analýzu pre zistenie problému klienta." action={<Btn onClick={() => { doAnalysis(); setNav('profile') }} small>🧠 Spustiť AI Analýzu</Btn>} />
           }
         </div>
@@ -509,12 +513,12 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
 
         {/* Next step */}
         {nextStep && (
-          <div style={{ background: `${C.green}07`, border: `1px solid ${C.green}22`, borderRadius: 5, padding: '1.1rem 1.3rem' }}>
-            <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.green, display: 'block', marginBottom: '0.5rem' }}>Odporúčaný ďalší krok</span>
-            <div style={{ fontFamily: sans, fontSize: '0.82rem', color: C.text, marginBottom: '0.65rem', lineHeight: 1.5 }}>{nextStep}</div>
+          <div style={{ background: `${C.green}0e`, border: `1px solid ${C.green}33`, borderLeft: `3px solid ${C.green}`, borderRadius: 5, padding: '1.1rem 1.3rem', boxShadow: `0 0 20px ${C.green}08` }}>
+            <span style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#4ade80', display: 'block', marginBottom: '0.55rem', fontWeight: 700 }}>Odporúčaný ďalší krok</span>
+            <div style={{ fontFamily: sans, fontSize: '0.84rem', color: '#e8eef6', marginBottom: '0.7rem', lineHeight: 1.6 }}>{nextStep}</div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <Btn onClick={() => setNav('email')} color={C.green} small>✉ Otvoriť emaily</Btn>
-              {mainCt?.email && <a href={`mailto:${mainCt.email}`} style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.28rem 0.7rem', border: `1px solid ${C.border2}`, background: 'transparent', color: C.dim, borderRadius: 3, textDecoration: 'none' }}>{mainCt.name || mainCt.email}</a>}
+              {mainCt?.email && <a href={`mailto:${mainCt.email}`} style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem 0.75rem', border: '1px solid #252b36', background: 'transparent', color: '#8a96a6', borderRadius: 3, textDecoration: 'none' }}>{mainCt.name || mainCt.email}</a>}
             </div>
           </div>
         )}
@@ -524,9 +528,9 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           <div>
             <SH label="Kľúčové problémy" source="ai" />
             {analysis.painPoints.slice(0, 3).map((p, i) => (
-              <div key={i} style={{ display: 'flex', gap: '0.6rem', padding: '0.65rem 0.85rem', background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, marginBottom: '0.35rem' }}>
-                <span style={{ color: C.red, flexShrink: 0, fontSize: '0.7rem' }}>▸</span>
-                <span style={{ fontFamily: sans, fontSize: '0.73rem', color: C.sub, lineHeight: 1.55 }}>{p}</span>
+              <div key={i} style={{ display: 'flex', gap: '0.65rem', padding: '0.7rem 0.9rem', background: '#13171e', border: '1px solid #1e2a38', borderLeft: `2px solid ${C.red}66`, borderRadius: 4, marginBottom: '0.4rem' }}>
+                <span style={{ color: C.red, flexShrink: 0, fontSize: '0.72rem', marginTop: '0.05rem' }}>▸</span>
+                <span style={{ fontFamily: sans, fontSize: '0.76rem', color: '#b0bac8', lineHeight: 1.6 }}>{p}</span>
               </div>
             ))}
           </div>
@@ -538,7 +542,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
             <SH label="Posledné živé signály" source="live" />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
               {(t.liveSignals || []).slice(0, 8).map((s, i) => (
-                <span key={i} style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.1rem 0.42rem', border: `1px solid ${C.amber}44`, borderRadius: 3, color: C.amber, background: `${C.amber}0d` }}>{s}</span>
+                <span key={i} style={{ fontFamily: mono, fontSize: '0.51rem', padding: '0.12rem 0.45rem', border: `1px solid ${C.amber}55`, borderRadius: 3, color: '#fbbf24', background: `${C.amber}18` }}>{s}</span>
               ))}
             </div>
           </div>
@@ -554,11 +558,11 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           <ProgressBar running={gLoad} maxSecs={15} type="ai" />
         </div>
         {problem ? (
-          <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1.3rem 1.5rem' }}>
+          <div style={{ background: '#13171e', border: '1px solid #252b36', borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1.3rem 1.5rem' }}>
             <Badge type={analysis?.reasoning ? 'ai' : 'ai'} />
-            <div style={{ marginTop: '0.75rem' }}>
+            <div style={{ marginTop: '0.8rem' }}>
               {(t.clientCard?.clientProfile || analysis?.reasoning || '').split('\n\n').slice(0, 4).map((p, i) => (
-                <p key={i} style={{ fontFamily: sans, fontSize: '0.75rem', color: i === 0 ? C.text : C.sub, lineHeight: 1.75, margin: 0, marginBottom: i < 3 ? '0.85rem' : 0 }}>{p}</p>
+                <p key={i} style={{ fontFamily: sans, fontSize: '0.77rem', color: i === 0 ? '#e8eef6' : '#a0aab8', lineHeight: 1.8, margin: 0, marginBottom: i < 3 ? '0.9rem' : 0 }}>{p}</p>
               ))}
             </div>
           </div>
@@ -594,14 +598,14 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         {hasE ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             {[
-              { label: 'Teplotný tlak',       v: t.heatPressure,          r: t.heatPressureReason },
-              { label: 'Závislosť od tepla',  v: t.thermalDependency,     r: t.thermalDependencyReason },
-              { label: 'Prevádzkové náklady', v: t.operatingCostPressure, r: t.operatingCostPressureReason },
-              { label: 'Potreba modernizácie', v: t.modernizationNeed,    r: t.modernizationNeedReason },
-              { label: 'Závislosť od kotlov', v: t.boilerDependencyProb,  r: t.boilerDependencyProbReason },
-              { label: 'Ochota riešiť',       v: t.willingnessToSolve,    r: t.willingnessToSolveReason },
+              { label: 'Teplotný tlak',        v: t.heatPressure,          r: t.heatPressureReason },
+              { label: 'Závislosť od tepla',   v: t.thermalDependency,     r: t.thermalDependencyReason },
+              { label: 'Prevádzkové náklady',  v: t.operatingCostPressure, r: t.operatingCostPressureReason },
+              { label: 'Potreba modernizácie', v: t.modernizationNeed,     r: t.modernizationNeedReason },
+              { label: 'Závislosť od kotlov',  v: t.boilerDependencyProb,  r: t.boilerDependencyProbReason },
+              { label: 'Ochota riešiť',        v: t.willingnessToSolve,    r: t.willingnessToSolveReason },
             ].map(({ label, v, r }) => (
-              <div key={label} style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, padding: '0.85rem 1rem' }}>
+              <div key={label} style={{ background: '#13171e', border: '1px solid #252b36', borderRadius: 4, padding: '0.9rem 1rem' }}>
                 <MRow label={label} value={v} reason={r} source={live ? 'live' : 'ai'} />
               </div>
             ))}
