@@ -1378,6 +1378,45 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     // KONTAKTY
     if (nav === 'contacts') return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+        {/* Pipeline architecture description */}
+        <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1rem 1.15rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.39rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: `${C.orange}99`, marginBottom: '0.85rem' }}>
+            Contact Discovery Pipeline
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+            {[
+              {
+                num: '01', color: '#60a5fa', label: 'Native HTTP Scan', time: '≤ 9s',
+                desc: 'Priamy HTTP scrape hotelového webu — /impressum, /team, /management, /contact, /kontakt. Regex extrakcia mien, rolí, emailov a telefónov. Rýchly, bez externých API.',
+              },
+              {
+                num: '02', color: C.purple, label: 'Deep Search + AI', time: '≤ 23s',
+                desc: 'SerpAPI (Google snippety) + Firecrawl (JS-rendered weby) bežia paralelne. Claude AI extrahuje kontakty z obsahu — rozozná skutočné mená od generického textu.',
+              },
+              {
+                num: '03', color: C.amber, label: 'Email Enrichment', time: 'on demand',
+                desc: 'Apollo people/match — osobný pracovný email pre konkrétne meno. Spúšťa sa manuálne na karte kontaktu tlačidlom „Obohatiť email".',
+              },
+              {
+                num: '04', color: C.green, label: 'Výstup', time: 'max 2 kontakty',
+                desc: 'Technický kontakt (Facility Manager, Technický Leiter, Energy Manager) + Manažérsky kontakt (Geschäftsführer, Director, General Manager). Jeden z každej kategórie.',
+              },
+            ].map(({ num, color, label, time, desc }) => (
+              <div key={num} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.44rem', color, fontWeight: 700, flexShrink: 0, width: 16, paddingTop: '0.04rem' }}>{num}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.18rem' }}>
+                    <span style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1px', textTransform: 'uppercase', color }}>{label}</span>
+                    <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.ghost, letterSpacing: '0.5px' }}>{time}</span>
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: '0.72rem', color: C.sub, lineHeight: 1.6 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <Btn onClick={doContacts} disabled={cLoad}>🔍 Nájsť kontakty</Btn>
           {cMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: cMsg.startsWith('✅') ? C.green : C.amber }}>{cMsg}</span>}
