@@ -947,7 +947,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyName: t.name, website: t.web, city: t.city, country: t.country || 'DE' }),
       })
-      const d = await r.json()
+      const d = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }))
 
       clearTimeout(t1); clearTimeout(t2)
       setCSteps(SCAN_STEPS.map((s, i) => ({ ...s, state: i <= 2 ? 'done' : 'scanning' })))
