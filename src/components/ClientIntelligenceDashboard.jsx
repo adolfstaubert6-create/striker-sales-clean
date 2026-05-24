@@ -283,111 +283,76 @@ function RightContactCard({ c, onSelect }) {
   const status          = c.status || (c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT')
   const st              = CONTACT_STATUS[status] || CONTACT_STATUS['NEEDS ENRICHMENT']
   const priority        = c.priority || (c.decisionPower === 'HIGH' ? 'PRIMARY' : c.decisionPower === 'MEDIUM' ? 'SECONDARY' : 'SUPPORT')
-  const priCol          = priority === 'PRIMARY' ? C.orange : priority === 'SECONDARY' ? C.amber : '#3d4a5c'
-  const hasEmail        = !!c.email
-  const hasPhone        = !!c.phone
-  const hasLinkedin     = !!c.linkedin
+  const priCol          = priority === 'PRIMARY' ? C.orange : priority === 'SECONDARY' ? C.amber : C.dim
 
   return (
     <div
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       onClick={() => onSelect && onSelect(c)}
-      style={{
-        background: hov ? `linear-gradient(135deg, #0f1520 0%, #0d1219 100%)` : `linear-gradient(135deg, #0b0f18 0%, #0a0d14 100%)`,
-        border: `1px solid ${hov ? priCol + '55' : '#191f2b'}`,
-        borderRadius: 8,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        transition: 'all 0.18s',
-        boxShadow: hov ? `0 4px 24px ${priCol}18, inset 0 1px 0 ${priCol}18` : '0 2px 8px #00000044',
-        position: 'relative',
-      }}
+      style={{ background: hov ? '#181d26' : '#13171e', border: `1px solid ${hov ? '#2d3444' : '#1e2530'}`, borderLeft: `3px solid ${priCol}`, borderRadius: 6, padding: '0.9rem 0.9rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', transition: 'all 0.15s', cursor: 'pointer' }}
     >
-      {/* Top accent bar */}
-      <div style={{ height: 2, background: `linear-gradient(90deg, ${priCol}, ${priCol}00)`, opacity: hov ? 1 : 0.5, transition: 'opacity 0.18s' }} />
 
-      <div style={{ padding: '0.85rem 0.95rem 0.8rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+      {/* Priority label */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: priCol }}>
+          {priority === 'PRIMARY' ? '▲ Primary Decision Maker' : priority === 'SECONDARY' ? '◆ Secondary Influencer' : '◇ Support Contact'}
+        </span>
+        {isDemo && <span style={{ fontFamily: mono, fontSize: '0.35rem', color: '#374151', padding: '0.03rem 0.22rem', border: '1px solid #1e2530', borderRadius: 2 }}>DEMO</span>}
+      </div>
 
-        {/* Priority + demo badge row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: priCol, display: 'inline-block', boxShadow: `0 0 6px ${priCol}` }} />
-            <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.8px', textTransform: 'uppercase', color: priCol }}>
-              {priority === 'PRIMARY' ? 'Primary Decision Maker' : priority === 'SECONDARY' ? 'Secondary Influencer' : 'Support Contact'}
-            </span>
-          </div>
-          {isDemo
-            ? <span style={{ fontFamily: mono, fontSize: '0.33rem', color: '#2d3a4d', padding: '0.06rem 0.28rem', border: '1px solid #1e2a38', borderRadius: 3, letterSpacing: '1px' }}>DEMO</span>
-            : c.sourceType && c.sourceType !== 'demo' && (() => {
-                const ST = { impressum: { label: 'IMPRESSUM', col: C.purple }, team: { label: 'TEAM', col: '#60a5fa' }, management: { label: 'MGMT', col: C.orange }, contact: { label: 'CONTACT', col: C.amber }, website: { label: 'WEB', col: '#4b5563' } }
-                const s = ST[c.sourceType] || ST.website
-                return <span style={{ fontFamily: mono, fontSize: '0.33rem', letterSpacing: '1px', textTransform: 'uppercase', color: s.col, padding: '0.06rem 0.28rem', border: `1px solid ${s.col}33`, borderRadius: 3, background: `${s.col}0d` }}>{s.label}</span>
-              })()
-          }
+      {/* Avatar + name + role */}
+      <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'flex-start' }}>
+        <div style={{ width: 42, height: 42, borderRadius: '50%', background: `${ac}22`, border: `2px solid ${ac}66`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 0 12px ${ac}22` }}>
+          <span style={{ fontFamily: sans, fontSize: '1.1rem', fontWeight: 700, color: ac }}>{init}</span>
         </div>
-
-        {/* Avatar + name + role */}
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <div style={{ width: 44, height: 44, borderRadius: '50%', background: `${ac}18`, border: `1.5px solid ${ac}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 0 16px ${ac}28` }}>
-            <span style={{ fontFamily: sans, fontSize: '1.15rem', fontWeight: 700, color: ac }}>{init}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: sans, fontSize: '0.84rem', fontWeight: 700, color: c.name ? '#f4f6f9' : '#6b7280', lineHeight: 1.2, marginBottom: '0.12rem' }}>
+            {c.name || <span style={{ fontWeight: 400, fontStyle: 'italic', fontSize: '0.72rem', color: '#4b5563' }}>Meno nenájdené</span>}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: sans, fontSize: '0.88rem', fontWeight: 700, color: c.name ? '#eaf0fa' : '#3d4a5c', lineHeight: 1.2, marginBottom: '0.14rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {c.name || <span style={{ fontWeight: 400, fontStyle: 'italic', fontSize: '0.72rem', color: '#2d3a4d' }}>Meno nenájdené</span>}
-            </div>
-            <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '0.8px', textTransform: 'uppercase', color: '#5a6a8a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.role || '—'}</div>
-          </div>
-        </div>
-
-        {/* Status pill */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.22rem', fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1.2px', textTransform: 'uppercase', color: st.color, padding: '0.14rem 0.45rem', border: `1px solid ${st.color}40`, borderRadius: 20, background: `${st.color}0e` }}>
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: st.color, display: 'inline-block', flexShrink: 0, boxShadow: `0 0 4px ${st.color}` }} />
-            {status}
-          </span>
-        </div>
-
-        {/* Contact info pills */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.22rem' }}>
-          {hasEmail
-            ? <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '0.38rem', fontFamily: mono, fontSize: '0.5rem', color: C.green, textDecoration: 'none', background: `${C.green}0a`, border: `1px solid ${C.green}28`, borderRadius: 4, padding: '0.22rem 0.5rem', overflow: 'hidden' }}>
-                <span style={{ flexShrink: 0, fontSize: '0.6rem' }}>✉</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</span>
-              </a>
-            : <div style={{ display: 'flex', alignItems: 'center', gap: '0.38rem', fontFamily: mono, fontSize: '0.46rem', color: '#2a3548', fontStyle: 'italic', padding: '0.22rem 0.5rem', border: '1px dashed #1a2332', borderRadius: 4 }}>
-                <span style={{ flexShrink: 0, fontSize: '0.55rem', opacity: 0.4 }}>✉</span>
-                Email nenájdený
-              </div>
-          }
-          {hasPhone && (
-            <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '0.38rem', fontFamily: mono, fontSize: '0.5rem', color: C.amber, textDecoration: 'none', background: `${C.amber}0a`, border: `1px solid ${C.amber}28`, borderRadius: 4, padding: '0.22rem 0.5rem' }}>
-              <span style={{ flexShrink: 0, fontSize: '0.55rem' }}>📞</span>
-              {c.phone}
-            </a>
-          )}
-          {hasLinkedin && (
-            <a href={c.linkedin} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '0.38rem', fontFamily: mono, fontSize: '0.5rem', color: '#818cf8', textDecoration: 'none', background: '#818cf80a', border: '1px solid #818cf828', borderRadius: 4, padding: '0.22rem 0.5rem' }}>
-              <span style={{ flexShrink: 0, fontSize: '0.55rem' }}>🔗</span>
-              LinkedIn Profile
-            </a>
+          <div style={{ fontFamily: mono, fontSize: '0.47rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#818cf8' }}>{c.role || '—'}</div>
+          {c.aiScore && (
+            <div style={{ fontFamily: mono, fontSize: '0.4rem', color: C.orange, marginTop: '0.1rem' }}>AI relevancia: {c.aiScore}/100</div>
           )}
         </div>
+      </div>
 
-        {/* Quick actions */}
-        <div style={{ display: 'flex', gap: '0.3rem', paddingTop: '0.35rem', borderTop: '1px solid #141a24' }}>
-          {hasEmail
-            ? <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} style={qaBtn('#4ade80', false)}>✉ Email</a>
-            : <span style={qaBtn('#22303f', true)}>✉ Email</span>
-          }
-          {hasPhone
-            ? <a href={`tel:${c.phone}`} onClick={e => e.stopPropagation()} style={qaBtn(C.amber, false)}>📞 Call</a>
-            : <span style={qaBtn('#22303f', true)}>📞 Call</span>
-          }
-          {hasLinkedin
-            ? <a href={c.linkedin} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={qaBtn('#818cf8', false)}>🔗 LI</a>
-            : <span style={qaBtn('#22303f', true)}>🔗 LI</span>
-          }
-        </div>
+      {/* Status + source badges */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontFamily: mono, fontSize: '0.39rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: st.color, padding: '0.12rem 0.4rem', border: `1px solid ${st.color}55`, borderRadius: 3, background: st.bg }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: st.color, display: 'inline-block', flexShrink: 0 }} />
+          {status}
+        </span>
+        {c.sourceType && c.sourceType !== 'demo' && (() => {
+          const ST = { impressum: { label: 'IMPRESSUM', col: C.purple }, team: { label: 'TEAM PAGE', col: '#60a5fa' }, management: { label: 'MANAGEMENT', col: C.orange }, contact: { label: 'CONTACT', col: C.amber }, website: { label: 'WEB', col: C.dim } }
+          const s = ST[c.sourceType] || ST.website
+          return <span style={{ fontFamily: mono, fontSize: '0.35rem', letterSpacing: '1px', textTransform: 'uppercase', color: s.col, padding: '0.1rem 0.28rem', border: `1px solid ${s.col}44`, borderRadius: 2, background: `${s.col}0d` }}>{s.label}</span>
+        })()}
+      </div>
+
+      {/* Contact info */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.12rem' }}>
+        {c.email
+          ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.53rem', color: '#4ade80', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {c.email}</a>
+          : <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151', fontStyle: 'italic' }}>Email nenájdený — spusti obohacovanie</span>
+        }
+        {c.phone && <span style={{ fontFamily: mono, fontSize: '0.53rem', color: '#9ca3af' }}>📞 {c.phone}</span>}
+      </div>
+
+      {/* Quick actions */}
+      <div style={{ display: 'flex', gap: '0.28rem', flexWrap: 'wrap', borderTop: '1px solid #1a1f2a', paddingTop: '0.55rem' }}>
+        {c.email
+          ? <a href={`mailto:${c.email}`} style={qaBtn('#4ade80', false)}>✉ Email</a>
+          : <span style={qaBtn('#374151', true)}>✉ Email</span>
+        }
+        {c.phone
+          ? <a href={`tel:${c.phone}`} style={qaBtn(C.amber, false)}>📞 Call</a>
+          : <span style={qaBtn('#374151', true)}>📞 Call</span>
+        }
+        {c.linkedin
+          ? <a href={c.linkedin} target="_blank" rel="noreferrer" style={qaBtn('#818cf8', false)}>🔗 LinkedIn</a>
+          : <span style={qaBtn('#374151', true)}>🔗 LinkedIn</span>
+        }
+        <span style={qaBtn('#4b5563', false)}>📝 Notes</span>
       </div>
     </div>
   )
@@ -768,56 +733,47 @@ function ZoomBtn({ panel, zoomed, setZoomed }) {
 function CompanyContactCard({ cc }) {
   if (!cc) return null
   const hasAny = cc.email || cc.phone || cc.website
-  const isScanned = cc.sourceType === 'website'
   return (
-    <div style={{ background: 'linear-gradient(135deg, #0c1119 0%, #090e15 100%)', border: `1px solid ${C.amber}30`, borderRadius: 8, overflow: 'hidden', boxShadow: `0 2px 16px ${C.amber}0e` }}>
-      {/* Amber top bar */}
-      <div style={{ height: 2, background: `linear-gradient(90deg, ${C.amber}cc, ${C.amber}00)` }} />
-      <div style={{ padding: '0.85rem 0.95rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-        {/* Label row */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.28rem' }}>
-            <span style={{ width: 4, height: 4, borderRadius: '50%', background: C.amber, display: 'inline-block', boxShadow: `0 0 5px ${C.amber}` }} />
-            <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1.8px', textTransform: 'uppercase', color: C.amber }}>Oficiálny kontakt</span>
-          </div>
-          <span style={{ fontFamily: mono, fontSize: '0.33rem', letterSpacing: '0.8px', textTransform: 'uppercase', color: isScanned ? C.green : '#3d4a5c', padding: '0.06rem 0.3rem', border: `1px solid ${isScanned ? C.green + '33' : '#1e2530'}`, borderRadius: 3 }}>
-            {isScanned ? '● Web scan' : '○ Target data'}
-          </span>
+    <div style={{ background: '#0c1018', border: `1px solid #1e2b3a`, borderLeft: `3px solid ${C.amber}`, borderRadius: 5, padding: '0.85rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+      <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.amber, marginBottom: '0.08rem' }}>
+        Oficiálny kontakt hotela
+      </div>
+      <div style={{ fontFamily: sans, fontSize: '0.84rem', fontWeight: 700, color: '#f4f6f9', lineHeight: 1.2 }}>{cc.name}</div>
+      {(cc.address || cc.city || cc.country) && (
+        <div style={{ fontFamily: mono, fontSize: '0.46rem', color: '#6b7280', lineHeight: 1.5 }}>
+          {[cc.address, cc.city, cc.country].filter(Boolean).join(', ')}
         </div>
-
-        {/* Hotel name + location */}
-        <div>
-          <div style={{ fontFamily: sans, fontSize: '0.88rem', fontWeight: 700, color: '#eaf0fa', lineHeight: 1.2, marginBottom: '0.1rem' }}>{cc.name}</div>
-          {(cc.address || cc.city || cc.country) && (
-            <div style={{ fontFamily: mono, fontSize: '0.43rem', color: '#3d4a5c', lineHeight: 1.5 }}>
-              {[cc.address, cc.city, cc.country].filter(Boolean).join(' · ')}
-            </div>
+      )}
+      {hasAny && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
+          {cc.email && (
+            <a href={`mailto:${cc.email}`} style={{ fontFamily: mono, fontSize: '0.52rem', color: '#4ade80', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              ✉ {cc.email}
+            </a>
           )}
-        </div>
-
-        {/* Contact lines */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-          {cc.email
-            ? <a href={`mailto:${cc.email}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: mono, fontSize: '0.49rem', color: C.green, textDecoration: 'none', background: `${C.green}0a`, border: `1px solid ${C.green}25`, borderRadius: 4, padding: '0.2rem 0.45rem', overflow: 'hidden' }}>
-                <span style={{ flexShrink: 0 }}>✉</span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cc.email}</span>
-              </a>
-            : !hasAny && <div style={{ fontFamily: mono, fontSize: '0.43rem', color: '#2a3548', fontStyle: 'italic', padding: '0.2rem 0' }}>Spusti scan pre kontaktné údaje</div>
-          }
           {cc.phone && (
-            <a href={`tel:${cc.phone}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: mono, fontSize: '0.49rem', color: C.amber, textDecoration: 'none', background: `${C.amber}0a`, border: `1px solid ${C.amber}25`, borderRadius: 4, padding: '0.2rem 0.45rem' }}>
-              <span style={{ flexShrink: 0 }}>📞</span>
-              {cc.phone}
+            <a href={`tel:${cc.phone}`} style={{ fontFamily: mono, fontSize: '0.52rem', color: C.amber, textDecoration: 'none' }}>
+              📞 {cc.phone}
             </a>
           )}
           {cc.website && (
             <a href={cc.website.startsWith('http') ? cc.website : `https://${cc.website}`} target="_blank" rel="noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontFamily: mono, fontSize: '0.49rem', color: '#818cf8', textDecoration: 'none', background: '#818cf80a', border: '1px solid #818cf825', borderRadius: 4, padding: '0.2rem 0.45rem', overflow: 'hidden' }}>
-              <span style={{ flexShrink: 0 }}>🌐</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cc.website.replace(/^https?:\/\//, '')}</span>
+              style={{ fontFamily: mono, fontSize: '0.52rem', color: '#818cf8', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              🌐 {cc.website.replace(/^https?:\/\//, '')}
             </a>
           )}
         </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem', flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.34rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', padding: '0.03rem 0.25rem', border: '1px solid #1e2530', borderRadius: 2 }}>
+          {cc.sourceType === 'website' ? 'WEB SCAN' : 'TARGET DATA'}
+        </span>
+        {cc.confidence === 'HIGH' && (
+          <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.green }}>● Overený</span>
+        )}
+        {!hasAny && (
+          <span style={{ fontFamily: mono, fontSize: '0.41rem', color: '#374151', fontStyle: 'italic' }}>Spusti scan pre kontaktné údaje</span>
+        )}
       </div>
     </div>
   )
@@ -1580,56 +1536,41 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         <div style={{ position: 'sticky', top: 0, zIndex: 15, display: 'flex', justifyContent: 'flex-end', padding: '0.4rem 0.5rem', background: C.panel, borderBottom: `1px solid ${C.border}` }}>
           <ZoomBtn panel="right" zoomed={zoomed} setZoomed={setZoomed} />
         </div>
-        <div style={{ padding: '1rem 0.85rem 1.2rem', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+        <div style={{ padding: '1rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
 
           {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', paddingBottom: '0.7rem', borderBottom: '1px solid #111620' }}>
-            <div>
-              <div style={{ fontFamily: sans, fontSize: '0.9rem', fontWeight: 700, color: '#dce6f5', letterSpacing: '-0.2px', marginBottom: '0.2rem' }}>Kontakty klienta</div>
-              <div style={{ fontFamily: mono, fontSize: '0.41rem', color: '#3d4a5c', letterSpacing: '0.5px' }}>Decision chain intelligence</div>
-            </div>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: localContacts.length > 0 ? C.green : '#1e2a38', marginTop: '0.3rem', boxShadow: localContacts.length > 0 ? `0 0 8px ${C.green}` : 'none', transition: 'all 0.3s' }} />
+          <div style={{ paddingBottom: '0.65rem', borderBottom: `1px solid #1e2530` }}>
+            <div style={{ fontFamily: sans, fontSize: '0.86rem', fontWeight: 700, color: '#f4f6f9', marginBottom: '0.18rem' }}>Kontakty klienta</div>
+            <div style={{ fontFamily: mono, fontSize: '0.44rem', color: '#6b7280', lineHeight: 1.5 }}>Ľudia, ktorí môžu ovplyvniť rozhodnutie</div>
           </div>
 
           {/* Level 1 — Company official contact */}
           <CompanyContactCard cc={localCompanyContact} />
 
-          {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, transparent, #1a2232)' }} />
-            <span style={{ fontFamily: mono, fontSize: '0.35rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#2d3a4d' }}>Person Contacts</span>
-            <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, #1a2232, transparent)' }} />
-          </div>
-
-          {/* Find contacts CTA / scan progress */}
+          {/* Find contacts CTA */}
           {cLoad && cSteps.length > 0 ? (
-            <div style={{ background: '#080c12', border: `1px solid ${C.orange}28`, borderRadius: 7, padding: '0.8rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.38rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '2px', textTransform: 'uppercase', color: `${C.orange}88`, marginBottom: '0.18rem' }}>Scanning in progress</div>
+            <div style={{ background: '#0b0e14', border: `1px solid ${C.orange}33`, borderRadius: 5, padding: '0.75rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.42rem' }}>
               {cSteps.map(step => (
                 <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontFamily: mono, fontSize: '0.5rem', width: 14, flexShrink: 0, color: step.state === 'done' ? C.green : step.state === 'scanning' ? C.orange : '#1e2a38', transition: 'color 0.2s' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.58rem', width: 14, flexShrink: 0, color: step.state === 'done' ? C.green : step.state === 'scanning' ? C.orange : '#374151' }}>
                     {step.state === 'done' ? '✓' : step.state === 'scanning' ? '◎' : '○'}
                   </span>
-                  <span style={{ fontFamily: mono, fontSize: '0.44rem', color: step.state === 'done' ? '#4b6a5c' : step.state === 'scanning' ? C.orange : '#1e2a38', letterSpacing: '0.3px', transition: 'color 0.2s' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.47rem', color: step.state === 'done' ? C.green : step.state === 'scanning' ? C.orange : '#374151', letterSpacing: '0.3px' }}>
                     {step.label}
                   </span>
                   {step.state === 'scanning' && (
-                    <span style={{ fontFamily: mono, fontSize: '0.36rem', color: `${C.orange}60`, letterSpacing: '3px' }}>···</span>
+                    <span style={{ fontFamily: mono, fontSize: '0.38rem', color: `${C.orange}77`, letterSpacing: '2px' }}>...</span>
                   )}
                 </div>
               ))}
             </div>
           ) : (
             <button onClick={doContacts} disabled={cLoad}
-              style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.6rem 0.8rem', border: `1px solid ${C.orange}50`, background: `linear-gradient(135deg, ${C.orange}18 0%, ${C.orange}0a 100%)`, color: C.orange, borderRadius: 6, cursor: 'pointer', transition: 'all 0.18s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', fontWeight: 600, boxShadow: `0 2px 12px ${C.orange}14, inset 0 1px 0 ${C.orange}20` }}>
-              <span style={{ fontSize: '0.7rem' }}>⬡</span> Nájsť kontakty
+              style={{ width: '100%', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.45rem 0.7rem', border: `1px solid ${C.orange}66`, background: `${C.orange}12`, color: C.orange, borderRadius: 4, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', fontWeight: 600 }}>
+              🔍 Nájsť kontakty
             </button>
           )}
-          {cMsg && (
-            <div style={{ fontFamily: mono, fontSize: '0.44rem', color: cMsg.startsWith('✅') || cMsg.startsWith('Ofic') ? C.green : C.amber, textAlign: 'center', padding: '0.18rem 0.5rem', background: cMsg.startsWith('✅') || cMsg.startsWith('Ofic') ? `${C.green}0a` : `${C.amber}0a`, border: `1px solid ${cMsg.startsWith('✅') || cMsg.startsWith('Ofic') ? C.green : C.amber}28`, borderRadius: 4 }}>
-              {cMsg}
-            </div>
-          )}
+          {cMsg && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: cMsg.startsWith('✅') || cMsg.startsWith('Ofic') ? C.green : C.amber, textAlign: 'center' }}>{cMsg}</div>}
 
           {/* Level 2 — Person contacts */}
           {(() => {
@@ -1638,21 +1579,16 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
             const hasResults  = cSearched
 
             const chainStatus = hasResults
-              ? techContact && bizContact ? { label: 'Decision Chain Complete', color: C.green, icon: '◈' }
-              : techContact               ? { label: 'Awaiting business contact', color: C.amber, icon: '◫' }
-              : bizContact                ? { label: 'Awaiting technical contact', color: C.amber, icon: '◫' }
+              ? techContact && bizContact ? { label: '◈ KOMPLETNÝ DECISION CHAIN', color: C.green }
+              : techContact               ? { label: '◫ Čaká sa na manažérsky kontakt', color: C.amber }
+              : bizContact                ? { label: '◫ Čaká sa na technický kontakt', color: C.amber }
               : null
               : null
 
-            const WaitingSlot = ({ label, accentColor }) => (
-              <div style={{ border: `1px dashed ${accentColor}22`, borderRadius: 7, padding: '0.75rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.55rem', background: `${accentColor}05` }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#0a0e15', border: `1px dashed ${accentColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <span style={{ fontFamily: mono, fontSize: '0.55rem', color: `${accentColor}40` }}>?</span>
-                </div>
-                <div>
-                  <div style={{ fontFamily: mono, fontSize: '0.4rem', color: `${accentColor}50`, letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.1rem' }}>Not found</div>
-                  <div style={{ fontFamily: mono, fontSize: '0.41rem', color: '#2a3548', fontStyle: 'italic' }}>{label}</div>
-                </div>
+            const WaitingSlot = ({ label }) => (
+              <div style={{ border: '1px dashed #1e2a3a', borderRadius: 4, padding: '0.7rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#0d1117', border: '1px dashed #2a3548', flexShrink: 0 }} />
+                <div style={{ fontFamily: mono, fontSize: '0.42rem', color: '#374151', fontStyle: 'italic', lineHeight: 1.5 }}>{label}</div>
               </div>
             )
 
@@ -1662,16 +1598,15 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
               if (!hasResults || !contact || contact.source === 'demo') return null
               if (est?.loading) {
                 return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.16rem', padding: '0.5rem 0.7rem', background: '#060a10', border: `1px solid ${C.amber}20`, borderRadius: 5, marginTop: '0.3rem' }}>
-                    <div style={{ fontFamily: mono, fontSize: '0.34rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: `${C.amber}60`, marginBottom: '0.1rem' }}>Email enrichment</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.18rem', paddingTop: '0.3rem' }}>
                     {est.steps.map(s => {
-                      const col = s.state === 'done' ? C.green : s.state === 'scanning' ? C.amber : '#1a2332'
+                      const col = s.state === 'done' ? C.green : s.state === 'scanning' ? C.amber : '#252f3e'
                       return (
-                        <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.38rem', padding: '0.15rem 0' }}>
-                          <span style={{ fontFamily: mono, fontSize: '0.42rem', color: col, flexShrink: 0, transition: 'color 0.2s' }}>
+                        <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.38rem', padding: '0.22rem 0.45rem', background: s.state === 'scanning' ? `${C.amber}08` : 'transparent', borderRadius: 3 }}>
+                          <span style={{ fontFamily: mono, fontSize: '0.4rem', color: col, flexShrink: 0 }}>
                             {s.state === 'done' ? '✓' : s.state === 'scanning' ? '⟳' : '○'}
                           </span>
-                          <span style={{ fontFamily: mono, fontSize: '0.4rem', color: s.state === 'pending' ? '#1a2332' : s.state === 'scanning' ? C.amber : '#3d5040' }}>{s.label}</span>
+                          <span style={{ fontFamily: mono, fontSize: '0.41rem', color: s.state === 'pending' ? '#252f3e' : s.state === 'scanning' ? C.amber : '#6b7a8d' }}>{s.label}</span>
                         </div>
                       )
                     })}
@@ -1680,61 +1615,54 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
               }
               if (est?.msg) {
                 return (
-                  <div style={{ fontFamily: mono, fontSize: '0.42rem', color: est.error ? C.amber : C.green, padding: '0.3rem 0.5rem', background: est.error ? `${C.amber}0a` : `${C.green}0a`, border: `1px solid ${est.error ? C.amber : C.green}25`, borderRadius: 4, marginTop: '0.3rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.43rem', color: est.error ? C.amber : C.green, paddingTop: '0.25rem', paddingLeft: '0.1rem' }}>
                     {est.msg}
                   </div>
                 )
               }
-              if (contact.email) return null
+              if (contact.email) return null  // already has email — no button needed
               return (
                 <button
                   onClick={() => doEnrichContact(contact)}
-                  style={{ marginTop: '0.35rem', width: '100%', fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.35rem 0.6rem', border: '1px solid #60a5fa35', background: '#60a5fa0a', color: '#60a5fa', borderRadius: 5, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                  ⬡ Obohatiť email
+                  style={{ marginTop: '0.3rem', width: '100%', fontFamily: mono, fontSize: '0.43rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.3rem 0.6rem', border: `1px solid #60a5fa44`, background: '#60a5fa0d', color: '#60a5fa', borderRadius: 3, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.38rem' }}>
+                  🔍 Obohatiť email
                 </button>
               )
             }
 
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', paddingTop: '0.15rem' }}>
                 {chainStatus && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', padding: '0.3rem 0.7rem', background: `${chainStatus.color}0a`, border: `1px solid ${chainStatus.color}28`, borderRadius: 20 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: chainStatus.color, display: 'inline-block', boxShadow: `0 0 5px ${chainStatus.color}` }} />
-                    <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: chainStatus.color }}>{chainStatus.label}</span>
+                  <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: chainStatus.color, textAlign: 'center', padding: '0.2rem 0', borderTop: `1px solid ${chainStatus.color}22`, borderBottom: `1px solid ${chainStatus.color}22` }}>
+                    {chainStatus.label}
                   </div>
                 )}
 
                 {/* Technical slot */}
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                    <span style={{ width: 3, height: 10, borderRadius: 2, background: '#60a5fa', display: 'inline-block' }} />
-                    <span style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#60a5fa' }}>Technický kontakt</span>
-                  </div>
+                  <div style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#60a5fa', marginBottom: '0.3rem' }}>Technický kontakt</div>
                   {!hasResults
                     ? <RightContactCard c={DEMO_CONTACTS[0]} onSelect={setSelectedContact} />
                     : techContact
                     ? <><RightContactCard c={techContact} onSelect={setSelectedContact} /><EnrichBlock contact={techContact} /></>
-                    : <WaitingSlot label="Technický kontakt nenájdený" accentColor="#60a5fa" />
+                    : <WaitingSlot label="Čaká sa na technický kontakt" />
                   }
                 </div>
 
                 {/* Business slot */}
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                    <span style={{ width: 3, height: 10, borderRadius: 2, background: C.orange, display: 'inline-block' }} />
-                    <span style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.orange }}>Manažérsky kontakt</span>
-                  </div>
+                  <div style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.orange, marginBottom: '0.3rem' }}>Manažérsky kontakt</div>
                   {!hasResults
                     ? <RightContactCard c={DEMO_CONTACTS[1]} onSelect={setSelectedContact} />
                     : bizContact
                     ? <><RightContactCard c={bizContact} onSelect={setSelectedContact} /><EnrichBlock contact={bizContact} /></>
-                    : <WaitingSlot label="Manažérsky kontakt nenájdený" accentColor={C.orange} />
+                    : <WaitingSlot label="Čaká sa na manažérsky kontakt" />
                   }
                 </div>
 
                 {!hasResults && (
-                  <div style={{ fontFamily: mono, fontSize: '0.41rem', color: '#1e2a38', textAlign: 'center', lineHeight: 1.8, padding: '0.1rem 0.5rem', borderTop: '1px solid #0e1420', paddingTop: '0.5rem' }}>
-                    Spusti „Nájsť kontakty" pre reálne dáta
+                  <div style={{ fontFamily: mono, fontSize: '0.43rem', color: '#4b5563', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.7, padding: '0.15rem 0.5rem' }}>
+                    Spusti „Nájsť kontakty" pre reálne mená a emaily
                   </div>
                 )}
               </div>
