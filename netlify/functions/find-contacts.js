@@ -124,7 +124,13 @@ function isGeneralEmail(email) {
 function normalizeUrl(url) {
   if (!url) return null
   url = url.trim().replace(/\/$/, '')
-  return url.startsWith('http') ? url : `https://${url}`
+  const full = url.startsWith('http') ? url : `https://${url}`
+  // strip www. so queries and scrape paths are canonical
+  return full.replace(/^(https?:\/\/)www\./, '$1')
+}
+
+function extractHostname(url) {
+  try { return new URL(url).hostname } catch { return null }
 }
 
 function detectPageType(url) {
@@ -329,8 +335,9 @@ async function scrapeWebsiteNative(baseUrl) {
 
 // ── SerpAPI ───────────────────────────────────────────────────────────────────
 
-async function serpSearch(companyName, city, apiKey) {
-  const q   = encodeURIComponent(`"${companyName}" ${city} Geschäftsführer OR Direktor OR "General Manager" OR Impressum`)
+async function serpSearch(companyName, city, apiKey, domain) {
+  const domainClause = domain ? ` OR site:${domain}` : ''
+  const q   = encodeURIComponent(`"${companyName}" ${city} Geschäftsführer OR Direktor OR "General Manager" OR Impressum${domainClause}`)
   const url = `https://serpapi.com/search.json?engine=google&q=${q}&api_key=${apiKey}&hl=de&gl=de&num=5`
   try {
     const ctrl = new AbortController()
@@ -472,7 +479,7 @@ exports.handler = async (event) => {
     pages.forEach(p => console.log(`  [${p.pageType}] ${p.url}`))
 
     // 2. SerpAPI in parallel with scrape (already done above, add here if needed)
-    const serpText = SERPAPI_KEY ? await serpSearch(companyName, city, SERPAPI_KEY) : null
+    const serpText = SERPAPI_KEY ? await serpSearch(companyName, city, SERPAPI_KEY, baseUrl ? extractHostname(baseUrl) : null) : null
     if (serpText) console.log(`[find-contacts] serpapi: ${serpText.length} chars`)
 
     // 3. Pre-extract all emails + phones via regex
@@ -497,7 +504,7 @@ exports.handler = async (event) => {
     // 4b. Firecrawl fallback — only when native found 0 named contacts (JS-rendered sites)
     if (FIRECRAWL_KEY && baseUrl && regexDeduped.length === 0) {
       console.log(`[find-contacts] native=0 contacts — Firecrawl fallback on priority paths`)
-      const FC_PATHS = ['/impressum', '/team', '/management']
+      const FC_PATHS = ['/impressum', '/team', '/management', '/contact', '/kontakt']
       for (const path of FC_PATHS) {
         const targetUrl = baseUrl + path
         if (pages.find(x => x.url === targetUrl)) continue  // already scraped natively
