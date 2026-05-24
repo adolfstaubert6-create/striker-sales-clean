@@ -119,7 +119,7 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
 
         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
           <button style={{ ...css.runBtn, opacity: running ? 0.6 : 1 }} onClick={handleRun} disabled={running}>
-            {running ? '⏳ Agent pracuje...' : '▶ Spustiť AI hľadanie firiem'}
+            {running ? '⏳ Agent pracuje...' : '▶ Vyhľadať firmy s potrebou riešenia'}
           </button>
           {(report || log.length > 0) && !running && (
             <button style={css.resetBtn} onClick={handleReset}>↺ Resetovať</button>
