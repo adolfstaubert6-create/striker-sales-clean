@@ -78,12 +78,11 @@ async function apolloSearch(contactName, hotelName, domain) {
   const { firstName, lastName } = splitName(contactName)
 
   const payload = {
-    api_key:                APOLLO_KEY,
     first_name:             firstName,
     last_name:              lastName,
     organization_name:      hotelName || undefined,
     domain:                 domain    || undefined,
-    reveal_personal_emails: false,   // free tier — work emails only
+    reveal_personal_emails: true,
   }
 
   console.log(`[enrich-contact] Apollo search: "${firstName} ${lastName}" @ "${hotelName}" domain=${domain}`)
@@ -93,7 +92,11 @@ async function apolloSearch(contactName, hotelName, domain) {
   try {
     const res = await fetch('https://api.apollo.io/v1/people/match', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+      headers: {
+        'Content-Type':  'application/json',
+        'Cache-Control': 'no-cache',
+        'x-api-key':     APOLLO_KEY,
+      },
       body:    JSON.stringify(payload),
       signal:  ctrl.signal,
     })
