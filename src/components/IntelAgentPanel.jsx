@@ -1,6 +1,8 @@
 // Vizuálny klon AgentPanel.jsx — rovnaké CSS, Division B AI Multi-Company Hunter
 import { useState } from 'react'
 import { SEGMENTS, COUNTRIES, scoreColor, REC_META } from '../constants/intelMeta.js'
+import { analyzeCompanySignalsBatch } from '../utils/signalAnalysis.js'
+import { updateTarget } from '../services/intelTargetService.js'
 
 const mono = "'IBM Plex Mono',monospace"
 
@@ -59,8 +61,34 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
       if (!data.ok) throw new Error(data.error)
 
       addLog(`✓ Hotovo: ${data.done} uložených · ${data.dups || 0} duplikátov · ${data.elapsed}`)
+
+      // Phase 1B — client-side signal analysis
+      let enrichedReport = data.report || []
+      if (enrichedReport.length > 0) {
+        addLog('🔬 Analyzujem signály potreby riešenia...')
+        const analyzed = analyzeCompanySignalsBatch(enrichedReport)
+        enrichedReport = analyzed
+
+        // Persist signal fields to Firestore for each saved company
+        const savePromises = analyzed
+          .filter(r => r.docId && !r.duplicate && r._signals)
+          .map(r => {
+            const { detectedSignals, signalCount, preliminaryNeedScore, reason } = r._signals
+            console.debug('[signals] saving', r.name, '— score:', preliminaryNeedScore, 'signals:', signalCount)
+            return updateTarget(r.docId, {
+              detectedSignals,
+              signalCount,
+              strikerNeedScore: preliminaryNeedScore,
+              signalReason:     reason,
+              analyzedAt:       new Date().toISOString(),
+            }).catch(e => console.warn('[signals] updateTarget failed for', r.docId, e.message))
+          })
+        await Promise.allSettled(savePromises)
+        addLog(`✅ Signály uložené pre ${savePromises.length} firiem`)
+      }
+
       if (data.done > 0 && onDone) onDone()
-      setReport(data)
+      setReport({ ...data, report: enrichedReport })
 
     } catch (e) {
       timers.forEach(clearTimeout)
@@ -177,10 +205,14 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
             )
             const oc  = scoreColor(r.overallScore || 0)
             const rec = REC_META[r.recommendation] || REC_META.monitor
+            const sig = r._signals
+            const needScore = sig?.preliminaryNeedScore ?? null
+            const needColor = needScore == null ? '#6b7280' : needScore >= 60 ? '#00cc88' : needScore >= 30 ? '#ffaa00' : '#6b7280'
+            const topSignals = sig?.detectedSignals?.slice(0, 3).map(s => s.label) || []
             return (
               <div key={i} style={{ ...css.resultCard, borderLeftColor: oc }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={css.resultName}>{r.name}</span>
                     {r.duplicate && <span style={css.dupTag}>DUPLIKÁT</span>}
                     <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280', marginTop: '0.15rem' }}>
@@ -188,10 +220,28 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
                       {r.email && <span style={{ color: '#00cc88', marginLeft: '0.5rem' }}>✉ {r.email}</span>}
                       {r.web   && <span style={{ color: '#818cf8', marginLeft: '0.5rem' }}>🌐 {r.web}</span>}
                     </div>
+                    {topSignals.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginTop: '0.3rem' }}>
+                        {topSignals.map(lbl => (
+                          <span key={lbl} style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '0.3px', padding: '0.05rem 0.3rem', border: '1px solid #1e2530', borderRadius: 2, color: '#9ca3af', background: '#111620' }}>{lbl}</span>
+                        ))}
+                        {(sig.signalCount > 3) && (
+                          <span style={{ fontFamily: mono, fontSize: '0.48rem', color: '#6b7280' }}>+{sig.signalCount - 3}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
-                    <span style={{ ...css.chip, color: oc, borderColor: oc + '44' }}>FIT {r.overallScore}</span>
-                    <span style={{ ...css.chip, color: rec.color, borderColor: rec.color + '44' }}>{rec.icon} {rec.label}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', flexShrink: 0, alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      <span style={{ ...css.chip, color: oc, borderColor: oc + '44' }}>FIT {r.overallScore}</span>
+                      <span style={{ ...css.chip, color: rec.color, borderColor: rec.color + '44' }}>{rec.icon} {rec.label}</span>
+                    </div>
+                    {needScore != null && (
+                      <span style={{ fontFamily: mono, fontSize: '0.5rem', color: needColor, letterSpacing: '0.5px', textAlign: 'right' }}>
+                        NEED {needScore}
+                        {sig.signalReason && <span style={{ color: '#4b5563', marginLeft: '0.35rem' }}>{sig.signalReason.slice(0, 60)}{sig.signalReason.length > 60 ? '…' : ''}</span>}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
