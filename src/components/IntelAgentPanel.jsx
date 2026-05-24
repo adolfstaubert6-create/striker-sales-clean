@@ -1,8 +1,6 @@
 // Vizuálny klon AgentPanel.jsx — rovnaké CSS, Division B AI Multi-Company Hunter
 import { useState } from 'react'
 import { SEGMENTS, COUNTRIES, scoreColor, REC_META } from '../constants/intelMeta.js'
-import { analyzeCompanySignalsBatch } from '../utils/signalAnalysis.js'
-import { updateTarget } from '../services/intelTargetService.js'
 
 const mono = "'IBM Plex Mono',monospace"
 
@@ -62,29 +60,60 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
 
       addLog(`✓ Hotovo: ${data.done} uložených · ${data.dups || 0} duplikátov · ${data.elapsed}`)
 
-      // Phase 1B — client-side signal analysis
+      // Phase 1D — real website crawl signal analysis
       let enrichedReport = data.report || []
-      if (enrichedReport.length > 0) {
-        addLog('🔬 Analyzujem signály potreby riešenia...')
-        const analyzed = analyzeCompanySignalsBatch(enrichedReport)
-        enrichedReport = analyzed
+      const crawlTargets = enrichedReport.filter(r => r.docId && !r.duplicate && r.web)
 
-        // Persist signal fields to Firestore for each saved company
-        const savePromises = analyzed
-          .filter(r => r.docId && !r.duplicate && r._signals)
-          .map(r => {
-            const { detectedSignals, signalCount, preliminaryNeedScore, reason } = r._signals
-            console.debug('[signals] saving', r.name, '— score:', preliminaryNeedScore, 'signals:', signalCount)
-            return updateTarget(r.docId, {
-              detectedSignals,
-              signalCount,
-              strikerNeedScore: preliminaryNeedScore,
-              signalReason:     reason,
-              analyzedAt:       new Date().toISOString(),
-            }).catch(e => console.warn('[signals] updateTarget failed for', r.docId, e.message))
-          })
-        await Promise.allSettled(savePromises)
-        addLog(`✅ Signály uložené pre ${savePromises.length} firiem`)
+      if (crawlTargets.length > 0) {
+        addLog(`🌐 Skenujem weby — ${crawlTargets.length} firiem...`)
+
+        const crawlResults = await Promise.allSettled(
+          crawlTargets.map(r =>
+            fetch('/.netlify/functions/crawl-signals', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({
+                web:          r.web,
+                name:         r.name,
+                segment:      form.segment,
+                segmentLabel: r.segmentLabel || form.segment,
+                city:         r.city || form.locality,
+                docId:        r.docId,
+              }),
+            })
+            .then(res => res.json())
+            .catch(e => ({ ok: false, name: r.name, error: e.message }))
+          )
+        )
+
+        let crawlOk = 0
+        const signalMap = {}
+        for (const res of crawlResults) {
+          if (res.status === 'fulfilled' && res.value?.ok) {
+            const d = res.value
+            signalMap[d.name] = d
+            crawlOk++
+            console.debug('[crawl-signals]', d.name, 'NEED:', d.strikerNeedScore, 'signals:', d.signalCount)
+          }
+        }
+
+        // Merge crawl results back into report
+        enrichedReport = enrichedReport.map(r => {
+          const sig = signalMap[r.name]
+          if (!sig) return r
+          return {
+            ...r,
+            _signals: {
+              detectedSignals:    sig.detectedSignals    || [],
+              signalCount:        sig.signalCount        || 0,
+              preliminaryNeedScore: sig.strikerNeedScore || 0,
+              reason:             sig.signalReason       || '',
+              signalSources:      sig.signalSources      || [],
+            },
+          }
+        })
+
+        addLog(`✅ Web signály: ${crawlOk}/${crawlTargets.length} stránok analyzovaných`)
       }
 
       if (data.done > 0 && onDone) onDone()
