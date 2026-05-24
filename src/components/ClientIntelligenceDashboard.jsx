@@ -248,79 +248,111 @@ function BackBtn({ onClose }) {
   )
 }
 
-// ── Demo contacts — shown when no real contacts fetched yet ───────────────────
+// ── Demo contacts ─────────────────────────────────────────────────────────────
 const DEMO_CONTACTS = [
-  { _id: 'd1', role: 'General Manager',       decisionPower: 'HIGH',   aiScore: 85, source: 'demo' },
-  { _id: 'd2', role: 'Facility Manager',      decisionPower: 'HIGH',   aiScore: 78, source: 'demo' },
-  { _id: 'd3', role: 'Technical Manager',     decisionPower: 'MEDIUM', aiScore: 62, source: 'demo' },
-  { _id: 'd4', role: 'Procurement / Einkauf', decisionPower: 'MEDIUM', aiScore: 55, source: 'demo' },
+  { _id: 'd1', role: 'General Manager',       decisionPower: 'HIGH',   priority: 'PRIMARY',   status: 'NEEDS ENRICHMENT', aiScore: 85, source: 'demo' },
+  { _id: 'd2', role: 'Facility Manager',      decisionPower: 'HIGH',   priority: 'PRIMARY',   status: 'NEEDS ENRICHMENT', aiScore: 78, source: 'demo' },
+  { _id: 'd3', role: 'Technical Manager',     decisionPower: 'MEDIUM', priority: 'SECONDARY', status: 'NEEDS ENRICHMENT', aiScore: 62, source: 'demo' },
+  { _id: 'd4', role: 'Procurement / Einkauf', decisionPower: 'MEDIUM', priority: 'SUPPORT',   status: 'NEEDS ENRICHMENT', aiScore: 55, source: 'demo' },
 ]
+
+// ── Status config ─────────────────────────────────────────────────────────────
+const CONTACT_STATUS = {
+  'NEW':              { color: '#60a5fa', bg: '#60a5fa10' },
+  'NEEDS ENRICHMENT': { color: C.amber,  bg: `${C.amber}10` },
+  'READY TO CONTACT': { color: C.green,  bg: `${C.green}10` },
+  'CONTACTED':        { color: C.orange, bg: `${C.orange}10` },
+  'WAITING REPLY':    { color: C.purple, bg: `${C.purple}10` },
+}
 
 // ── Right panel contact card ───────────────────────────────────────────────────
 function RightContactCard({ c }) {
-  const init      = (c.name || c.role || '?').charAt(0).toUpperCase()
-  const AC        = [C.orange, C.purple, C.green, C.amber, '#60a5fa', '#f472b6']
-  const ac        = AC[(init.charCodeAt(0) || 0) % AC.length]
-  const pwrCol    = c.decisionPower === 'HIGH' ? C.orange : c.decisionPower === 'MEDIUM' ? C.amber : C.dim
-  const confCol   = { HIGH: C.green, MEDIUM: C.amber, LOW: C.dim }[c.confidence] || C.dim
-  const isDemo    = c.source === 'demo'
+  const [hov, setHov]   = useState(false)
+  const init            = (c.name || c.role || '?').charAt(0).toUpperCase()
+  const AC              = [C.orange, C.purple, C.green, C.amber, '#60a5fa', '#f472b6']
+  const ac              = AC[(init.charCodeAt(0) || 0) % AC.length]
+  const isDemo          = c.source === 'demo'
+  const status          = c.status || (c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT')
+  const st              = CONTACT_STATUS[status] || CONTACT_STATUS['NEEDS ENRICHMENT']
+  const priority        = c.priority || (c.decisionPower === 'HIGH' ? 'PRIMARY' : c.decisionPower === 'MEDIUM' ? 'SECONDARY' : 'SUPPORT')
+  const priCol          = priority === 'PRIMARY' ? C.orange : priority === 'SECONDARY' ? C.amber : C.dim
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 6, padding: '0.8rem 0.85rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', opacity: isDemo ? 0.7 : 1 }}>
+    <div
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ background: hov ? '#181d26' : '#13171e', border: `1px solid ${hov ? '#2d3444' : '#1e2530'}`, borderLeft: `3px solid ${priCol}`, borderRadius: 6, padding: '0.9rem 0.9rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', transition: 'all 0.15s' }}
+    >
 
-      {/* Header */}
-      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
-        <div style={{ width: 36, height: 36, borderRadius: '50%', background: `${ac}18`, border: `1.5px solid ${ac}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <span style={{ fontFamily: sans, fontSize: '0.9rem', fontWeight: 700, color: ac }}>{init}</span>
+      {/* Priority label */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: priCol }}>
+          {priority === 'PRIMARY' ? '▲ Primary Decision Maker' : priority === 'SECONDARY' ? '◆ Secondary Influencer' : '◇ Support Contact'}
+        </span>
+        {isDemo && <span style={{ fontFamily: mono, fontSize: '0.35rem', color: '#374151', padding: '0.03rem 0.22rem', border: '1px solid #1e2530', borderRadius: 2 }}>DEMO</span>}
+      </div>
+
+      {/* Avatar + name + role */}
+      <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'flex-start' }}>
+        <div style={{ width: 42, height: 42, borderRadius: '50%', background: `${ac}22`, border: `2px solid ${ac}66`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 0 12px ${ac}22` }}>
+          <span style={{ fontFamily: sans, fontSize: '1.1rem', fontWeight: 700, color: ac }}>{init}</span>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: sans, fontSize: '0.8rem', fontWeight: 600, color: c.name ? '#f1f3f5' : C.ghost, lineHeight: 1.2 }}>
-            {c.name || <span style={{ fontStyle: 'italic', fontSize: '0.68rem' }}>Meno nenájdené</span>}
+          <div style={{ fontFamily: sans, fontSize: '0.84rem', fontWeight: 700, color: c.name ? '#f4f6f9' : '#6b7280', lineHeight: 1.2, marginBottom: '0.12rem' }}>
+            {c.name || <span style={{ fontWeight: 400, fontStyle: 'italic', fontSize: '0.72rem', color: '#4b5563' }}>Meno nenájdené</span>}
           </div>
-          <div style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.purple, marginTop: '0.08rem' }}>{c.role || '—'}</div>
+          <div style={{ fontFamily: mono, fontSize: '0.47rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#818cf8' }}>{c.role || '—'}</div>
+          {c.aiScore && (
+            <div style={{ fontFamily: mono, fontSize: '0.4rem', color: C.orange, marginTop: '0.1rem' }}>AI relevancia: {c.aiScore}/100</div>
+          )}
         </div>
-        {c.decisionPower && (
-          <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', textTransform: 'uppercase', color: pwrCol, padding: '0.08rem 0.28rem', border: `1px solid ${pwrCol}44`, borderRadius: 2, background: `${pwrCol}10`, flexShrink: 0, whiteSpace: 'nowrap' }}>{c.decisionPower}</span>
-        )}
+      </div>
+
+      {/* Status badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontFamily: mono, fontSize: '0.39rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: st.color, padding: '0.12rem 0.4rem', border: `1px solid ${st.color}55`, borderRadius: 3, background: st.bg }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: st.color, display: 'inline-block', flexShrink: 0 }} />
+          {status}
+        </span>
       </div>
 
       {/* Contact info */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.06rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.12rem' }}>
         {c.email
-          ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.51rem', color: C.green, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {c.email}</a>
-          : <span style={{ fontFamily: mono, fontSize: '0.48rem', color: C.ghost, fontStyle: 'italic' }}>Email nenájdený</span>
+          ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.53rem', color: '#4ade80', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {c.email}</a>
+          : <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151', fontStyle: 'italic' }}>Email nenájdený — spusti obohacovanie</span>
         }
-        {c.phone && <span style={{ fontFamily: mono, fontSize: '0.51rem', color: C.dim }}>📞 {c.phone}</span>}
-      </div>
-
-      {/* Badges */}
-      <div style={{ display: 'flex', gap: '0.22rem', flexWrap: 'wrap' }}>
-        {c.confidence && <span style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1px', textTransform: 'uppercase', color: confCol, padding: '0.05rem 0.28rem', border: `1px solid ${confCol}44`, borderRadius: 2, background: `${confCol}0d` }}>{c.confidence}</span>}
-        {c.aiScore   && <span style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.orange, padding: '0.05rem 0.28rem', border: `1px solid ${C.orange}44`, borderRadius: 2, background: `${C.orange}0d` }}>AI {c.aiScore}</span>}
-        {isDemo      && <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.ghost, padding: '0.05rem 0.28rem', border: `1px solid ${C.border}`, borderRadius: 2 }}>DEMO</span>}
+        {c.phone && <span style={{ fontFamily: mono, fontSize: '0.53rem', color: '#9ca3af' }}>📞 {c.phone}</span>}
       </div>
 
       {/* Quick actions */}
-      <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', borderTop: `1px solid ${C.border}`, paddingTop: '0.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.28rem', flexWrap: 'wrap', borderTop: '1px solid #1a1f2a', paddingTop: '0.55rem' }}>
         {c.email
-          ? <a href={`mailto:${c.email}`}   style={qaBtn(C.green)}>✉ Email</a>
-          : <span                            style={{ ...qaBtn(C.ghost), opacity: 0.4, cursor: 'default' }}>✉ Email</span>
+          ? <a href={`mailto:${c.email}`} style={qaBtn('#4ade80', false)}>✉ Email</a>
+          : <span style={qaBtn('#374151', true)}>✉ Email</span>
         }
         {c.phone
-          ? <a href={`tel:${c.phone}`}      style={qaBtn(C.amber)}>📞 Call</a>
-          : <span                            style={{ ...qaBtn(C.ghost), opacity: 0.4, cursor: 'default' }}>📞 Call</span>
+          ? <a href={`tel:${c.phone}`} style={qaBtn(C.amber, false)}>📞 Call</a>
+          : <span style={qaBtn('#374151', true)}>📞 Call</span>
         }
         {c.linkedin
-          ? <a href={c.linkedin} target="_blank" rel="noreferrer" style={qaBtn(C.purple)}>🔗 LinkedIn</a>
-          : <span                            style={{ ...qaBtn(C.ghost), opacity: 0.4, cursor: 'default' }}>🔗 LinkedIn</span>
+          ? <a href={c.linkedin} target="_blank" rel="noreferrer" style={qaBtn('#818cf8', false)}>🔗 LinkedIn</a>
+          : <span style={qaBtn('#374151', true)}>🔗 LinkedIn</span>
         }
-        <span style={qaBtn(C.dim)}>📝 Notes</span>
+        <span style={qaBtn('#4b5563', false)}>📝 Notes</span>
       </div>
     </div>
   )
 }
-function qaBtn(col) {
-  return { fontFamily: mono, fontSize: '0.43rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.2rem 0.45rem', border: `1px solid ${col}44`, background: `${col}0a`, color: col, borderRadius: 3, textDecoration: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }
+
+function qaBtn(col, disabled) {
+  return {
+    fontFamily: mono, fontSize: '0.44rem', letterSpacing: '0.5px', textTransform: 'uppercase',
+    padding: '0.24rem 0.5rem', border: `1px solid ${col}${disabled ? '33' : '55'}`,
+    background: disabled ? 'transparent' : `${col}12`,
+    color: disabled ? col : col,
+    opacity: disabled ? 0.45 : 1,
+    borderRadius: 3, textDecoration: 'none', cursor: disabled ? 'default' : 'pointer', whiteSpace: 'nowrap',
+  }
 }
 
 // ── Panel zoom button ──────────────────────────────────────────────────────────
@@ -867,39 +899,65 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         <div style={{ position: 'sticky', top: 0, zIndex: 15, display: 'flex', justifyContent: 'flex-end', padding: '0.4rem 0.5rem', background: C.panel, borderBottom: `1px solid ${C.border}` }}>
           <ZoomBtn panel="right" zoomed={zoomed} setZoomed={setZoomed} />
         </div>
-        <div style={{ padding: '1rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ padding: '1rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
 
           {/* Header */}
-          <div style={{ paddingBottom: '0.65rem', borderBottom: `1px solid ${C.border2}` }}>
-            <div style={{ fontFamily: sans, fontSize: '0.82rem', fontWeight: 700, color: '#f1f3f5', marginBottom: '0.2rem' }}>Kontakty klienta</div>
-            <div style={{ fontFamily: mono, fontSize: '0.44rem', color: C.dim, lineHeight: 1.5 }}>Ľudia, ktorí môžu ovplyvniť rozhodnutie</div>
+          <div style={{ paddingBottom: '0.65rem', borderBottom: `1px solid #1e2530` }}>
+            <div style={{ fontFamily: sans, fontSize: '0.86rem', fontWeight: 700, color: '#f4f6f9', marginBottom: '0.18rem' }}>Kontakty klienta</div>
+            <div style={{ fontFamily: mono, fontSize: '0.44rem', color: '#6b7280', lineHeight: 1.5 }}>Ľudia, ktorí môžu ovplyvniť rozhodnutie</div>
           </div>
+
+          {/* Summary strip */}
+          {(() => {
+            const contacts   = (t.contacts || []).length > 0 ? t.contacts : DEMO_CONTACTS
+            const deciders   = contacts.filter(c => c.decisionPower === 'HIGH').length
+            const hasEmail   = contacts.filter(c => c.email).length
+            const nextAction = hasEmail > 0 ? 'Pripraviť email' : 'Obohatiť kontakty'
+            return (
+              <div style={{ background: '#0e1117', border: '1px solid #1e2530', borderRadius: 5, padding: '0.7rem 0.8rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ flex: 1, textAlign: 'center', borderRight: '1px solid #1e2530', paddingRight: '0.5rem' }}>
+                    <div style={{ fontFamily: mono, fontSize: '1.15rem', fontWeight: 700, color: '#f4f6f9', lineHeight: 1 }}>{contacts.length}</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.38rem', color: '#6b7280', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '0.18rem' }}>Kontakty</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ fontFamily: mono, fontSize: '1.15rem', fontWeight: 700, color: C.orange, lineHeight: 1 }}>{deciders}</div>
+                    <div style={{ fontFamily: mono, fontSize: '0.38rem', color: '#6b7280', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '0.18rem' }}>Rozhod.</div>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid #1e2530', paddingTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151' }}>Ďalší krok:</span>
+                  <span style={{ fontFamily: mono, fontSize: '0.42rem', color: C.green }}>{nextAction}</span>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Find contacts CTA */}
           <button onClick={() => { setNav('contacts'); doContacts() }} disabled={cLoad}
-            style={{ width: '100%', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.42rem 0.7rem', border: `1px solid ${C.orange}55`, background: `${C.orange}0d`, color: C.orange, borderRadius: 3, cursor: cLoad ? 'default' : 'pointer', opacity: cLoad ? 0.65 : 1, transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+            style={{ width: '100%', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.45rem 0.7rem', border: `1px solid ${C.orange}66`, background: `${C.orange}12`, color: C.orange, borderRadius: 4, cursor: cLoad ? 'default' : 'pointer', opacity: cLoad ? 0.65 : 1, transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', fontWeight: 600 }}>
             {cLoad ? '⏳ Hľadám...' : '🔍 Nájsť kontakty'}
           </button>
           {cMsg && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: cMsg.startsWith('✅') ? C.green : C.amber, textAlign: 'center' }}>{cMsg}</div>}
 
-          {/* General email if available */}
+          {/* General email */}
           {t.email && (
-            <div style={{ padding: '0.5rem 0.65rem', background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <div style={{ padding: '0.5rem 0.65rem', background: '#0e1117', border: `1px solid #1e2530`, borderRadius: 4, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.amber, padding: '0.05rem 0.28rem', border: `1px solid ${C.amber}44`, borderRadius: 2, background: `${C.amber}10`, flexShrink: 0 }}>VŠEOB.</span>
-              <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.54rem', color: C.green, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {t.email}</a>
+              <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.54rem', color: '#4ade80', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {t.email}</a>
             </div>
           )}
 
-          {/* Real contact cards */}
+          {/* Contact cards */}
           {(t.contacts || []).length > 0
             ? (t.contacts).map((c, i) => <RightContactCard key={i} c={c} />)
             : (
               <>
-                <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, paddingTop: '0.25rem' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151' }}>
                   Typické rozhodovacie pozície
                 </div>
                 {DEMO_CONTACTS.map(c => <RightContactCard key={c._id} c={c} />)}
-                <div style={{ fontFamily: mono, fontSize: '0.42rem', color: C.ghost, fontStyle: 'italic', textAlign: 'center', paddingTop: '0.25rem', lineHeight: 1.6 }}>
+                <div style={{ fontFamily: mono, fontSize: '0.43rem', color: '#4b5563', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.7, padding: '0.25rem 0.5rem' }}>
                   Spusti „Nájsť kontakty" pre reálne mená a emaily
                 </div>
               </>
