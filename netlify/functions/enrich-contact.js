@@ -121,8 +121,14 @@ exports.handler = async (event) => {
     const textFull  = `${text} ${r.link || ''}`
     const textLower = textFull.toLowerCase()
 
-    // Extract emails from snippet text
-    for (const e of (text.match(EMAIL_RE) || [])) {
+    // Normalize obfuscated emails before extraction: [at] / (at) / " at " → @
+    const textNorm = text
+      .replace(/\s*\[at\]\s*/gi, '@')
+      .replace(/\s*\(at\)\s*/gi, '@')
+      .replace(/\s+at\s+(?=[A-Za-z0-9.\-]+\.[A-Za-z]{2,})/g, '@')
+
+    // Extract emails from (normalized) snippet text
+    for (const e of (textNorm.match(EMAIL_RE) || [])) {
       console.log(`[enrich-contact] email candidate from snippet: ${e}`)
       foundEmails.add(e.toLowerCase())
     }
@@ -155,9 +161,23 @@ exports.handler = async (event) => {
   }
 
   // Classify emails
-  const personalEmails    = [...foundEmails].filter(e => !isGeneralEmail(e))
-  const domainEmails      = domain ? [...foundEmails].filter(e => e.endsWith('@' + domain)) : []
-  const personalOnDomain  = domain ? personalEmails.filter(e => e.endsWith('@' + domain)) : []
+  // "Personal" requires: not a general prefix AND local part contains a name fragment
+  function isPersonalEmail(e) {
+    if (isGeneralEmail(e)) return false
+    if (!nameParts.length) return true  // no name to check against — accept non-general
+    const local = e.split('@')[0].toLowerCase()
+    return nameParts.some(p => p.length >= 3 && local.includes(p))
+  }
+
+  const personalEmails   = [...foundEmails].filter(isPersonalEmail)
+  const domainEmails     = domain ? [...foundEmails].filter(e => e.endsWith('@' + domain)) : []
+  const personalOnDomain = domain ? personalEmails.filter(e => e.endsWith('@' + domain)) : []
+
+  // Log rejected non-general emails (passed isGeneralEmail but failed name check)
+  const nonGeneral = [...foundEmails].filter(e => !isGeneralEmail(e))
+  nonGeneral.filter(e => !isPersonalEmail(e)).forEach(e =>
+    console.log(`[enrich-contact] rejected non-general email (no name match): ${e}`)
+  )
 
   // Best email pick: personal+on-domain > personal anywhere > domain email
   const bestEmail = personalOnDomain[0] || personalEmails[0] || domainEmails[0] || null
@@ -174,7 +194,7 @@ exports.handler = async (event) => {
   const hasName = !!(contactName || '').trim()
   const hasRole = !!(contactRole || '').trim()
 
-  if (bestEmail && !isGeneralEmail(bestEmail) && hasName)    confidence = 'HIGH'
+  if (bestEmail && isPersonalEmail(bestEmail) && hasName)    confidence = 'HIGH'
   else if (bestEmail && hasName)                             confidence = 'MEDIUM'
   else if (bestLinkedin && (hasName || hasRole))             confidence = 'MEDIUM'
   else if (domainEmails.length > 0 || matchedPages.length > 0) confidence = 'LOW'
