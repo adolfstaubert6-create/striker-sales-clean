@@ -461,17 +461,14 @@ exports.handler = async (event) => {
   const baseUrl = normalizeUrl(website)
   console.log(`[find-contacts] START "${companyName}" url=${baseUrl || 'none'} city=${city}`)
 
-  const hardTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('hard timeout 25s')), 25000))
+  const hardTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('hard timeout 35s')), 35000))
 
   async function run() {
-    // 1. Scrape pages
-    const rawPages = baseUrl
-      ? (FIRECRAWL_KEY ? await scrapeWebsite(baseUrl) : await scrapeWebsiteNative(baseUrl))
-      : []
-
+    // 1. Scrape pages — always native first (fast, free)
+    const rawPages = baseUrl ? await scrapeWebsiteNative(baseUrl) : []
     const pages = rawPages.map(p => ({ ...p, pageType: detectPageType(p.url) }))
 
-    console.log(`[find-contacts] scraped ${pages.length} pages:`)
+    console.log(`[find-contacts] native scraped ${pages.length} pages:`)
     pages.forEach(p => console.log(`  [${p.pageType}] ${p.url}`))
 
     // 2. SerpAPI in parallel with scrape (already done above, add here if needed)
@@ -480,8 +477,8 @@ exports.handler = async (event) => {
 
     // 3. Pre-extract all emails + phones via regex
     const allText   = pages.map(p => p.text).join('\n') + '\n' + (serpText || '')
-    const allEmails = extractEmails(allText)
-    const allPhones = extractPhones(allText)
+    let allEmails = extractEmails(allText)
+    let allPhones = extractPhones(allText)
 
     console.log(`[find-contacts] regex: emails=${allEmails.length} phones=${allPhones.length}`)
 
@@ -494,8 +491,37 @@ exports.handler = async (event) => {
       }
       regexPersons.push(...persons)
     }
-    const regexDeduped = deduplicateContacts(regexPersons)
+    let regexDeduped = deduplicateContacts(regexPersons)
     console.log(`[find-contacts] regex total (deduped): ${regexDeduped.length}`)
+
+    // 4b. Firecrawl fallback — only when native found 0 named contacts (JS-rendered sites)
+    if (FIRECRAWL_KEY && baseUrl && regexDeduped.length === 0) {
+      console.log(`[find-contacts] native=0 contacts — Firecrawl fallback on priority paths`)
+      const FC_PATHS = ['/impressum', '/team', '/management']
+      for (const path of FC_PATHS) {
+        const targetUrl = baseUrl + path
+        if (pages.find(x => x.url === targetUrl)) continue  // already scraped natively
+        const p = await scrapePage(targetUrl, 7000)
+        if (p) {
+          const pt = detectPageType(p.url)
+          pages.push({ ...p, pageType: pt, _source: 'firecrawl' })
+          console.log(`[find-contacts] firecrawl [${pt}]: ${p.url} (${p.text.length} chars)`)
+        }
+      }
+      // Re-extract emails/phones with Firecrawl pages merged in
+      const allTextFC = pages.map(p => p.text).join('\n') + '\n' + (serpText || '')
+      allEmails = extractEmails(allTextFC)
+      allPhones = extractPhones(allTextFC)
+      for (const page of pages.filter(p => p._source === 'firecrawl')) {
+        const persons = extractPersonsRegex(page.text, page.url, page.pageType)
+        if (persons.length) {
+          console.log(`[find-contacts] firecrawl regex persons from [${page.pageType}]: ${persons.map(p => p.name).join(', ')}`)
+        }
+        regexPersons.push(...persons)
+      }
+      regexDeduped = deduplicateContacts(regexPersons)
+      console.log(`[find-contacts] after firecrawl: emails=${allEmails.length} phones=${allPhones.length} regex=${regexDeduped.length}`)
+    }
 
     // 5. Claude extraction — enriches and finds any missed persons
     let result
@@ -558,7 +584,11 @@ exports.handler = async (event) => {
       console.log(`  [${i + 1}] [${c.confidence}] name="${c.name || '-'}" role="${c.role || '-'}" email="${c.email || '-'}" src=${c.sourceType || '-'}`)
     })
 
-    const scanned = FIRECRAWL_KEY ? `Firecrawl: ${pages.length}` : `Native: ${pages.length}`
+    const fcPages     = pages.filter(p => p._source === 'firecrawl').length
+    const nativePages = pages.length - fcPages
+    const scanned = fcPages > 0
+      ? `Native: ${nativePages} + Firecrawl: ${fcPages}`
+      : `Native: ${nativePages}`
     return {
       contacts:     result.contacts,
       generalEmail: result.generalEmail,
