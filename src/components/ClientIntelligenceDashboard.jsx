@@ -930,7 +930,8 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           decisionPower:   detectDecisionPower(c.role),
           priority:        detectPriority(c.role),
           aiScore:         detectAiScore(c.role),
-        }))
+        })).filter(c => c.contactCategory === 'technical' || c.contactCategory === 'business')
+        if (enriched.length === 0) return { cc, enriched: [] }
         setLocalContacts(enriched)
         return { cc, enriched }
       }

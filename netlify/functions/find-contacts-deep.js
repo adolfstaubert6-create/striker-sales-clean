@@ -413,20 +413,7 @@ exports.handler = async (event) => {
       .filter(c => c.contactCategory)
     const contacts = selectBestContacts(classified)
 
-    // 7. Fallback: personal email without a named contact
     const generalEmail = claudeResult?.generalEmail || allEmails.filter(isGeneralEmail)[0] || null
-    if (!contacts.filter(c => c.name).length) {
-      const personal = allEmails.filter(e => !isGeneralEmail(e))
-      personal.slice(0, 1).forEach(email => {
-        if (!contacts.some(c => c.email === email)) {
-          contacts.push({
-            name: null, role: null, contactCategory: null, email, emailType: 'PERSONAL',
-            phone: allPhones[0] || null, source: baseUrl || 'web',
-            sourceType: 'website', confidence: 'LOW',
-          })
-        }
-      })
-    }
 
     const ms = Date.now() - t0
     console.log(`[phase2] DONE ${ms}ms — ${contacts.length} contacts`)
