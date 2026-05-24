@@ -841,6 +841,56 @@ function ZoomBtn({ panel, zoomed, setZoomed }) {
   )
 }
 
+// ── Level 1: Company/Hotel official contact card ──────────────────────────────
+function CompanyContactCard({ cc }) {
+  if (!cc) return null
+  const hasAny = cc.email || cc.phone || cc.website
+  return (
+    <div style={{ background: '#0c1018', border: `1px solid #1e2b3a`, borderLeft: `3px solid ${C.amber}`, borderRadius: 5, padding: '0.85rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+      <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.amber, marginBottom: '0.08rem' }}>
+        Oficiálny kontakt hotela
+      </div>
+      <div style={{ fontFamily: sans, fontSize: '0.84rem', fontWeight: 700, color: '#f4f6f9', lineHeight: 1.2 }}>{cc.name}</div>
+      {(cc.address || cc.city || cc.country) && (
+        <div style={{ fontFamily: mono, fontSize: '0.46rem', color: '#6b7280', lineHeight: 1.5 }}>
+          {[cc.address, cc.city, cc.country].filter(Boolean).join(', ')}
+        </div>
+      )}
+      {hasAny && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
+          {cc.email && (
+            <a href={`mailto:${cc.email}`} style={{ fontFamily: mono, fontSize: '0.52rem', color: '#4ade80', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              ✉ {cc.email}
+            </a>
+          )}
+          {cc.phone && (
+            <a href={`tel:${cc.phone}`} style={{ fontFamily: mono, fontSize: '0.52rem', color: C.amber, textDecoration: 'none' }}>
+              📞 {cc.phone}
+            </a>
+          )}
+          {cc.website && (
+            <a href={cc.website.startsWith('http') ? cc.website : `https://${cc.website}`} target="_blank" rel="noreferrer"
+              style={{ fontFamily: mono, fontSize: '0.52rem', color: '#818cf8', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              🌐 {cc.website.replace(/^https?:\/\//, '')}
+            </a>
+          )}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem', flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.34rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', padding: '0.03rem 0.25rem', border: '1px solid #1e2530', borderRadius: 2 }}>
+          {cc.sourceType === 'website' ? 'WEB SCAN' : 'TARGET DATA'}
+        </span>
+        {cc.confidence === 'HIGH' && (
+          <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.green }}>● Overený</span>
+        )}
+        {!hasAny && (
+          <span style={{ fontFamily: mono, fontSize: '0.41rem', color: '#374151', fontStyle: 'italic' }}>Spusti scan pre kontaktné údaje</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Contact discovery helpers ─────────────────────────────────────────────────
 const SCAN_STEPS = [
   { key: 'scan',    label: 'Scanning website'   },
@@ -882,8 +932,17 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
   const [photoLoad, setPhotoLoad] = useState(!t.photoUrl)
   const [zoomed,    setZoomed]    = useState(null) // null | 'left' | 'center' | 'right'
   const [selectedContact, setSelectedContact] = useState(null)
-  const [localContacts, setLocalContacts] = useState(t.contacts || [])
-  const [cSteps,        setCSteps]        = useState([])
+  const [localContacts,       setLocalContacts]       = useState(t.contacts || [])
+  const [cSteps,              setCSteps]              = useState([])
+  const [localCompanyContact, setLocalCompanyContact] = useState(
+    t.companyContact || {
+      name: t.name, city: t.city, country: t.country,
+      website: t.web, email: t.email || null, phone: t.phone || null,
+      address: t.address || null, sourceType: 'target',
+      confidence: (t.email || t.phone) ? 'MEDIUM' : 'LOW',
+    }
+  )
+  const [cSearched, setCSearched] = useState(false)
 
   useEffect(() => {
     const fn = e => { if (e.key === 'Escape' && zoomed) setZoomed(null) }
@@ -969,8 +1028,27 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       setCSteps(SCAN_STEPS.map((s, i) => ({ ...s, state: i <= 2 ? 'done' : 'scanning' })))
 
       if (d.ok) {
+        // Build & save Level 1 company contact
+        const scanned = (d.sourceNote || '').includes('Native') || (d.sourceNote || '').includes('Firecrawl')
+        const cc = {
+          name:       t.name,
+          address:    t.address || null,
+          city:       t.city,
+          country:    t.country,
+          website:    t.web,
+          email:      d.generalEmail || t.email || null,
+          phone:      (d.allPhones || [])[0] || t.phone || null,
+          allPhones:  d.allPhones  || [],
+          allEmails:  d.allEmails  || [],
+          sourceType: scanned ? 'website' : 'target',
+          confidence: d.generalEmail ? 'HIGH' : t.email ? 'MEDIUM' : 'LOW',
+          updatedAt:  new Date().toISOString(),
+        }
+        setLocalCompanyContact(cc)
+        await updateTarget(t.id, { companyContact: cc, ...(cc.email && !t.email ? { email: cc.email } : {}) })
+
+        // Level 2 — person contacts
         const newContacts = d.contacts || []
-        if (d.generalEmail && !t.email) await updateTarget(t.id, { email: d.generalEmail })
         if (newContacts.length > 0) {
           const enriched = newContacts.map(c => ({
             ...c,
@@ -985,14 +1063,16 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           setLocalContacts(enriched)
           setCMsg(`✅ ${enriched.length} kontaktov nájdených`)
         } else {
-          setCMsg('Neboli nájdené žiadne relevantné kontakty.')
+          setCMsg('Officiálny kontakt hotela je dostupný.')
         }
       } else {
         setCMsg('⚠ Chyba pri hľadaní kontaktov.')
       }
+      setCSearched(true)
     } catch (e) {
       clearTimeout(t1); clearTimeout(t2)
       setCMsg('⚠ ' + e.message)
+      setCSearched(true)
     } finally {
       setCSteps(SCAN_STEPS.map(s => ({ ...s, state: 'done' })))
       setCLoad(false)
@@ -1449,31 +1529,8 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
             <div style={{ fontFamily: mono, fontSize: '0.44rem', color: '#6b7280', lineHeight: 1.5 }}>Ľudia, ktorí môžu ovplyvniť rozhodnutie</div>
           </div>
 
-          {/* Summary strip */}
-          {(() => {
-            const contacts   = localContacts.length > 0 ? localContacts : DEMO_CONTACTS
-            const deciders   = contacts.filter(c => c.decisionPower === 'HIGH').length
-            const hasEmail   = contacts.filter(c => c.email).length
-            const nextAction = hasEmail > 0 ? 'Pripraviť email' : 'Obohatiť kontakty'
-            return (
-              <div style={{ background: '#0e1117', border: '1px solid #1e2530', borderRadius: 5, padding: '0.7rem 0.8rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <div style={{ flex: 1, textAlign: 'center', borderRight: '1px solid #1e2530', paddingRight: '0.5rem' }}>
-                    <div style={{ fontFamily: mono, fontSize: '1.15rem', fontWeight: 700, color: '#f4f6f9', lineHeight: 1 }}>{contacts.length}</div>
-                    <div style={{ fontFamily: mono, fontSize: '0.38rem', color: '#6b7280', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '0.18rem' }}>Kontakty</div>
-                  </div>
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{ fontFamily: mono, fontSize: '1.15rem', fontWeight: 700, color: C.orange, lineHeight: 1 }}>{deciders}</div>
-                    <div style={{ fontFamily: mono, fontSize: '0.38rem', color: '#6b7280', letterSpacing: '1px', textTransform: 'uppercase', marginTop: '0.18rem' }}>Rozhod.</div>
-                  </div>
-                </div>
-                <div style={{ borderTop: '1px solid #1e2530', paddingTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151' }}>Ďalší krok:</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.42rem', color: C.green }}>{nextAction}</span>
-                </div>
-              </div>
-            )
-          })()}
+          {/* Level 1 — Company official contact */}
+          <CompanyContactCard cc={localCompanyContact} />
 
           {/* Find contacts CTA */}
           {cLoad && cSteps.length > 0 ? (
@@ -1498,24 +1555,24 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
               🔍 Nájsť kontakty
             </button>
           )}
-          {cMsg && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: cMsg.startsWith('✅') ? C.green : C.amber, textAlign: 'center' }}>{cMsg}</div>}
+          {cMsg && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: cMsg.startsWith('✅') || cMsg.startsWith('Ofic') ? C.green : C.amber, textAlign: 'center' }}>{cMsg}</div>}
 
-          {/* General email */}
-          {t.email && (
-            <div style={{ padding: '0.5rem 0.65rem', background: '#0e1117', border: `1px solid #1e2530`, borderRadius: 4, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.amber, padding: '0.05rem 0.28rem', border: `1px solid ${C.amber}44`, borderRadius: 2, background: `${C.amber}10`, flexShrink: 0 }}>VŠEOB.</span>
-              <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.54rem', color: '#4ade80', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {t.email}</a>
-            </div>
-          )}
+          {/* Level 2 — Person contacts */}
+          <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151', paddingTop: '0.2rem' }}>
+            Kontaktné osoby
+          </div>
 
-          {/* Contact cards */}
           {localContacts.length > 0
             ? localContacts.map((c, i) => <RightContactCard key={i} c={c} onSelect={setSelectedContact} />)
+            : cSearched
+            ? (
+              <div style={{ background: '#0c0f15', border: '1px solid #1a2030', borderRadius: 4, padding: '0.85rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.46rem', color: C.green }}>✓ Officiálny kontakt hotela je dostupný.</div>
+                <div style={{ fontFamily: mono, fontSize: '0.44rem', color: '#4b5563' }}>Kontaktné osoby zatiaľ neboli nájdené.</div>
+              </div>
+            )
             : (
               <>
-                <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151' }}>
-                  Typické rozhodovacie pozície
-                </div>
                 {DEMO_CONTACTS.map(c => <RightContactCard key={c._id} c={c} onSelect={setSelectedContact} />)}
                 <div style={{ fontFamily: mono, fontSize: '0.43rem', color: '#4b5563', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.7, padding: '0.25rem 0.5rem' }}>
                   Spusti „Nájsť kontakty" pre reálne mená a emaily
