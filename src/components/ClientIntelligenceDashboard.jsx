@@ -122,6 +122,12 @@ function ContactCard({ c, onRemove, onSave }) {
           : <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.ghost, fontStyle: 'italic', marginBottom: '0.05rem' }}>Email nenájdený</div>
         }
         {c.phone && <div style={{ fontFamily: mono, fontSize: '0.52rem', color: C.dim }}>📞 {c.phone}</div>}
+        {c.linkedin && (
+          <a href={c.linkedin} target="_blank" rel="noreferrer"
+            style={{ fontFamily: mono, fontSize: '0.52rem', color: '#818cf8', display: 'block', marginBottom: '0.05rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            🔗 LinkedIn
+          </a>
+        )}
         <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
           {c.confidence && <Badge type={c.confidence.toLowerCase()} small />}
           {c.emailType === 'GENERAL' && <Badge type="general" small />}
