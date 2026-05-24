@@ -1036,6 +1036,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     }
   )
   const [cSearched, setCSearched] = useState(false)
+  const [enrichState, setEnrichState] = useState({}) // { [contactCategory]: { loading, steps, msg, error } }
 
   useEffect(() => {
     const fn = e => { if (e.key === 'Escape' && zoomed) setZoomed(null) }
@@ -1177,6 +1178,88 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     } finally {
       setCSteps(SCAN_STEPS.map(s => ({ ...s, state: 'done' })))
       setCLoad(false)
+    }
+  }
+
+  const ENRICH_STEPS = [
+    { id: 'search', label: 'Vyhľadávam Google výsledky' },
+    { id: 'verify', label: 'Overujem email' },
+    { id: 'save',   label: 'Kontakt obohatený' },
+  ]
+
+  async function doEnrichContact(contact) {
+    const key = contact.contactCategory || 'unknown'
+    setEnrichState(prev => ({
+      ...prev,
+      [key]: { loading: true, steps: ENRICH_STEPS.map((s, i) => ({ ...s, state: i === 0 ? 'scanning' : 'pending' })), msg: '', error: false },
+    }))
+
+    const t1 = setTimeout(() =>
+      setEnrichState(prev => ({
+        ...prev,
+        [key]: { ...prev[key], steps: ENRICH_STEPS.map((s, i) => ({ ...s, state: i === 0 ? 'done' : i === 1 ? 'scanning' : 'pending' })) },
+      })), 2500)
+
+    try {
+      const r = await fetch('/.netlify/functions/enrich-contact', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          contactName:     contact.name     || '',
+          contactRole:     contact.role     || '',
+          contactCategory: contact.contactCategory || '',
+          hotelName:       t.name,
+          hotelWebsite:    t.web || '',
+        }),
+      })
+      clearTimeout(t1)
+      const d = await r.json()
+
+      setEnrichState(prev => ({
+        ...prev,
+        [key]: { ...prev[key], steps: ENRICH_STEPS.map((s, i) => ({ ...s, state: i <= 1 ? 'done' : 'scanning' })) },
+      }))
+
+      if (d.ok && d.enriched) {
+        const e = d.enriched
+        const updated = {
+          ...contact,
+          ...(e.email    && !contact.email    ? { email: e.email, emailType: e.emailType } : {}),
+          ...(e.linkedin && !contact.linkedin ? { linkedin: e.linkedin }                  : {}),
+          ...(e.phone    && !contact.phone    ? { phone: e.phone }                        : {}),
+          confidence:   e.confidence,
+          sourceType:   e.sourceType,
+          enrichedAt:   e.enrichedAt,
+          matchedPages: e.matchedPages || [],
+          status:       (e.email || contact.email) ? 'READY TO CONTACT' : contact.status,
+        }
+        const newContacts = localContacts.map(c =>
+          c.contactCategory === contact.contactCategory ? updated : c
+        )
+        setLocalContacts(newContacts)
+        await updateTarget(t.id, { contacts: newContacts })
+
+        const linkedinMsg = e.linkedin && !contact.linkedin ? ' · LinkedIn nájdený' : ''
+        const msg = e.email && !contact.email ? `✅ Email nájdený: ${e.email}${linkedinMsg}`
+                  : e.linkedin && !contact.linkedin ? '✅ LinkedIn profil nájdený'
+                  : '⚠ Google prehľadaný — email neznámy'
+
+        setEnrichState(prev => ({
+          ...prev,
+          [key]: { loading: false, steps: ENRICH_STEPS.map(s => ({ ...s, state: 'done' })), msg, error: false },
+        }))
+      } else {
+        setEnrichState(prev => ({
+          ...prev,
+          [key]: { loading: false, steps: ENRICH_STEPS.map(s => ({ ...s, state: 'done' })), msg: `⚠ ${d.error || 'Žiadne výsledky'}`, error: true },
+        }))
+      }
+    } catch (e) {
+      clearTimeout(t1)
+      setEnrichState(prev => ({
+        ...prev,
+        [key]: { loading: false, steps: ENRICH_STEPS.map(s => ({ ...s, state: 'done' })), msg: `⚠ ${e.message}`, error: true },
+      }))
     }
   }
 
@@ -1678,6 +1761,44 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
               </div>
             )
 
+            const EnrichBlock = ({ contact }) => {
+              const key  = contact?.contactCategory
+              const est  = enrichState[key]
+              if (!hasResults || !contact || contact.source === 'demo') return null
+              if (est?.loading) {
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.18rem', paddingTop: '0.3rem' }}>
+                    {est.steps.map(s => {
+                      const col = s.state === 'done' ? C.green : s.state === 'scanning' ? C.amber : '#252f3e'
+                      return (
+                        <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.38rem', padding: '0.22rem 0.45rem', background: s.state === 'scanning' ? `${C.amber}08` : 'transparent', borderRadius: 3 }}>
+                          <span style={{ fontFamily: mono, fontSize: '0.4rem', color: col, flexShrink: 0 }}>
+                            {s.state === 'done' ? '✓' : s.state === 'scanning' ? '⟳' : '○'}
+                          </span>
+                          <span style={{ fontFamily: mono, fontSize: '0.41rem', color: s.state === 'pending' ? '#252f3e' : s.state === 'scanning' ? C.amber : '#6b7a8d' }}>{s.label}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              }
+              if (est?.msg) {
+                return (
+                  <div style={{ fontFamily: mono, fontSize: '0.43rem', color: est.error ? C.amber : C.green, paddingTop: '0.25rem', paddingLeft: '0.1rem' }}>
+                    {est.msg}
+                  </div>
+                )
+              }
+              if (contact.email) return null  // already has email — no button needed
+              return (
+                <button
+                  onClick={() => doEnrichContact(contact)}
+                  style={{ marginTop: '0.3rem', width: '100%', fontFamily: mono, fontSize: '0.43rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.3rem 0.6rem', border: `1px solid #60a5fa44`, background: '#60a5fa0d', color: '#60a5fa', borderRadius: 3, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.38rem' }}>
+                  🔍 Obohatiť email
+                </button>
+              )
+            }
+
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', paddingTop: '0.15rem' }}>
                 {chainStatus && (
@@ -1692,7 +1813,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
                   {!hasResults
                     ? <RightContactCard c={DEMO_CONTACTS[0]} onSelect={setSelectedContact} />
                     : techContact
-                    ? <RightContactCard c={techContact} onSelect={setSelectedContact} />
+                    ? <><RightContactCard c={techContact} onSelect={setSelectedContact} /><EnrichBlock contact={techContact} /></>
                     : <WaitingSlot label="Čaká sa na technický kontakt" />
                   }
                 </div>
@@ -1703,7 +1824,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
                   {!hasResults
                     ? <RightContactCard c={DEMO_CONTACTS[1]} onSelect={setSelectedContact} />
                     : bizContact
-                    ? <RightContactCard c={bizContact} onSelect={setSelectedContact} />
+                    ? <><RightContactCard c={bizContact} onSelect={setSelectedContact} /><EnrichBlock contact={bizContact} /></>
                     : <WaitingSlot label="Čaká sa na manažérsky kontakt" />
                   }
                 </div>
