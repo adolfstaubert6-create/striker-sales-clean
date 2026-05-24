@@ -107,15 +107,52 @@ export default function IntelTargetCard({ target: t, onOpen, checked, onCheck })
           </div>
         </div>
 
-        {/* Hlavný problém */}
-        <div style={{ marginBottom: '0.5rem', padding: '0.4rem 0.6rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2 }}>
-          <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.15rem' }}>
-            ⚠ Hlavný problém
-          </div>
-          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#ffaa00', lineHeight: 1.4 }}>
-            {problem}
-          </div>
-        </div>
+        {/* STRIKER NEED SCORE — signal analysis */}
+        {(() => {
+          const needScore = t.strikerNeedScore ?? null
+          const signals   = t.detectedSignals  || []
+          const reason    = t.signalReason      || ''
+          const hasSignals = signals.length > 0 || needScore != null
+          const needColor  = needScore == null ? '#4b5563' : needScore >= 60 ? '#00cc88' : needScore >= 30 ? '#ffaa00' : '#4b5563'
+          const top3 = signals.slice(0, 3)
+          return (
+            <div style={{ marginBottom: '0.5rem', padding: '0.45rem 0.6rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 2 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.45rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151' }}>
+                  ◈ Signály potreby
+                </div>
+                {needScore != null && (
+                  <span style={{ fontFamily: mono, fontSize: '0.68rem', fontWeight: 700, color: needColor, lineHeight: 1 }}>
+                    NEED {needScore}
+                  </span>
+                )}
+              </div>
+              {top3.length > 0 ? (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginBottom: reason ? '0.3rem' : 0 }}>
+                    {top3.map(s => (
+                      <span key={s.id} style={{ fontFamily: mono, fontSize: '0.48rem', padding: '0.06rem 0.32rem', border: `1px solid ${needColor}44`, borderRadius: 2, color: needColor, background: `${needColor}10` }}>
+                        {s.label}
+                      </span>
+                    ))}
+                    {signals.length > 3 && (
+                      <span style={{ fontFamily: mono, fontSize: '0.48rem', color: '#4b5563' }}>+{signals.length - 3}</span>
+                    )}
+                  </div>
+                  {reason && (
+                    <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#6b7280', lineHeight: 1.4 }}>
+                      {reason.length > 80 ? reason.slice(0, 80) + '…' : reason}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', fontStyle: 'italic', lineHeight: 1.4 }}>
+                  Zatiaľ neboli nájdené silné signály potreby riešenia.
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Priorita */}
         <div style={{ marginBottom: '0.5rem' }}>
