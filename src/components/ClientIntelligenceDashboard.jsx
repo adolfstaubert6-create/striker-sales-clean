@@ -725,18 +725,23 @@ function ContactDetailModal({ contact: c, onClose }) {
 // ── Panel zoom button ──────────────────────────────────────────────────────────
 function ZoomBtn({ panel, zoomed, setZoomed }) {
   const on = zoomed === panel
+  const [hov, setHov] = useState(false)
   return (
     <button
       onClick={() => setZoomed(on ? null : panel)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       title={on ? 'ESC — zatvoriť' : 'Rozbaliť panel'}
       style={{
-        background: on ? `${C.orange}1a` : 'rgba(7,9,13,0.85)',
-        border: `1px solid ${on ? C.orange + '66' : '#1e2530'}`,
-        color: on ? C.orange : '#4b5563',
-        borderRadius: 3, cursor: 'pointer', lineHeight: 1,
-        padding: '0.22rem 0.45rem', fontFamily: mono, fontSize: '0.75rem',
+        background: on ? `${C.orange}28` : hov ? '#1a2030' : '#111620',
+        border: `1px solid ${on ? C.orange + 'aa' : hov ? C.orange + '66' : '#3a4455'}`,
+        color: on ? C.orange : hov ? '#e0e6f0' : '#9aa5b4',
+        borderRadius: 4, cursor: 'pointer', lineHeight: 1,
+        padding: '0.3rem 0.55rem', fontFamily: mono, fontSize: '0.85rem',
         transition: 'all 0.15s', flexShrink: 0,
-        boxShadow: on ? `0 0 10px ${C.orange}22` : 'none',
+        boxShadow: on
+          ? `0 0 14px ${C.orange}44, inset 0 0 8px ${C.orange}18`
+          : hov ? `0 0 10px ${C.orange}22` : 'none',
       }}
     >{on ? '⊠' : '⛶'}</button>
   )
