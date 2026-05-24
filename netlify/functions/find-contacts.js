@@ -13,6 +13,7 @@ const CONTACT_PATHS = [
   '/impressum', '/kontakt', '/kontakt.html', '/kontakt.php',
   '/contact', '/contact-us', '/team', '/ueber-uns',
   '/about', '/about-us', '/ansprechpartner', '/footer',
+  '/management', '/karriere', '/datenschutz', '/uber-uns',
 ]
 
 // ── Pre-extraction: regex before Claude ───────────────────────────────────────
@@ -80,6 +81,46 @@ async function scrapeWebsite(baseUrl) {
   for (const path of CONTACT_PATHS) {
     if (Date.now() - t0 > 11000 || pages.length >= 4) break
     const p = await scrapePage(baseUrl + path, 5000)
+    if (p) pages.push(p)
+  }
+  return pages
+}
+
+// ── Native HTTP scraper (no external API) ─────────────────────────────────────
+
+async function scrapePageNative(url, ms = 5000) {
+  const ctrl = new AbortController()
+  const to   = setTimeout(() => ctrl.abort(), ms)
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; StrikerBot/1.0)', 'Accept': 'text/html,*/*' },
+    })
+    clearTimeout(to)
+    if (!res.ok) return null
+    const ct = res.headers.get('content-type') || ''
+    if (!ct.includes('text/html') && !ct.includes('text/plain')) return null
+    const html = await res.text()
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n))
+      .replace(/\s+/g, ' ').trim().slice(0, 3000)
+    return text.length > 30 ? { url, text } : null
+  } catch { clearTimeout(to); return null }
+}
+
+async function scrapeWebsiteNative(baseUrl) {
+  const pages = []
+  const t0    = Date.now()
+  const home  = await scrapePageNative(baseUrl, 6000)
+  if (home) pages.push(home)
+  for (const path of CONTACT_PATHS) {
+    if (Date.now() - t0 > 12000 || pages.length >= 5) break
+    const p = await scrapePageNative(baseUrl + path, 4000)
     if (p) pages.push(p)
   }
   return pages
@@ -226,7 +267,7 @@ exports.handler = async (event) => {
   async function run() {
     // 1. Scrape + SerpAPI in parallel
     const [pages, serpText] = await Promise.all([
-      baseUrl ? scrapeWebsite(baseUrl) : Promise.resolve([]),
+      baseUrl ? (FIRECRAWL_KEY ? scrapeWebsite(baseUrl) : scrapeWebsiteNative(baseUrl)) : Promise.resolve([]),
       SERPAPI_KEY ? serpSearch(companyName, city, SERPAPI_KEY) : Promise.resolve(null),
     ])
 
@@ -268,7 +309,7 @@ exports.handler = async (event) => {
       generalEmail:result.generalEmail,
       allPhones:   result.allPhones   || allPhones,
       allEmails:   result.allEmails   || allEmails,
-      sourceNote:  pages.length ? `Firecrawl: ${pages.length} stránok` : serpText ? 'SerpAPI' : 'žiadne zdroje',
+      sourceNote:  pages.length ? (FIRECRAWL_KEY ? `Firecrawl: ${pages.length} stránok` : `Native: ${pages.length} stránok`) : serpText ? 'SerpAPI' : 'žiadne zdroje',
       foundAt:     new Date().toISOString(),
     }
   }

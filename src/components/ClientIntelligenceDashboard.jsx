@@ -835,6 +835,29 @@ function ZoomBtn({ panel, zoomed, setZoomed }) {
   )
 }
 
+// ── Contact discovery helpers ─────────────────────────────────────────────────
+const SCAN_STEPS = [
+  { key: 'scan',    label: 'Scanning website'   },
+  { key: 'impress', label: 'Searching impressum' },
+  { key: 'extract', label: 'Extracting contacts' },
+  { key: 'save',    label: 'Saving contacts'     },
+]
+
+function detectDecisionPower(role) {
+  if (!role) return 'LOW'
+  if (/geschäftsführ|direktor|ceo|coo|cto|owner|inhaber|leitung|director|general manager/i.test(role)) return 'HIGH'
+  if (/facility|technisch|energy|einkauf|procurement|manager|leiter/i.test(role)) return 'MEDIUM'
+  return 'LOW'
+}
+function detectPriority(role) {
+  const dp = detectDecisionPower(role)
+  return dp === 'HIGH' ? 'PRIMARY' : dp === 'MEDIUM' ? 'SECONDARY' : 'SUPPORT'
+}
+function detectAiScore(role) {
+  const dp = detectDecisionPower(role)
+  return dp === 'HIGH' ? 82 : dp === 'MEDIUM' ? 65 : 48
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 export default function ClientIntelligenceDashboard({ target: initialT, onClose }) {
   const [t]              = useState(initialT)
@@ -853,6 +876,8 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
   const [photoLoad, setPhotoLoad] = useState(!t.photoUrl)
   const [zoomed,    setZoomed]    = useState(null) // null | 'left' | 'center' | 'right'
   const [selectedContact, setSelectedContact] = useState(null)
+  const [localContacts, setLocalContacts] = useState(t.contacts || [])
+  const [cSteps,        setCSteps]        = useState([])
 
   useEffect(() => {
     const fn = e => { if (e.key === 'Escape' && zoomed) setZoomed(null) }
@@ -920,12 +945,52 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
   }
 
   async function doContacts() {
-    setCLoad(true); setCMsg('')
+    setCLoad(true); setCMsg(''); setNav('contacts')
+    setCSteps(SCAN_STEPS.map((s, i) => ({ ...s, state: i === 0 ? 'scanning' : 'pending' })))
+
+    const t1 = setTimeout(() => setCSteps(p => p.map((s, i) => i === 0 ? { ...s, state: 'done' } : i === 1 ? { ...s, state: 'scanning' } : s)), 1500)
+    const t2 = setTimeout(() => setCSteps(p => p.map((s, i) => i === 1 ? { ...s, state: 'done' } : i === 2 ? { ...s, state: 'scanning' } : s)), 3500)
+
     try {
-      const r = await fetch('/.netlify/functions/find-contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, website: t.web, city: t.city, country: t.country || 'DE' }) })
+      const r = await fetch('/.netlify/functions/find-contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName: t.name, website: t.web, city: t.city, country: t.country || 'DE' }),
+      })
       const d = await r.json()
-      if (d.ok) { setFound(d.contacts || []); if (d.generalEmail && !t.email) await updateTarget(t.id, { email: d.generalEmail }); setCMsg(d.contacts?.length ? `✅ ${d.contacts.length} overených kontaktov` : 'Nenašla sa overená kontaktná osoba.') }
-    } catch (e) { setCMsg('⚠ ' + e.message) } finally { setCLoad(false) }
+
+      clearTimeout(t1); clearTimeout(t2)
+      setCSteps(SCAN_STEPS.map((s, i) => ({ ...s, state: i <= 2 ? 'done' : 'scanning' })))
+
+      if (d.ok) {
+        const newContacts = d.contacts || []
+        if (d.generalEmail && !t.email) await updateTarget(t.id, { email: d.generalEmail })
+        if (newContacts.length > 0) {
+          const enriched = newContacts.map(c => ({
+            ...c,
+            source:        c.source       || t.web || 'web',
+            confidence:    c.confidence   || 'MEDIUM',
+            status:        c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT',
+            decisionPower: detectDecisionPower(c.role),
+            priority:      detectPriority(c.role),
+            aiScore:       detectAiScore(c.role),
+          }))
+          await updateTarget(t.id, { contacts: enriched })
+          setLocalContacts(enriched)
+          setCMsg(`✅ ${enriched.length} kontaktov nájdených`)
+        } else {
+          setCMsg('Neboli nájdené žiadne relevantné kontakty.')
+        }
+      } else {
+        setCMsg('⚠ Chyba pri hľadaní kontaktov.')
+      }
+    } catch (e) {
+      clearTimeout(t1); clearTimeout(t2)
+      setCMsg('⚠ ' + e.message)
+    } finally {
+      setCSteps(SCAN_STEPS.map(s => ({ ...s, state: 'done' })))
+      setCLoad(false)
+    }
   }
 
   async function saveDraft(lang, subject, body) {
@@ -1234,9 +1299,15 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
             <span style={{ fontFamily: mono, fontSize: '0.48rem', color: C.ghost }}>všeobecný email</span>
           </div>
         )}
-        {(t.contacts || []).map((c, i) => <ContactCard key={i} c={c} onRemove={() => removeContact(t.id, i)} />)}
-        {found?.map((c, i) => <ContactCard key={i} c={c} onSave={() => { addContact(t.id, { ...c, source: c.source || 'web', confidence: c.confidence || 'MEDIUM' }); setFound(p => p.filter(fc => fc !== c)) }} />)}
-        {!t.contacts?.length && !found && !t.email && <Empty text="Dáta zatiaľ neoverené — klikni Nájsť kontakty." />}
+        {localContacts.map((c, i) => (
+          <ContactCard key={i} c={c} onRemove={() => {
+            const updated = localContacts.filter((_, idx) => idx !== i)
+            setLocalContacts(updated)
+            updateTarget(t.id, { contacts: updated })
+          }} />
+        ))}
+        {found?.map((c, i) => <ContactCard key={i} c={c} onSave={() => { const enriched = { ...c, source: c.source || 'web', confidence: c.confidence || 'MEDIUM' }; addContact(t.id, enriched); setLocalContacts(prev => [...prev, enriched]); setFound(p => p.filter(fc => fc !== c)) }} />)}
+        {!localContacts.length && !found && !t.email && <Empty text="Dáta zatiaľ neoverené — klikni Nájsť kontakty." />}
       </div>
     )
 
@@ -1374,7 +1445,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
 
           {/* Summary strip */}
           {(() => {
-            const contacts   = (t.contacts || []).length > 0 ? t.contacts : DEMO_CONTACTS
+            const contacts   = localContacts.length > 0 ? localContacts : DEMO_CONTACTS
             const deciders   = contacts.filter(c => c.decisionPower === 'HIGH').length
             const hasEmail   = contacts.filter(c => c.email).length
             const nextAction = hasEmail > 0 ? 'Pripraviť email' : 'Obohatiť kontakty'
@@ -1399,10 +1470,28 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           })()}
 
           {/* Find contacts CTA */}
-          <button onClick={() => { setNav('contacts'); doContacts() }} disabled={cLoad}
-            style={{ width: '100%', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.45rem 0.7rem', border: `1px solid ${C.orange}66`, background: `${C.orange}12`, color: C.orange, borderRadius: 4, cursor: cLoad ? 'default' : 'pointer', opacity: cLoad ? 0.65 : 1, transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', fontWeight: 600 }}>
-            {cLoad ? '⏳ Hľadám...' : '🔍 Nájsť kontakty'}
-          </button>
+          {cLoad && cSteps.length > 0 ? (
+            <div style={{ background: '#0b0e14', border: `1px solid ${C.orange}33`, borderRadius: 5, padding: '0.75rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.42rem' }}>
+              {cSteps.map(step => (
+                <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.58rem', width: 14, flexShrink: 0, color: step.state === 'done' ? C.green : step.state === 'scanning' ? C.orange : '#374151' }}>
+                    {step.state === 'done' ? '✓' : step.state === 'scanning' ? '◎' : '○'}
+                  </span>
+                  <span style={{ fontFamily: mono, fontSize: '0.47rem', color: step.state === 'done' ? C.green : step.state === 'scanning' ? C.orange : '#374151', letterSpacing: '0.3px' }}>
+                    {step.label}
+                  </span>
+                  {step.state === 'scanning' && (
+                    <span style={{ fontFamily: mono, fontSize: '0.38rem', color: `${C.orange}77`, letterSpacing: '2px' }}>...</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <button onClick={doContacts} disabled={cLoad}
+              style={{ width: '100%', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.45rem 0.7rem', border: `1px solid ${C.orange}66`, background: `${C.orange}12`, color: C.orange, borderRadius: 4, cursor: 'pointer', transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem', fontWeight: 600 }}>
+              🔍 Nájsť kontakty
+            </button>
+          )}
           {cMsg && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: cMsg.startsWith('✅') ? C.green : C.amber, textAlign: 'center' }}>{cMsg}</div>}
 
           {/* General email */}
@@ -1414,8 +1503,8 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           )}
 
           {/* Contact cards */}
-          {(t.contacts || []).length > 0
-            ? (t.contacts).map((c, i) => <RightContactCard key={i} c={c} onSelect={setSelectedContact} />)
+          {localContacts.length > 0
+            ? localContacts.map((c, i) => <RightContactCard key={i} c={c} onSelect={setSelectedContact} />)
             : (
               <>
                 <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151' }}>
