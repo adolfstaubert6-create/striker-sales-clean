@@ -248,6 +248,81 @@ function BackBtn({ onClose }) {
   )
 }
 
+// ── Demo contacts — shown when no real contacts fetched yet ───────────────────
+const DEMO_CONTACTS = [
+  { _id: 'd1', role: 'General Manager',       decisionPower: 'HIGH',   aiScore: 85, source: 'demo' },
+  { _id: 'd2', role: 'Facility Manager',      decisionPower: 'HIGH',   aiScore: 78, source: 'demo' },
+  { _id: 'd3', role: 'Technical Manager',     decisionPower: 'MEDIUM', aiScore: 62, source: 'demo' },
+  { _id: 'd4', role: 'Procurement / Einkauf', decisionPower: 'MEDIUM', aiScore: 55, source: 'demo' },
+]
+
+// ── Right panel contact card ───────────────────────────────────────────────────
+function RightContactCard({ c }) {
+  const init      = (c.name || c.role || '?').charAt(0).toUpperCase()
+  const AC        = [C.orange, C.purple, C.green, C.amber, '#60a5fa', '#f472b6']
+  const ac        = AC[(init.charCodeAt(0) || 0) % AC.length]
+  const pwrCol    = c.decisionPower === 'HIGH' ? C.orange : c.decisionPower === 'MEDIUM' ? C.amber : C.dim
+  const confCol   = { HIGH: C.green, MEDIUM: C.amber, LOW: C.dim }[c.confidence] || C.dim
+  const isDemo    = c.source === 'demo'
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 6, padding: '0.8rem 0.85rem', display: 'flex', flexDirection: 'column', gap: '0.55rem', opacity: isDemo ? 0.7 : 1 }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start' }}>
+        <div style={{ width: 36, height: 36, borderRadius: '50%', background: `${ac}18`, border: `1.5px solid ${ac}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <span style={{ fontFamily: sans, fontSize: '0.9rem', fontWeight: 700, color: ac }}>{init}</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: sans, fontSize: '0.8rem', fontWeight: 600, color: c.name ? '#f1f3f5' : C.ghost, lineHeight: 1.2 }}>
+            {c.name || <span style={{ fontStyle: 'italic', fontSize: '0.68rem' }}>Meno nenájdené</span>}
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.purple, marginTop: '0.08rem' }}>{c.role || '—'}</div>
+        </div>
+        {c.decisionPower && (
+          <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', textTransform: 'uppercase', color: pwrCol, padding: '0.08rem 0.28rem', border: `1px solid ${pwrCol}44`, borderRadius: 2, background: `${pwrCol}10`, flexShrink: 0, whiteSpace: 'nowrap' }}>{c.decisionPower}</span>
+        )}
+      </div>
+
+      {/* Contact info */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.06rem' }}>
+        {c.email
+          ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.51rem', color: C.green, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {c.email}</a>
+          : <span style={{ fontFamily: mono, fontSize: '0.48rem', color: C.ghost, fontStyle: 'italic' }}>Email nenájdený</span>
+        }
+        {c.phone && <span style={{ fontFamily: mono, fontSize: '0.51rem', color: C.dim }}>📞 {c.phone}</span>}
+      </div>
+
+      {/* Badges */}
+      <div style={{ display: 'flex', gap: '0.22rem', flexWrap: 'wrap' }}>
+        {c.confidence && <span style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1px', textTransform: 'uppercase', color: confCol, padding: '0.05rem 0.28rem', border: `1px solid ${confCol}44`, borderRadius: 2, background: `${confCol}0d` }}>{c.confidence}</span>}
+        {c.aiScore   && <span style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.orange, padding: '0.05rem 0.28rem', border: `1px solid ${C.orange}44`, borderRadius: 2, background: `${C.orange}0d` }}>AI {c.aiScore}</span>}
+        {isDemo      && <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.ghost, padding: '0.05rem 0.28rem', border: `1px solid ${C.border}`, borderRadius: 2 }}>DEMO</span>}
+      </div>
+
+      {/* Quick actions */}
+      <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', borderTop: `1px solid ${C.border}`, paddingTop: '0.5rem' }}>
+        {c.email
+          ? <a href={`mailto:${c.email}`}   style={qaBtn(C.green)}>✉ Email</a>
+          : <span                            style={{ ...qaBtn(C.ghost), opacity: 0.4, cursor: 'default' }}>✉ Email</span>
+        }
+        {c.phone
+          ? <a href={`tel:${c.phone}`}      style={qaBtn(C.amber)}>📞 Call</a>
+          : <span                            style={{ ...qaBtn(C.ghost), opacity: 0.4, cursor: 'default' }}>📞 Call</span>
+        }
+        {c.linkedin
+          ? <a href={c.linkedin} target="_blank" rel="noreferrer" style={qaBtn(C.purple)}>🔗 LinkedIn</a>
+          : <span                            style={{ ...qaBtn(C.ghost), opacity: 0.4, cursor: 'default' }}>🔗 LinkedIn</span>
+        }
+        <span style={qaBtn(C.dim)}>📝 Notes</span>
+      </div>
+    </div>
+  )
+}
+function qaBtn(col) {
+  return { fontFamily: mono, fontSize: '0.43rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.2rem 0.45rem', border: `1px solid ${col}44`, background: `${col}0a`, color: col, borderRadius: 3, textDecoration: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }
+}
+
 // ── Panel zoom button ──────────────────────────────────────────────────────────
 function ZoomBtn({ panel, zoomed, setZoomed }) {
   const on = zoomed === panel
@@ -792,64 +867,44 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         <div style={{ position: 'sticky', top: 0, zIndex: 15, display: 'flex', justifyContent: 'flex-end', padding: '0.4rem 0.5rem', background: C.panel, borderBottom: `1px solid ${C.border}` }}>
           <ZoomBtn panel="right" zoomed={zoomed} setZoomed={setZoomed} />
         </div>
-        <div style={{ padding: '1.25rem 1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ padding: '1rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
 
-          {/* Pipeline status */}
-          <div>
-            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Stav obchodu</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-              {INTEL_STATUS_LIST.slice(0, 5).map(s => (
-                <button key={s.key} onClick={() => updateTarget(t.id, { status: s.key })}
-                  style={{ display: 'block', width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.6rem', border: `1px solid ${t.status === s.key ? s.color + '55' : C.border}`, background: t.status === s.key ? s.bg : 'transparent', color: t.status === s.key ? s.color : C.ghost, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
-                  {s.label}
-                </button>
-              ))}
+          {/* Header */}
+          <div style={{ paddingBottom: '0.65rem', borderBottom: `1px solid ${C.border2}` }}>
+            <div style={{ fontFamily: sans, fontSize: '0.82rem', fontWeight: 700, color: '#f1f3f5', marginBottom: '0.2rem' }}>Kontakty klienta</div>
+            <div style={{ fontFamily: mono, fontSize: '0.44rem', color: C.dim, lineHeight: 1.5 }}>Ľudia, ktorí môžu ovplyvniť rozhodnutie</div>
+          </div>
+
+          {/* Find contacts CTA */}
+          <button onClick={() => { setNav('contacts'); doContacts() }} disabled={cLoad}
+            style={{ width: '100%', fontFamily: mono, fontSize: '0.52rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.42rem 0.7rem', border: `1px solid ${C.orange}55`, background: `${C.orange}0d`, color: C.orange, borderRadius: 3, cursor: cLoad ? 'default' : 'pointer', opacity: cLoad ? 0.65 : 1, transition: 'all 0.15s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+            {cLoad ? '⏳ Hľadám...' : '🔍 Nájsť kontakty'}
+          </button>
+          {cMsg && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: cMsg.startsWith('✅') ? C.green : C.amber, textAlign: 'center' }}>{cMsg}</div>}
+
+          {/* General email if available */}
+          {t.email && (
+            <div style={{ padding: '0.5rem 0.65rem', background: C.card, border: `1px solid ${C.border2}`, borderRadius: 4, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.amber, padding: '0.05rem 0.28rem', border: `1px solid ${C.amber}44`, borderRadius: 2, background: `${C.amber}10`, flexShrink: 0 }}>VŠEOB.</span>
+              <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.54rem', color: C.green, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {t.email}</a>
             </div>
-          </div>
+          )}
 
-          {/* Contacts */}
-          <div>
-            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Kontakty</div>
-            {t.email && (
-              <div style={{ padding: '0.5rem 0.65rem', background: C.card, border: `1px solid ${C.border}`, borderRadius: 3, marginBottom: '0.4rem' }}>
-                <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green }}>✉ {t.email}</a>
-              </div>
-            )}
-            {(t.contacts || []).slice(0, 3).map((c, i) => <ContactCard key={i} c={c} />)}
-            {!t.contacts?.length && !t.email && <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.ghost, fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>}
-            <button onClick={() => { setNav('contacts'); doContacts() }} disabled={cLoad}
-              style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem', border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, borderRadius: 3, cursor: 'pointer', marginTop: '0.4rem', opacity: cLoad ? 0.6 : 1 }}>
-              {cLoad ? '⏳' : '🔍 Nájsť kontakty'}
-            </button>
-          </div>
-
-          {/* Quick actions */}
-          <div>
-            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Rýchle akcie</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              {[
-                { l: '✉ Emaily',          c: C.green,  a: () => setNav('email')                               },
-                { l: '⚡ Signal Engine',  c: C.orange, a: () => { doSignals(); setNav('signals') }             },
-                { l: '🧠 AI Analýza',    c: C.amber,  a: () => { doAnalysis(); setNav('profile') }            },
-                { l: '🔍 Kontakty',      c: C.purple, a: () => { setNav('contacts'); doContacts() }           },
-              ].map(({ l, c, a }) => (
-                <button key={l} onClick={a}
-                  style={{ fontFamily: mono, fontSize: '0.51rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.35rem 0.7rem', border: `1px solid ${c}33`, background: `${c}07`, color: c, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Data freshness */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, padding: '0.7rem 0.85rem', marginTop: 'auto' }}>
-            <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.35rem' }}>Aktuálnosť dát</div>
-            <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', marginBottom: '0.18rem' }}>
-              <Badge type={live ? 'live' : 'ai'} small />
-              <span style={{ fontFamily: mono, fontSize: '0.52rem', color: live ? C.green : C.dim }}>{live ? 'Živé Google dáta' : 'AI simulácia'}</span>
-            </div>
-            {t.reviewsCachedAt && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: C.ghost }}>{new Date(t.reviewsCachedAt).toLocaleDateString('sk-SK')}</div>}
-          </div>
+          {/* Real contact cards */}
+          {(t.contacts || []).length > 0
+            ? (t.contacts).map((c, i) => <RightContactCard key={i} c={c} />)
+            : (
+              <>
+                <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, paddingTop: '0.25rem' }}>
+                  Typické rozhodovacie pozície
+                </div>
+                {DEMO_CONTACTS.map(c => <RightContactCard key={c._id} c={c} />)}
+                <div style={{ fontFamily: mono, fontSize: '0.42rem', color: C.ghost, fontStyle: 'italic', textAlign: 'center', paddingTop: '0.25rem', lineHeight: 1.6 }}>
+                  Spusti „Nájsť kontakty" pre reálne mená a emaily
+                </div>
+              </>
+            )
+          }
         </div>
       </div>
     </div>
