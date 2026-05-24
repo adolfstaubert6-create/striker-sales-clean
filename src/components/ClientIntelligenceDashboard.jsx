@@ -534,14 +534,73 @@ function AIAnalysisOverlay({ contact: c, onClose }) {
 }
 
 // ── Contact Detail Modal ───────────────────────────────────────────────────────
-function ContactDetailModal({ contact: c, onClose }) {
-  const scrollRef = useRef(null)
+function ContactDetailModal({ contact: c, onClose, target: tgt, onEnrichDone }) {
+  const scrollRef   = useRef(null)
+  const [enriching, setEnriching] = useState(false)
+  const [enrichMsg, setEnrichMsg] = useState('')
+
   useEffect(() => { scrollRef.current?.focus() }, [])
   useEffect(() => {
     const fn = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', fn)
     return () => window.removeEventListener('keydown', fn)
   }, [onClose])
+
+  async function handleEnrich() {
+    if (enriching) return
+    setEnriching(true)
+    setEnrichMsg('')
+    console.log('[modal] Kompletizovať profil:', c.name, c.role, tgt?.name)
+    try {
+      const r = await fetch('/.netlify/functions/enrich-contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactName:     c.name     || '',
+          contactRole:     c.role     || '',
+          contactCategory: c.contactCategory || '',
+          hotelName:       tgt?.name  || '',
+          hotelWebsite:    tgt?.web   || '',
+        }),
+      })
+      const d = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }))
+      console.log('[modal] enrich-contact result:', d)
+
+      if (d.ok && d.enriched) {
+        const e = d.enriched
+        const foundSomething = (e.email && !c.email) || (e.linkedin && !c.linkedin) || (e.phone && !c.phone)
+        const updated = {
+          ...c,
+          ...(e.email    && !c.email    ? { email: e.email, emailType: e.emailType } : {}),
+          ...(e.linkedin && !c.linkedin ? { linkedin: e.linkedin }                  : {}),
+          ...(e.phone    && !c.phone    ? { phone: e.phone }                        : {}),
+          confidence:   e.confidence   || c.confidence,
+          sourceType:   e.sourceType   || c.sourceType,
+          enrichedAt:   e.enrichedAt,
+          status:       (e.email || c.email) ? 'READY TO CONTACT' : c.status,
+        }
+        if (foundSomething) {
+          setEnrichMsg(
+            e.email && !c.email ? `✅ Email nájdený: ${e.email}`
+            : e.linkedin && !c.linkedin ? '✅ LinkedIn profil nájdený'
+            : `✅ Telefón nájdený: ${e.phone}`
+          )
+          onEnrichDone?.(updated)
+        } else {
+          setEnrichMsg('Nenašli sa nové údaje.')
+        }
+      } else {
+        const errMsg = d.error || 'Neznáma chyba'
+        console.error('[modal] enrich-contact error:', errMsg)
+        setEnrichMsg('Profil sa nepodarilo kompletizovať.')
+      }
+    } catch (err) {
+      console.error('[modal] enrich fetch failed:', err)
+      setEnrichMsg('Profil sa nepodarilo kompletizovať.')
+    } finally {
+      setEnriching(false)
+    }
+  }
 
   const init     = (c.name || c.role || '?').charAt(0).toUpperCase()
   const ac       = c.contactCategory === 'business' ? C.amber : '#60a5fa'
@@ -717,12 +776,21 @@ function ContactDetailModal({ contact: c, onClose }) {
         </div>
 
         {/* F) Actions — sticky bottom bar */}
-        <div style={{ flexShrink: 0, borderTop: `1px solid #2a3040`, background: '#070a0f', padding: '0.85rem 1.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <ActionBtn href={`mailto:${c.email}`} color="#4ade80" disabled={!c.email}>✉ Poslať email</ActionBtn>
-          <ActionBtn href={`tel:${c.phone}`} color={C.amber} disabled={!c.phone}>📞 Zavolať</ActionBtn>
-          <ActionBtn href={c.linkedin} target="_blank" color="#818cf8" disabled={!c.linkedin}>🔗 LinkedIn</ActionBtn>
-          <ActionBtn onClick={() => {}} color="#60a5fa">📝 Poznámka</ActionBtn>
-          <ActionBtn onClick={() => {}} color={C.orange}>◈ Kompletizovať profil</ActionBtn>
+        <div style={{ flexShrink: 0, borderTop: `1px solid #2a3040`, background: '#070a0f', padding: '0.75rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {enrichMsg && (
+            <div style={{ fontFamily: mono, fontSize: '0.48rem', color: enrichMsg.startsWith('✅') ? C.green : C.amber, letterSpacing: '0.5px' }}>
+              {enrichMsg}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <ActionBtn href={`mailto:${c.email}`} color="#4ade80" disabled={!c.email}>✉ Poslať email</ActionBtn>
+            <ActionBtn href={`tel:${c.phone}`} color={C.amber} disabled={!c.phone}>📞 Zavolať</ActionBtn>
+            <ActionBtn href={c.linkedin} target="_blank" color="#818cf8" disabled={!c.linkedin}>🔗 LinkedIn</ActionBtn>
+            <ActionBtn onClick={() => {}} color="#60a5fa">📝 Poznámka</ActionBtn>
+            <ActionBtn onClick={handleEnrich} color={C.orange} disabled={enriching}>
+              {enriching ? '⏳ Kompletizujem...' : '◈ Kompletizovať profil'}
+            </ActionBtn>
+          </div>
         </div>
 
       </div>
@@ -1566,7 +1634,19 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       </div>
 
       {selectedContact && (
-        <ContactDetailModal contact={selectedContact} onClose={() => setSelectedContact(null)} />
+        <ContactDetailModal
+          contact={selectedContact}
+          onClose={() => setSelectedContact(null)}
+          target={t}
+          onEnrichDone={updated => {
+            const newContacts = localContacts.map(c =>
+              c.contactCategory === updated.contactCategory ? updated : c
+            )
+            setLocalContacts(newContacts)
+            updateTarget(t.id, { contacts: newContacts })
+            setSelectedContact(updated)
+          }}
+        />
       )}
 
       {/* ── RIGHT ── */}
