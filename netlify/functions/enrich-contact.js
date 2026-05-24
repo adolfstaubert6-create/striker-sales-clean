@@ -1,11 +1,11 @@
 /**
- * Contact email enrichment via SerpAPI Google Search.
- * Runs up to 4 targeted queries per contact, extracts emails / LinkedIn /
- * phones from result snippets, scores confidence, returns enriched data.
+ * Contact email enrichment.
+ * Pipeline: SerpAPI Google Search → if no personal email → Apollo people/match.
  * Does NOT write to Firestore — the frontend handles persistence.
  */
 
 const SERPAPI_KEY = process.env.SERPAPI_API_KEY
+const APOLLO_KEY  = process.env.APOLLO_API_KEY
 
 const EMAIL_RE   = /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g
 const PHONE_RE   = /(?:(?:\+49|0049|0)[0-9\s()\-\/\.]{6,20})/g
@@ -65,15 +65,78 @@ async function serpSearch(query) {
   }
 }
 
+// ── Apollo people/match ───────────────────────────────────────────────────────
+
+function splitName(fullName) {
+  const parts = (fullName || '').trim().split(/\s+/)
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' }
+  return { firstName: parts[0], lastName: parts.slice(1).join(' ') }
+}
+
+async function apolloSearch(contactName, hotelName, domain) {
+  if (!APOLLO_KEY || !contactName) return null
+  const { firstName, lastName } = splitName(contactName)
+
+  const payload = {
+    api_key:                APOLLO_KEY,
+    first_name:             firstName,
+    last_name:              lastName,
+    organization_name:      hotelName || undefined,
+    domain:                 domain    || undefined,
+    reveal_personal_emails: false,   // free tier — work emails only
+  }
+
+  console.log(`[enrich-contact] Apollo search: "${firstName} ${lastName}" @ "${hotelName}" domain=${domain}`)
+
+  const ctrl = new AbortController()
+  const to   = setTimeout(() => ctrl.abort(), 9000)
+  try {
+    const res = await fetch('https://api.apollo.io/v1/people/match', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+      body:    JSON.stringify(payload),
+      signal:  ctrl.signal,
+    })
+    clearTimeout(to)
+
+    if (!res.ok) {
+      const text = await res.text()
+      console.warn(`[enrich-contact] Apollo ${res.status}: ${text.slice(0, 200)}`)
+      return { error: `Apollo HTTP ${res.status}` }
+    }
+
+    const data   = await res.json()
+    const person = data.person
+
+    if (!person) {
+      console.log(`[enrich-contact] Apollo: no person matched`)
+      return { error: 'no match' }
+    }
+
+    const email    = person.email || null
+    const linkedin = person.linkedin_url || null
+    const phone    = person.phone_numbers?.[0]?.sanitized_number || null
+    const title    = person.title || null
+
+    console.log(`[enrich-contact] Apollo matched: email=${email || '-'} linkedin=${linkedin ? '✓' : '-'} title="${title}"`)
+
+    return { email, linkedin, phone, title, raw: { id: person.id, name: person.name } }
+  } catch (e) {
+    clearTimeout(to)
+    console.warn(`[enrich-contact] Apollo error: ${e.message}`)
+    return { error: e.message }
+  }
+}
+
 exports.handler = async (event) => {
   const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' }
   if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: CORS, body: JSON.stringify({ error: 'Method not allowed' }) }
 
-  if (!SERPAPI_KEY) {
+  if (!SERPAPI_KEY && !APOLLO_KEY) {
     return {
       statusCode: 200, headers: CORS,
-      body: JSON.stringify({ ok: false, error: 'SERPAPI_API_KEY nie je nastavený.' }),
+      body: JSON.stringify({ ok: false, error: 'Žiadny API kľúč — nastavte SERPAPI_API_KEY alebo APOLLO_API_KEY.' }),
     }
   }
 
@@ -91,15 +154,19 @@ exports.handler = async (event) => {
   console.log(`[enrich-contact] START cat=${contactCategory} name="${contactName}" role="${contactRole}" hotel="${hotelName}" domain=${domain}`)
   console.log(`[enrich-contact] queries: ${JSON.stringify(queries)}`)
 
-  // Run queries sequentially to respect SerpAPI rate limits
+  // Run SerpAPI queries sequentially (skip if no key)
   const queryLogs  = []
   const allResults = []
 
-  for (const q of queries) {
-    const { results, error } = await serpSearch(q)
-    queryLogs.push({ query: q, count: results.length, error: error || null })
-    console.log(`[enrich-contact] query="${q}" → ${results.length} results${error ? ' err=' + error : ''}`)
-    allResults.push(...results)
+  if (SERPAPI_KEY) {
+    for (const q of queries) {
+      const { results, error } = await serpSearch(q)
+      queryLogs.push({ query: q, count: results.length, error: error || null })
+      console.log(`[enrich-contact] query="${q}" → ${results.length} results${error ? ' err=' + error : ''}`)
+      allResults.push(...results)
+    }
+  } else {
+    console.log(`[enrich-contact] no SERPAPI_KEY — skipping Google search, going straight to Apollo`)
   }
 
   // Deduplicate results by URL
@@ -189,40 +256,71 @@ exports.handler = async (event) => {
     return nameParts.some(p => p.length > 3 && slug.includes(p))
   }) || [...foundLinkedins][0] || null
 
-  // Confidence scoring
-  let confidence
+  // Apollo fallback — only when SerpAPI found no personal email
+  let apolloResult = null
+  let finalEmail    = bestEmail
+  let finalLinkedin = bestLinkedin
+  let finalPhone    = [...foundPhones][0] || null
+  let sourceType    = 'GOOGLE'
+
+  if (!bestEmail && APOLLO_KEY) {
+    apolloResult = await apolloSearch(contactName, hotelName, domain)
+    if (apolloResult && !apolloResult.error) {
+      if (apolloResult.email)    finalEmail    = apolloResult.email
+      if (apolloResult.linkedin) finalLinkedin = apolloResult.linkedin
+      if (apolloResult.phone)    finalPhone    = apolloResult.phone
+      sourceType = finalEmail ? 'APOLLO' : 'GOOGLE+APOLLO'
+    }
+  }
+
+  // Confidence scoring — re-evaluate against final merged values
   const hasName = !!(contactName || '').trim()
   const hasRole = !!(contactRole || '').trim()
 
-  if (bestEmail && isPersonalEmail(bestEmail) && hasName)    confidence = 'HIGH'
-  else if (bestEmail && hasName)                             confidence = 'MEDIUM'
-  else if (bestLinkedin && (hasName || hasRole))             confidence = 'MEDIUM'
+  function isPersonalFinal(e) {
+    if (!e) return false
+    if (isGeneralEmail(e)) return false
+    if (!nameParts.length) return true
+    const local = e.split('@')[0].toLowerCase()
+    return nameParts.some(p => p.length >= 3 && local.includes(p))
+  }
+
+  let confidence
+  if (finalEmail && isPersonalFinal(finalEmail) && hasName)   confidence = 'HIGH'
+  else if (finalEmail && hasName)                             confidence = 'MEDIUM'
+  else if (finalLinkedin && (hasName || hasRole))             confidence = 'MEDIUM'
   else if (domainEmails.length > 0 || matchedPages.length > 0) confidence = 'LOW'
+  else if (apolloResult && !apolloResult.error)               confidence = 'LOW'
   else                                                        confidence = null
 
   const ms = Date.now() - t0
-  console.log(`[enrich-contact] DONE ${ms}ms email=${bestEmail || '-'} linkedin=${bestLinkedin ? '✓' : '-'} confidence=${confidence} matchedPages=${matchedPages.length}`)
+  console.log(`[enrich-contact] DONE ${ms}ms email=${finalEmail || '-'} src=${sourceType} linkedin=${finalLinkedin ? '✓' : '-'} confidence=${confidence}`)
 
   return {
     statusCode: 200, headers: CORS,
     body: JSON.stringify({
       ok: true,
       enriched: {
-        email:        bestEmail,
-        emailType:    bestEmail ? (isGeneralEmail(bestEmail) ? 'GENERAL' : 'PERSONAL') : null,
-        linkedin:     bestLinkedin,
-        phone:        [...foundPhones][0] || null,
+        email:        finalEmail,
+        emailType:    finalEmail
+                        ? (sourceType === 'APOLLO' ? 'WORK' : isGeneralEmail(finalEmail) ? 'GENERAL' : 'PERSONAL')
+                        : null,
+        linkedin:     finalLinkedin,
+        phone:        finalPhone,
         confidence:   confidence || 'LOW',
-        sourceType:   'GOOGLE',
+        sourceType,
         enrichedAt:   new Date().toISOString(),
         matchedPages: matchedPages.slice(0, 3),
       },
       debug: {
-        queries:      queryLogs,
-        totalResults: unique.length,
-        emails:       [...foundEmails],
-        linkedins:    [...foundLinkedins],
-        matchedPages: matchedPages.length,
+        serpapi: {
+          queries:      queryLogs,
+          totalResults: unique.length,
+          emails:       [...foundEmails],
+          linkedins:    [...foundLinkedins],
+          matchedPages: matchedPages.length,
+        },
+        apollo: apolloResult || { skipped: 'SerpAPI found personal email' },
         ms,
       },
     }),
