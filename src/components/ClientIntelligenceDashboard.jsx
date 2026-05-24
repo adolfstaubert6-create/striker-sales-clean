@@ -783,6 +783,60 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
             </div>
           </div>
 
+          {/* E — Email enrichment queries */}
+          {(() => {
+            const enrichment = buildPersonSearchQueries(tgt, c, null)
+            const catLabel   = enrichment.category === 'technical' ? 'TECHNICKÝ KONTAKT' : enrichment.category === 'business' ? 'MANAŽÉRSKY KONTAKT' : null
+            const catColor   = enrichment.category === 'technical' ? '#60a5fa' : C.orange
+            return (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #252f3e' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.44rem', color: C.orange, fontWeight: 700 }}>E</span>
+                  <span style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#8a96a6', fontWeight: 600 }}>Email Enrichment</span>
+                </div>
+                {/* Status row */}
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.7rem' }}>
+                  {catLabel && (
+                    <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: catColor, padding: '0.1rem 0.38rem', border: `1px solid ${catColor}44`, borderRadius: 2, background: `${catColor}10` }}>
+                      {catLabel}
+                    </span>
+                  )}
+                  {enrichment.domain && (
+                    <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', color: '#6b7280', padding: '0.1rem 0.38rem', border: '1px solid #252f3e', borderRadius: 2, background: '#0c0f15' }}>
+                      🌐 {enrichment.domain}
+                    </span>
+                  )}
+                  <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', color: c.email ? C.green : '#ef4444', padding: '0.1rem 0.38rem', border: `1px solid ${c.email ? C.green : '#ef4444'}44`, borderRadius: 2, background: c.email ? `${C.green}10` : '#ef444410' }}>
+                    {c.email ? '✓ Email known' : '✗ Email missing'}
+                  </span>
+                </div>
+                {/* Prepared queries */}
+                {enrichment.queries.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.28rem' }}>
+                    {enrichment.queries.map(({ label, q }) => {
+                      const url = `https://www.google.com/search?q=${encodeURIComponent(q)}`
+                      return (
+                        <a key={q} href={url} target="_blank" rel="noreferrer"
+                          style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.42rem 0.6rem', background: '#0b0f15', border: '1px solid #1a2030', borderRadius: 4, textDecoration: 'none', transition: 'border-color 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.borderColor = '#2a3a50'}
+                          onMouseLeave={e => e.currentTarget.style.borderColor = '#1a2030'}
+                        >
+                          <span style={{ fontFamily: mono, fontSize: '0.35rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', minWidth: 112, flexShrink: 0 }}>{label}</span>
+                          <span style={{ fontFamily: mono, fontSize: '0.44rem', color: '#60a5fa', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q}</span>
+                          <span style={{ fontFamily: mono, fontSize: '0.38rem', color: '#374151', flexShrink: 0 }}>↗</span>
+                        </a>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontFamily: mono, fontSize: '0.46rem', color: '#374151', fontStyle: 'italic', padding: '0.55rem 0.7rem', background: '#0b0f15', border: '1px dashed #1a2030', borderRadius: 4 }}>
+                    Chýba meno aj rola — nie je možné vygenerovať query
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           {/* Interná poznámka */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #252f3e' }}>
@@ -921,6 +975,36 @@ function detectContactCategory(role) {
   if (/facility|technisch|energy|operations?\s+manager|haustechnik|techniker|technical\s+(manager|director)/i.test(role)) return 'technical'
   if (/geschäftsführ|direktor|director|general\s+manager|hotel\s+manager|inhaber|eigentümer|betriebsleiter/i.test(role)) return 'business'
   return null
+}
+
+// ── Email enrichment query builder ────────────────────────────────────────────
+function extractDomain(url) {
+  if (!url) return null
+  try {
+    const u = url.startsWith('http') ? url : `https://${url}`
+    return new URL(u).hostname.replace(/^www\./, '')
+  } catch { return null }
+}
+
+function buildPersonSearchQueries(target, contact, companyContact) {
+  const domain = extractDomain(target?.web || companyContact?.website)
+  const hotel  = (target?.name || companyContact?.name || '').trim()
+  const name   = (contact?.name  || '').trim()
+  const role   = (contact?.role  || '').trim()
+  const queries = []
+
+  if (name) {
+    queries.push({ label: 'Name + Hotel + email',   q: `"${name}" "${hotel}" email` })
+    if (domain) queries.push({ label: 'Name + Domain', q: `"${name}" "${domain}"` })
+  }
+  if (role) {
+    queries.push({ label: 'Role + Hotel + email',   q: `"${role}" "${hotel}" email` })
+    queries.push({ label: 'Role + Hotel + kontakt', q: `"${role}" "${hotel}" kontakt` })
+    if (domain && name) queries.push({ label: `site:${domain} + Name`, q: `site:${domain} "${name}"` })
+    if (domain)         queries.push({ label: `site:${domain} + Role`, q: `site:${domain} "${role}"` })
+  }
+
+  return { queries, domain, category: contact?.contactCategory || detectContactCategory(role) || null }
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
