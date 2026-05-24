@@ -545,110 +545,176 @@ function ContactDetailModal({ contact: c, onClose }) {
 
   const init     = (c.name || c.role || '?').charAt(0).toUpperCase()
   const ac       = c.contactCategory === 'business' ? C.amber : '#60a5fa'
+  const catLabel = c.contactCategory === 'business' ? 'Manažérsky kontakt' : 'Technický kontakt'
   const status   = c.status || (c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT')
   const st       = CONTACT_STATUS[status] || CONTACT_STATUS['NEEDS ENRICHMENT']
   const priority = c.priority || (c.decisionPower === 'HIGH' ? 'PRIMARY' : c.decisionPower === 'MEDIUM' ? 'SECONDARY' : 'SUPPORT')
   const priCol   = priority === 'PRIMARY' ? C.orange : priority === 'SECONDARY' ? C.amber : C.dim
   const dpCol    = c.decisionPower === 'HIGH' ? C.green : c.decisionPower === 'MEDIUM' ? C.amber : C.dim
+  const confCol  = { HIGH: C.green, MEDIUM: C.amber, LOW: C.dim }[c.confidence] || C.dim
+  const missing  = [!c.email && 'Email', !c.phone && 'Telefón', !c.linkedin && 'LinkedIn'].filter(Boolean)
+  const ts       = c.enrichedAt || c.foundAt
+  const aiText   = c.decisionPower === 'HIGH'
+    ? `Kontakt na pozícii „${c.role || 'rozhodovateľa'}" má vysokú pravdepodobnosť ovplyvňovať energetické a technické rozhodnutia. Odporúčame priamy outreach s dôrazom na ROI a úsporu prevádzkových nákladov.`
+    : c.decisionPower === 'MEDIUM'
+    ? `Kontakt na pozícii „${c.role || 'influencera'}" pravdepodobne ovplyvňuje výberové konanie. Odporúčame zahrnúť do komunikačnej stratégie so zameraním na technické argumenty.`
+    : `Kontakt je vhodný ako doplnkový bod kontaktu v rámci outreach kampane pre toto zariadenie.`
+  const nextAction = c.email
+    ? `Poslať personalizovaný email na ${c.email} s dôrazom na konkrétny problém oddelenia.`
+    : `Najprv obohatiť profil — spusti „Obohatiť email" na karte kontaktu pre získanie pracovného emailu.`
+
+  function SecHead({ label, col }) {
+    return <div style={{ fontFamily: mono, fontSize: '0.33rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: col || `${C.orange}66`, marginBottom: '0.6rem', paddingBottom: '0.25rem', borderBottom: `1px solid ${C.border}` }}>{label}</div>
+  }
+  function Row({ label, value, col }) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.32rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '0.8px', color: C.dim, flexShrink: 0 }}>{label}</span>
+        <span style={{ fontFamily: mono, fontSize: '0.48rem', color: col || C.sub, textAlign: 'right', wordBreak: 'break-all' }}>
+          {value || <span style={{ color: C.ghost, fontStyle: 'italic', fontWeight: 400, fontSize: '0.41rem' }}>Dáta zatiaľ nenájdené</span>}
+        </span>
+      </div>
+    )
+  }
+
+  function ActionBtn({ href, target, color, disabled, children }) {
+    const base = { flex: 1, minWidth: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.62rem 0.6rem', borderRadius: 5, fontFamily: mono, fontSize: '0.42rem', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none', transition: 'background 0.12s', cursor: disabled ? 'not-allowed' : 'pointer', border: `1px solid ${disabled ? '#1e2530' : color + '44'}`, background: disabled ? '#0b0e15' : color + '14', color: disabled ? C.ghost : color, opacity: disabled ? 0.45 : 1 }
+    if (disabled) return <span style={base}>{children}</span>
+    return <a href={href} target={target} rel={target === '_blank' ? 'noreferrer' : undefined}
+      style={base}
+      onMouseEnter={e => e.currentTarget.style.background = color + '22'}
+      onMouseLeave={e => e.currentTarget.style.background = color + '14'}>
+      {children}
+    </a>
+  }
 
   return (
-    <div
-      onClick={e => e.target === e.currentTarget && onClose()}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: '1.5rem', overflow: 'hidden' }}
-    >
-      <div ref={scrollRef} tabIndex={-1} style={{ background: '#0a0d12', border: `1px solid ${ac}33`, borderRadius: 10, width: '100%', maxWidth: 380, overflowY: 'auto', overscrollBehavior: 'contain', boxShadow: `0 32px 80px rgba(0,0,0,0.8), 0 0 60px ${ac}08`, outline: 'none' }}>
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.84)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: '2rem', overflow: 'hidden' }}>
+      <div ref={scrollRef} tabIndex={-1}
+        style={{ background: '#090c11', border: `1px solid ${ac}33`, borderRadius: 10, width: '100%', minWidth: 'min(40vw, 520px)', maxWidth: 'min(68vw, 820px)', minHeight: '55vh', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overscrollBehavior: 'contain', boxShadow: `0 32px 80px rgba(0,0,0,0.85), 0 0 0 1px ${ac}18, 0 0 60px ${ac}08`, outline: 'none' }}>
 
-        {/* ── Header ── */}
-        <div style={{ background: `linear-gradient(135deg, #0c1018 0%, ${ac}10 100%)`, padding: '1.1rem 1.2rem 0.9rem', borderBottom: `1px solid ${ac}1e`, display: 'flex', gap: '0.9rem', alignItems: 'flex-start' }}>
-          <div style={{ width: 48, height: 48, borderRadius: '50%', background: `${ac}18`, border: `2px solid ${ac}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 0 16px ${ac}22` }}>
-            <span style={{ fontFamily: sans, fontSize: '1.2rem', fontWeight: 700, color: ac }}>{init}</span>
+        {/* ── A) Header ── */}
+        <div style={{ background: `linear-gradient(135deg, #0b0e15 0%, ${ac}0e 100%)`, padding: '1.2rem 1.5rem', borderBottom: `1px solid ${ac}20`, display: 'flex', gap: '1rem', alignItems: 'flex-start', flexShrink: 0 }}>
+          <div style={{ width: 54, height: 54, borderRadius: '50%', background: `${ac}18`, border: `2px solid ${ac}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 0 20px ${ac}22` }}>
+            <span style={{ fontFamily: sans, fontSize: '1.35rem', fontWeight: 700, color: ac }}>{init}</span>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Name + status badge inline */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
-              <span style={{ fontFamily: sans, fontSize: '0.92rem', fontWeight: 700, color: c.name ? '#f0f4f8' : '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>
-                {c.name || <span style={{ fontStyle: 'italic', fontSize: '0.78rem', color: '#4b5563' }}>Meno nenájdené</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', marginBottom: '0.22rem', flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: sans, fontSize: '1rem', fontWeight: 700, color: c.name ? '#f0f4f8' : '#4b5563' }}>
+                {c.name || <span style={{ fontStyle: 'italic', fontSize: '0.82rem' }}>Meno nenájdené</span>}
               </span>
-              <span style={{ fontFamily: mono, fontSize: '0.33rem', letterSpacing: '1.2px', textTransform: 'uppercase', color: st.color, padding: '0.1rem 0.38rem', border: `1px solid ${st.color}44`, borderRadius: 2, background: `${st.color}10`, flexShrink: 0 }}>
-                {status}
+              <span style={{ fontFamily: mono, fontSize: '0.32rem', letterSpacing: '1.2px', textTransform: 'uppercase', color: st.color, padding: '0.1rem 0.4rem', border: `1px solid ${st.color}44`, borderRadius: 2, background: `${st.color}10`, flexShrink: 0 }}>{status}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1.2px', textTransform: 'uppercase', color: ac }}>{c.role || '—'}</span>
+              <span style={{ fontFamily: mono, fontSize: '0.3rem', letterSpacing: '1px', textTransform: 'uppercase', color: priCol, padding: '0.08rem 0.35rem', border: `1px solid ${priCol}33`, borderRadius: 2, background: `${priCol}0d`, flexShrink: 0 }}>
+                {priority === 'PRIMARY' ? '▲ Primary Decision Maker' : priority === 'SECONDARY' ? '◆ Secondary Influencer' : '◇ Support Contact'}
               </span>
             </div>
-            {/* Role + priority badge inline */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-              <span style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.2px', textTransform: 'uppercase', color: ac }}>{c.role || '—'}</span>
-              <span style={{ fontFamily: mono, fontSize: '0.31rem', letterSpacing: '1px', textTransform: 'uppercase', color: priCol, padding: '0.08rem 0.3rem', border: `1px solid ${priCol}33`, borderRadius: 2, background: `${priCol}0d`, flexShrink: 0 }}>
-                {priority === 'PRIMARY' ? '▲ Primary' : priority === 'SECONDARY' ? '◆ Secondary' : '◇ Support'}
-              </span>
-            </div>
+            <span style={{ fontFamily: mono, fontSize: '0.3rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: ac, padding: '0.06rem 0.35rem', border: `1px solid ${ac}33`, borderRadius: 2, background: `${ac}0d` }}>{catLabel}</span>
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#4b5563', fontSize: '0.95rem', cursor: 'pointer', padding: '0.1rem 0.25rem', lineHeight: 1, flexShrink: 0, transition: 'color 0.12s', marginTop: '0.1rem' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#9ca3af'} onMouseLeave={e => e.currentTarget.style.color = '#4b5563'}>✕</button>
+          <button onClick={onClose}
+            style={{ background: 'transparent', border: '1px solid #1e2530', color: '#4b5563', borderRadius: 4, padding: '0.3rem 0.7rem', fontFamily: mono, fontSize: '0.44rem', letterSpacing: '1px', cursor: 'pointer', flexShrink: 0, transition: 'all 0.12s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#374151'; e.currentTarget.style.color = '#9ca3af' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e2530'; e.currentTarget.style.color = '#4b5563' }}>
+            ✕ Zavrieť
+          </button>
         </div>
 
-        <div style={{ padding: '0.9rem 1.2rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+        {/* ── Body (scrollable) ── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.2rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-          {/* Contact info — only render rows that have data */}
-          {(c.email || c.phone || c.linkedin) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              {c.email && (
-                <a href={`mailto:${c.email}`} style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.48rem 0.7rem', background: '#0d1119', border: '1px solid #1a2535', borderRadius: 5, textDecoration: 'none', transition: 'border-color 0.12s' }}
+          {/* B + C: 2-col grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+
+            {/* B) Contact data */}
+            <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 6, padding: '0.8rem 0.95rem' }}>
+              <SecHead label="Kontaktné údaje" />
+              {c.email
+                ? <a href={`mailto:${c.email}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.38rem 0.5rem', background: '#0d1119', border: '1px solid #1a2535', borderRadius: 4, textDecoration: 'none', marginBottom: '0.28rem', transition: 'border-color 0.12s' }}
                     onMouseEnter={e => e.currentTarget.style.borderColor = '#4ade8044'} onMouseLeave={e => e.currentTarget.style.borderColor = '#1a2535'}>
-                  <span style={{ fontSize: '0.72rem', flexShrink: 0 }}>✉</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#4ade80', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</span>
-                </a>
-              )}
-              {c.phone && (
-                <a href={`tel:${c.phone}`} style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.48rem 0.7rem', background: '#0d1119', border: '1px solid #1a2535', borderRadius: 5, textDecoration: 'none', transition: 'border-color 0.12s' }}
+                    <span style={{ fontSize: '0.62rem' }}>✉</span>
+                    <span style={{ fontFamily: mono, fontSize: '0.46rem', color: '#4ade80', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{c.email}</span>
+                    {c.emailType && <span style={{ fontFamily: mono, fontSize: '0.28rem', color: c.emailType === 'PERSONAL' ? C.green : C.ghost, letterSpacing: '1px', flexShrink: 0 }}>{c.emailType}</span>}
+                  </a>
+                : <div style={{ fontFamily: mono, fontSize: '0.42rem', color: C.ghost, fontStyle: 'italic', marginBottom: '0.28rem', paddingLeft: '0.1rem' }}>Email: Dáta zatiaľ nenájdené</div>
+              }
+              {c.phone
+                ? <a href={`tel:${c.phone}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.38rem 0.5rem', background: '#0d1119', border: '1px solid #1a2535', borderRadius: 4, textDecoration: 'none', marginBottom: '0.28rem', transition: 'border-color 0.12s' }}
                     onMouseEnter={e => e.currentTarget.style.borderColor = `${C.amber}44`} onMouseLeave={e => e.currentTarget.style.borderColor = '#1a2535'}>
-                  <span style={{ fontSize: '0.72rem', flexShrink: 0 }}>📞</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.52rem', color: C.amber }}>{c.phone}</span>
-                </a>
-              )}
-              {c.linkedin && (
-                <a href={c.linkedin} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.48rem 0.7rem', background: '#0d1119', border: '1px solid #1a2535', borderRadius: 5, textDecoration: 'none', transition: 'border-color 0.12s' }}
+                    <span style={{ fontSize: '0.62rem' }}>📞</span>
+                    <span style={{ fontFamily: mono, fontSize: '0.46rem', color: C.amber }}>{c.phone}</span>
+                  </a>
+                : <div style={{ fontFamily: mono, fontSize: '0.42rem', color: C.ghost, fontStyle: 'italic', marginBottom: '0.28rem', paddingLeft: '0.1rem' }}>Telefón: Dáta zatiaľ nenájdené</div>
+              }
+              {c.linkedin
+                ? <a href={c.linkedin} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.38rem 0.5rem', background: '#0d1119', border: '1px solid #1a2535', borderRadius: 4, textDecoration: 'none', marginBottom: '0.28rem', transition: 'border-color 0.12s' }}
                     onMouseEnter={e => e.currentTarget.style.borderColor = '#818cf844'} onMouseLeave={e => e.currentTarget.style.borderColor = '#1a2535'}>
-                  <span style={{ fontSize: '0.72rem', flexShrink: 0 }}>🔗</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#818cf8' }}>LinkedIn profil</span>
-                  <span style={{ marginLeft: 'auto', fontFamily: mono, fontSize: '0.36rem', color: '#374151' }}>↗</span>
-                </a>
+                    <span style={{ fontSize: '0.62rem' }}>🔗</span>
+                    <span style={{ fontFamily: mono, fontSize: '0.46rem', color: '#818cf8' }}>LinkedIn profil</span>
+                    <span style={{ marginLeft: 'auto', fontFamily: mono, fontSize: '0.33rem', color: C.ghost }}>↗</span>
+                  </a>
+                : <div style={{ fontFamily: mono, fontSize: '0.42rem', color: C.ghost, fontStyle: 'italic', marginBottom: '0.28rem', paddingLeft: '0.1rem' }}>LinkedIn: Dáta zatiaľ nenájdené</div>
+              }
+              {c.source && c.source !== 'demo' && (
+                <div style={{ fontFamily: mono, fontSize: '0.38rem', color: C.dim, marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🌐 {c.source}</div>
               )}
             </div>
-          )}
 
-          {/* Decision power */}
-          {c.decisionPower && (
-            <div style={{ background: '#0c1018', border: `1px solid ${dpCol}22`, borderRadius: 5, padding: '0.5rem 0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151' }}>Decision Power</span>
-              <span style={{ fontFamily: mono, fontSize: '0.52rem', fontWeight: 700, color: dpCol }}>{c.decisionPower}</span>
+            {/* C) Professional profile */}
+            <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 6, padding: '0.8rem 0.95rem' }}>
+              <SecHead label="Profesionálny profil" />
+              <Row label="Pozícia"        value={c.role}           col={ac} />
+              <Row label="Kategória"      value={catLabel}         col={ac} />
+              <Row label="Decision Power" value={c.decisionPower}  col={dpCol} />
+              <Row label="Priorita"       value={priority}         col={priCol} />
+              <Row label="AI relevancia"  value={c.aiScore ? `${c.aiScore} / 100` : null} col={C.purple} />
+              {c.confidence && <Row label="Confidence" value={c.confidence} col={confCol} />}
             </div>
-          )}
+          </div>
 
-          {/* Action buttons — only available actions, larger with labels */}
-          {(c.email || c.phone || c.linkedin) && (
-            <div style={{ display: 'flex', gap: '0.4rem', paddingTop: '0.1rem', borderTop: `1px solid ${ac}18` }}>
-              {c.email && (
-                <a href={`mailto:${c.email}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', padding: '0.6rem 0.5rem', background: '#4ade8012', border: '1px solid #4ade8033', borderRadius: 5, textDecoration: 'none', transition: 'background 0.12s', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#4ade8020'} onMouseLeave={e => e.currentTarget.style.background = '#4ade8012'}>
-                  <span style={{ fontSize: '1rem' }}>✉</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#4ade80' }}>Email</span>
-                </a>
-              )}
-              {c.phone && (
-                <a href={`tel:${c.phone}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', padding: '0.6rem 0.5rem', background: `${C.amber}12`, border: `1px solid ${C.amber}33`, borderRadius: 5, textDecoration: 'none', transition: 'background 0.12s', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.background = `${C.amber}20`} onMouseLeave={e => e.currentTarget.style.background = `${C.amber}12`}>
-                  <span style={{ fontSize: '1rem' }}>📞</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', textTransform: 'uppercase', color: C.amber }}>Zavolať</span>
-                </a>
-              )}
-              {c.linkedin && (
-                <a href={c.linkedin} target="_blank" rel="noreferrer" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', padding: '0.6rem 0.5rem', background: '#818cf812', border: '1px solid #818cf833', borderRadius: 5, textDecoration: 'none', transition: 'background 0.12s', cursor: 'pointer' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#818cf820'} onMouseLeave={e => e.currentTarget.style.background = '#818cf812'}>
-                  <span style={{ fontSize: '1rem' }}>🔗</span>
-                  <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#818cf8' }}>LinkedIn</span>
-                </a>
-              )}
+          {/* D) Data quality */}
+          <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderRadius: 6, padding: '0.8rem 0.95rem' }}>
+            <SecHead label="Kvalita dát" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: missing.length ? '0.6rem' : 0 }}>
+              {[
+                { label: 'Confidence',     value: c.confidence,  col: confCol },
+                { label: 'Zdroj',          value: c.sourceType,  col: C.sub },
+                { label: 'Posl. aktualizácia', value: ts ? new Date(ts).toLocaleDateString('sk-SK') : null, col: C.sub },
+              ].map(({ label, value, col }) => (
+                <div key={label} style={{ background: '#0a0d12', border: `1px solid ${C.border}`, borderRadius: 4, padding: '0.45rem 0.55rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.3rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.18rem' }}>{label}</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.5rem', fontWeight: 600, color: value ? col : C.ghost, fontStyle: value ? 'normal' : 'italic' }}>{value || '—'}</div>
+                </div>
+              ))}
             </div>
-          )}
+            {missing.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: mono, fontSize: '0.31rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: C.ghost }}>Chýba:</span>
+                {missing.map(m => (
+                  <span key={m} style={{ fontFamily: mono, fontSize: '0.31rem', letterSpacing: '1px', color: C.amber, padding: '0.06rem 0.3rem', border: `1px solid ${C.amber}33`, borderRadius: 2, background: `${C.amber}0a` }}>{m}</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* E) AI notes */}
+          <div style={{ background: `${C.orange}07`, border: `1px solid ${C.orange}1e`, borderLeft: `3px solid ${C.orange}44`, borderRadius: 6, padding: '0.8rem 0.95rem' }}>
+            <SecHead label="AI odporúčanie" col={`${C.orange}77`} />
+            <p style={{ fontFamily: sans, fontSize: '0.74rem', color: '#aab4c0', lineHeight: 1.75, margin: 0, marginBottom: '0.6rem' }}>{aiText}</p>
+            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: '0.5rem' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.3rem', letterSpacing: '2px', textTransform: 'uppercase', color: `${C.green}77`, marginBottom: '0.28rem' }}>Odporúčaný ďalší krok</div>
+              <p style={{ fontFamily: sans, fontSize: '0.72rem', color: C.sub, lineHeight: 1.65, margin: 0 }}>{nextAction}</p>
+            </div>
+          </div>
+
+          {/* F) Actions */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.2rem', borderTop: `1px solid ${C.border}` }}>
+            <ActionBtn href={`mailto:${c.email}`} color="#4ade80" disabled={!c.email}>✉ Poslať email</ActionBtn>
+            <ActionBtn href={`tel:${c.phone}`}    color={C.amber}  disabled={!c.phone}>📞 Zavolať</ActionBtn>
+            <ActionBtn href={c.linkedin} target="_blank" color="#818cf8" disabled={!c.linkedin}>🔗 LinkedIn</ActionBtn>
+          </div>
 
         </div>
       </div>
