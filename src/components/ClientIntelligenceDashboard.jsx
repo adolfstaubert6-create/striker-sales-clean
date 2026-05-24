@@ -360,6 +360,189 @@ function qaBtn(col, disabled) {
   }
 }
 
+// ── AI Intelligence Analysis Overlay ─────────────────────────────────────────
+const AI_SOURCES = [
+  { key: 'web',       label: 'Web firmy',               icon: '🌐' },
+  { key: 'impressum', label: 'Impressum / Legal',        icon: '📋' },
+  { key: 'linkedin',  label: 'LinkedIn profil',          icon: '🔗' },
+  { key: 'email',     label: 'Email lookup',             icon: '✉'  },
+  { key: 'phone',     label: 'Telefón',                  icon: '📞' },
+  { key: 'social',    label: 'Sociálne siete',           icon: '◈'  },
+  { key: 'tech',      label: 'Technické oddelenie',      icon: '⚙'  },
+  { key: 'decision',  label: 'Decision maker analýza',   icon: '◎'  },
+]
+const AI_NEXT = [
+  { icon: '✉', label: 'Obohatiť email',                      col: '#4ade80' },
+  { icon: '🔗', label: 'Nájsť LinkedIn',                     col: '#818cf8' },
+  { icon: '⚡', label: 'Pripraviť technický outreach',       col: '#ffaa00' },
+  { icon: '◎', label: 'Identifikovať ďalších decision makerov', col: '#ff5c00' },
+]
+
+function AIAnalysisOverlay({ contact: c, onClose }) {
+  const [scanIdx,  setScanIdx]  = useState(0)
+  const [done,     setDone]     = useState([])
+  const [finished, setFinished] = useState(false)
+  const [pulse,    setPulse]    = useState(true)
+
+  // Pulse tick for scanning glow
+  useEffect(() => {
+    const id = setInterval(() => setPulse(p => !p), 550)
+    return () => clearInterval(id)
+  }, [])
+
+  // Sequential scanning chain
+  useEffect(() => {
+    if (finished || scanIdx >= AI_SOURCES.length) {
+      if (scanIdx >= AI_SOURCES.length) setFinished(true)
+      return
+    }
+    const delay = 480 + Math.random() * 620
+    const id = setTimeout(() => {
+      setDone(prev => [...prev, scanIdx])
+      setScanIdx(prev => prev + 1)
+    }, delay)
+    return () => clearTimeout(id)
+  }, [scanIdx, finished])
+
+  // ESC closes overlay (not the modal below)
+  useEffect(() => {
+    const fn = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [])
+
+  const priority = c.priority || (c.decisionPower === 'HIGH' ? 'PRIMARY' : c.decisionPower === 'MEDIUM' ? 'SECONDARY' : 'SUPPORT')
+  const priCol   = priority === 'PRIMARY' ? C.orange : priority === 'SECONDARY' ? C.amber : C.dim
+
+  function srcState(i) {
+    if (done.includes(i))               return 'done'
+    if (i === scanIdx && !finished)     return 'scanning'
+    return 'pending'
+  }
+
+  const aiText = c.decisionPower === 'HIGH'
+    ? `Kontakt na pozícii „${c.role || 'rozhodovateľa'}" má vysokú pravdepodobnosť ovplyvňovať energetické a technické rozhodnutia. Odporúčame priamy outreach s dôrazom na ROI a úsporu prevádzkových nákladov.`
+    : `Kontakt na pozícii „${c.role || 'influencera'}" pravdepodobne ovplyvňuje výberové konanie. Odporúčame zahrnúť do komunikačnej stratégie ako sekundárny kontakt s technickými argumentmi.`
+
+  return (
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 700, padding: '1.25rem' }}>
+      <div style={{ background: '#06090d', border: `1px solid ${C.orange}44`, borderRadius: 10, width: '100%', maxWidth: 560, maxHeight: '91vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: `0 0 80px ${C.orange}14, 0 0 0 1px ${C.orange}18, 0 28px 60px rgba(0,0,0,0.75)` }}>
+
+        {/* Header */}
+        <div style={{ padding: '1.15rem 1.5rem', borderBottom: `1px solid ${C.orange}28`, background: `linear-gradient(135deg, #08090e 0%, ${C.orange}0e 60%, #08090e 100%)`, position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '3.5px', textTransform: 'uppercase', color: pulse ? C.orange : `${C.orange}88`, marginBottom: '0.18rem', transition: 'color 0.5s' }}>⬡ STRIKER AI ENGINE</div>
+            <div style={{ fontFamily: sans, fontSize: '0.96rem', fontWeight: 700, color: '#f4f6f9', letterSpacing: '-0.01em' }}>AI Inteligentná analýza</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            {!finished
+              ? <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: pulse ? C.amber : `${C.amber}44`, display: 'inline-block', transition: 'background 0.4s', boxShadow: pulse ? `0 0 8px ${C.amber}` : 'none' }} />
+                  <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.amber }}>SCANUJE...</span>
+                </div>
+              : <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.green, display: 'inline-block', boxShadow: `0 0 8px ${C.green}` }} />
+                  <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.green }}>DOKONČENÉ</span>
+                </div>
+            }
+            <button onClick={onClose} style={{ background: 'transparent', border: `1px solid ${C.orange}33`, color: '#6b7280', borderRadius: 3, padding: '0.22rem 0.6rem', fontFamily: mono, fontSize: '0.47rem', letterSpacing: '1px', cursor: 'pointer', transition: 'all 0.15s' }}>
+              ✕ Zavrieť
+            </button>
+          </div>
+        </div>
+
+        <div style={{ padding: '1.3rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+          {/* 01 — Analýza kontaktu */}
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.39rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: `${C.orange}88`, marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: `1px solid ${C.orange}1a` }}>01 — Analýza kontaktu</div>
+            <div style={{ background: '#0d1117', border: `1px solid ${C.border2}`, borderLeft: `3px solid ${priCol}`, borderRadius: 5, padding: '0.9rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+              {[
+                ['Meno',           c.name         || '—'],
+                ['Pozícia',        c.role         || '—'],
+                ['Decision Power', c.decisionPower || '—'],
+                ['AI Relevancia',  c.aiScore ? `${c.aiScore} / 100` : '—'],
+                ['Confidence',     c.confidence   || '—'],
+                ['Priorita',       priority],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <div style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.14rem' }}>{label}</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.56rem', fontWeight: 600, color: '#b8c4d4' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 02 — Hľadanie údajov */}
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.39rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: `${C.orange}88`, marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: `1px solid ${C.orange}1a` }}>02 — Hľadanie údajov</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.38rem' }}>
+              {AI_SOURCES.map((src, i) => {
+                const st  = srcState(i)
+                const col = st === 'done' ? C.green : st === 'scanning' ? C.amber : '#2a3040'
+                const bg  = st === 'done' ? `${C.green}09` : st === 'scanning' ? `${C.amber}0e` : '#0a0d12'
+                return (
+                  <div key={src.key} style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', padding: '0.5rem 0.75rem', background: bg, border: `1px solid ${col}${st === 'pending' ? '' : '55'}`, borderRadius: 4, transition: 'all 0.35s', boxShadow: st === 'scanning' ? `0 0 14px ${C.amber}0d` : 'none' }}>
+                    <span style={{ fontSize: '0.78rem', flexShrink: 0, opacity: st === 'pending' ? 0.22 : 1, transition: 'opacity 0.3s' }}>{src.icon}</span>
+                    <span style={{ flex: 1, fontFamily: mono, fontSize: '0.52rem', color: st === 'pending' ? '#2a3040' : st === 'scanning' ? C.amber : '#9aa8bc', transition: 'color 0.35s' }}>{src.label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      {/* Progress bar */}
+                      <div style={{ width: 56, height: 3, background: '#101520', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ width: st === 'done' ? '100%' : st === 'scanning' ? (pulse ? '80%' : '35%') : '0%', height: '100%', background: st === 'done' ? C.green : C.amber, borderRadius: 2, transition: st === 'scanning' ? 'width 0.5s ease' : 'width 0.2s', boxShadow: st !== 'pending' ? `0 0 6px ${col}77` : 'none' }} />
+                      </div>
+                      <span style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: col, minWidth: 68, textAlign: 'right', transition: 'color 0.35s' }}>
+                        {st === 'done' ? '✓ Hotovo' : st === 'scanning' ? '⟳ Skenujem' : '○ Čaká'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 03 — AI odporúčanie */}
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.39rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: `${C.orange}88`, marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: `1px solid ${C.orange}1a` }}>03 — AI odporúčanie</div>
+            {finished ? (
+              <div style={{ background: `${C.orange}0b`, border: `1px solid ${C.orange}33`, borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1rem 1.2rem', boxShadow: `0 0 24px ${C.orange}0c` }}>
+                <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.orange, marginBottom: '0.42rem' }}>⬡ STRIKER AI VÝSTUP</div>
+                <p style={{ fontFamily: sans, fontSize: '0.78rem', color: '#dde6f2', lineHeight: 1.78, margin: 0 }}>{aiText}</p>
+              </div>
+            ) : (
+              <div style={{ background: '#0a0d12', border: '1px solid #1a2030', borderRadius: 5, padding: '0.85rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <span style={{ fontFamily: mono, fontSize: '0.7rem', color: pulse ? C.amber : `${C.amber}44`, transition: 'color 0.4s' }}>⟳</span>
+                <span style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151', fontStyle: 'italic' }}>Analýza prebieha — čakám na dokončenie skenovania...</span>
+              </div>
+            )}
+          </div>
+
+          {/* 04 — Potenciálne ďalšie kroky */}
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.39rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: `${C.orange}88`, marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: `1px solid ${C.orange}1a` }}>04 — Potenciálne ďalšie kroky</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+              {AI_NEXT.map(({ icon, label, col }) => (
+                <button key={label} disabled={!finished}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 0.8rem', background: finished ? `${col}0b` : '#0a0d12', border: `1px solid ${finished ? col + '44' : '#1a2030'}`, borderRadius: 5, cursor: finished ? 'pointer' : 'default', textAlign: 'left', transition: 'all 0.3s', opacity: finished ? 1 : 0.35, boxShadow: finished ? `0 0 12px ${col}0c` : 'none' }}>
+                  <span style={{ fontSize: '0.75rem', flexShrink: 0 }}>{icon}</span>
+                  <span style={{ fontFamily: mono, fontSize: '0.46rem', color: finished ? col : '#374151', lineHeight: 1.35, transition: 'color 0.3s' }}>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ borderTop: `1px solid ${C.orange}1a`, paddingTop: '0.85rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.36rem 1rem', border: '1px solid #1e2530', background: 'transparent', color: '#6b7280', borderRadius: 3, cursor: 'pointer' }}>
+              ✕ Zavrieť analýzu
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Contact detail modal helpers ─────────────────────────────────────────────
 function CField({ label, value, element }) {
   return (
@@ -393,11 +576,13 @@ function SectionLabel({ children }) {
 
 // ── Contact Detail Modal ───────────────────────────────────────────────────────
 function ContactDetailModal({ contact: c, onClose }) {
+  const [showAI, setShowAI] = useState(false)
+
   useEffect(() => {
-    const fn = e => { if (e.key === 'Escape') onClose() }
+    const fn = e => { if (e.key === 'Escape' && !showAI) onClose() }
     window.addEventListener('keydown', fn)
     return () => window.removeEventListener('keydown', fn)
-  }, [])
+  }, [showAI])
 
   const init    = (c.name || c.role || '?').charAt(0).toUpperCase()
   const AC      = [C.orange, C.purple, C.green, C.amber, '#60a5fa', '#f472b6']
@@ -513,16 +698,28 @@ function ContactDetailModal({ contact: c, onClose }) {
             </div>
           </div>
 
+          {/* AI Intelligence button — prominent CTA */}
+          <button onClick={() => setShowAI(true)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.65rem', padding: '0.75rem 1rem', background: `linear-gradient(135deg, ${C.orange}18 0%, ${C.amber}0e 100%)`, border: `1px solid ${C.orange}66`, borderRadius: 6, cursor: 'pointer', transition: 'all 0.18s', boxShadow: `0 0 20px ${C.orange}18, inset 0 0 20px ${C.orange}06` }}>
+            <span style={{ fontSize: '1rem' }}>⬡</span>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.orange, fontWeight: 700, lineHeight: 1.2 }}>AI Inteligentná analýza</div>
+              <div style={{ fontFamily: mono, fontSize: '0.38rem', color: `${C.amber}99`, marginTop: '0.08rem', letterSpacing: '0.5px' }}>Spustiť STRIKER AI enrichment engine</div>
+            </div>
+            <span style={{ marginLeft: 'auto', fontFamily: mono, fontSize: '0.38rem', color: C.orange, letterSpacing: '1.5px' }}>▶</span>
+          </button>
+
           {/* Quick actions */}
           <div style={{ borderTop: '1px solid #1e2530', paddingTop: '1rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
             {c.email    ? <a href={`mailto:${c.email}`} style={mdBtn('#4ade80')}>✉ Poslať email</a> : <span style={{ ...mdBtn('#374151'), opacity: 0.4, cursor: 'default' }}>✉ Email</span>}
             {c.phone    ? <a href={`tel:${c.phone}`}   style={mdBtn(C.amber)}>📞 Zavolať</a>      : <span style={{ ...mdBtn('#374151'), opacity: 0.4, cursor: 'default' }}>📞 Zavolať</span>}
             {c.linkedin ? <a href={c.linkedin} target="_blank" rel="noreferrer" style={mdBtn('#818cf8')}>🔗 LinkedIn</a> : <span style={{ ...mdBtn('#374151'), opacity: 0.4, cursor: 'default' }}>🔗 LinkedIn</span>}
-            <span style={mdBtn(C.orange)}>🧠 AI Analýza</span>
             <span style={mdBtn('#5a6878')}>📝 Poznámka</span>
           </div>
         </div>
       </div>
+
+      {showAI && <AIAnalysisOverlay contact={c} onClose={() => setShowAI(false)} />}
     </div>
   )
 }
