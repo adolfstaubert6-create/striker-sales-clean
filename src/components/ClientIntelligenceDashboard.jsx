@@ -1166,6 +1166,42 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     // PROFIL KLIENTA
     if (nav === 'profile') return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+        {/* Section A description */}
+        <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1rem 1.15rem' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', marginBottom: '0.85rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.39rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: `${C.orange}99` }}>Sekcia A</span>
+            <span style={{ fontFamily: mono, fontSize: '0.55rem', fontWeight: 700, color: C.orange }}>— Analýza klienta</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+            {[
+              {
+                num: '01', color: '#60a5fa', label: 'AI Profil klienta', time: '≤ 15s',
+                desc: 'Klikni „Generovať AI profil" — Claude AI dostane názov firmy, mesto, segment a fit skóre. Vráti: profil klienta, hlavné problémy, obchodnú stratégiu, odporúčaný ďalší krok a návrh emailu.',
+              },
+              {
+                num: '02', color: C.amber, label: 'Signal Engine', time: '≤ 20s',
+                desc: 'Klikni „Signal Engine" — SerpAPI prehľadá Google recenzie a zmienky o firme. Vráti: živé signály (sťažnosti, chvály), hodnotenie, teplotný tlak a potrebu modernizácie.',
+              },
+              {
+                num: '03', color: C.green, label: 'Výstup', time: 'uložené do Firestore',
+                desc: 'Výsledky sa uložia ku klientovi: profil, pain pointy, stratégia, živé signály, odporúčaný email. Ostatné záložky (Energetický problém, Recenzie, Financie...) sa naplnia automaticky.',
+              },
+            ].map(({ num, color, label, time, desc }) => (
+              <div key={num} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                <div style={{ fontFamily: mono, fontSize: '0.44rem', color, fontWeight: 700, flexShrink: 0, width: 16, paddingTop: '0.04rem' }}>{num}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.18rem' }}>
+                    <span style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1px', textTransform: 'uppercase', color }}>{label}</span>
+                    <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.ghost, letterSpacing: '0.5px' }}>{time}</span>
+                  </div>
+                  <div style={{ fontFamily: sans, fontSize: '0.72rem', color: C.sub, lineHeight: 1.6 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
           <Btn onClick={doAnalysis} disabled={gLoad}>{gLoad ? '⏳ Analyzujem...' : '🧠 Generovať AI profil'}</Btn>
           <ProgressBar running={gLoad} maxSecs={15} type="ai" />
@@ -1379,10 +1415,11 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     if (nav === 'contacts') return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-        {/* Pipeline architecture description */}
+        {/* Section B description */}
         <div style={{ background: C.card, border: `1px solid ${C.border2}`, borderLeft: `3px solid ${C.orange}`, borderRadius: 5, padding: '1rem 1.15rem' }}>
-          <div style={{ fontFamily: mono, fontSize: '0.39rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: `${C.orange}99`, marginBottom: '0.85rem' }}>
-            Contact Discovery Pipeline
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', marginBottom: '0.85rem' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.39rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: `${C.orange}99` }}>Sekcia B</span>
+            <span style={{ fontFamily: mono, fontSize: '0.55rem', fontWeight: 700, color: C.orange }}>— Contact Discovery Pipeline</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
             {[
