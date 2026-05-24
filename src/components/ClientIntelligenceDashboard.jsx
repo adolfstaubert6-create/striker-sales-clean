@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { updateTarget, addContact, removeContact } from '../services/intelTargetService.js'
 import { INTEL_STATUS_LIST } from '../constants/intelMeta.js'
 import ProgressBar from './ProgressBar.jsx'
@@ -383,6 +383,9 @@ function AIAnalysisOverlay({ contact: c, onClose }) {
   const [done,     setDone]     = useState([])
   const [finished, setFinished] = useState(false)
   const [pulse,    setPulse]    = useState(true)
+  const scrollRef = useRef(null)
+
+  useEffect(() => { scrollRef.current?.focus() }, [])
 
   // Pulse tick for scanning glow
   useEffect(() => {
@@ -426,8 +429,8 @@ function AIAnalysisOverlay({ contact: c, onClose }) {
 
   return (
     <div onClick={e => e.target === e.currentTarget && onClose()}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 700, padding: '1.25rem' }}>
-      <div style={{ background: '#06090d', border: `1px solid ${C.orange}44`, borderRadius: 10, width: '100%', maxWidth: 560, maxHeight: '91vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: `0 0 80px ${C.orange}14, 0 0 0 1px ${C.orange}18, 0 28px 60px rgba(0,0,0,0.75)` }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 700, padding: '1.25rem', overflow: 'hidden' }}>
+      <div ref={scrollRef} tabIndex={-1} style={{ background: '#06090d', border: `1px solid ${C.orange}44`, borderRadius: 10, width: '100%', maxWidth: 560, maxHeight: '91vh', overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', boxShadow: `0 0 80px ${C.orange}14, 0 0 0 1px ${C.orange}18, 0 28px 60px rgba(0,0,0,0.75)`, outline: 'none' }}>
 
         {/* Header */}
         <div style={{ padding: '1.15rem 1.5rem', borderBottom: `1px solid ${C.orange}28`, background: `linear-gradient(135deg, #08090e 0%, ${C.orange}0e 60%, #08090e 100%)`, position: 'sticky', top: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -577,6 +580,9 @@ function SectionLabel({ children }) {
 // ── Contact Detail Modal ───────────────────────────────────────────────────────
 function ContactDetailModal({ contact: c, target: tgt, onClose }) {
   const [showAI, setShowAI] = useState(false)
+  const scrollRef = useRef(null)
+
+  useEffect(() => { scrollRef.current?.focus() }, [])
 
   useEffect(() => {
     const fn = e => { if (e.key === 'Escape' && !showAI) onClose() }
@@ -602,9 +608,9 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
   return (
     <div
       onClick={e => e.target === e.currentTarget && onClose()}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: '1.25rem' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: '1.25rem', overflow: 'hidden' }}
     >
-      <div style={{ background: '#0d1117', border: '1px solid #252b36', borderRadius: 8, width: '100%', maxWidth: 540, maxHeight: '88vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: `0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px ${ac}18` }}>
+      <div ref={scrollRef} tabIndex={-1} style={{ background: '#0d1117', border: '1px solid #252b36', borderRadius: 8, width: '100%', maxWidth: 540, maxHeight: '88vh', overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', boxShadow: `0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px ${ac}18`, outline: 'none' }}>
 
         {/* ── Modal header ── */}
         <div style={{ background: `linear-gradient(135deg, #0d1117 0%, ${ac}0d 100%)`, padding: '1.4rem 1.5rem 1.2rem', borderBottom: '1px solid #1e2530', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -1375,7 +1381,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 300, display: 'flex', overflow: 'hidden' }}>
 
       {/* ── LEFT ── */}
-      <div style={{ ...lStyle, background: '#07090d', borderRight: `1px solid ${C.border2}`, display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingTop: 38 }}>
+      <div style={{ ...lStyle, background: '#07090d', borderRight: `1px solid ${C.border2}`, display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehavior: 'contain', paddingTop: 38 }}>
         <BackBtn onClose={onClose} />
 
         {/* Zoom bar */}
@@ -1415,7 +1421,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{ ...cStyle, overflowY: 'auto', borderRight: `1px solid ${C.border}` }}>
+      <div style={{ ...cStyle, overflowY: 'auto', overscrollBehavior: 'contain', borderRight: `1px solid ${C.border}` }}>
         {/* Zoom bar */}
         <div style={{ position: 'sticky', top: 0, zIndex: 15, display: 'flex', justifyContent: 'flex-end', padding: '0.4rem 0.75rem', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
           <ZoomBtn panel="center" zoomed={zoomed} setZoomed={setZoomed} />
@@ -1430,7 +1436,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       )}
 
       {/* ── RIGHT ── */}
-      <div style={{ ...rStyle, overflowY: 'auto', background: C.panel }}>
+      <div style={{ ...rStyle, overflowY: 'auto', overscrollBehavior: 'contain', background: C.panel }}>
         {/* Zoom bar */}
         <div style={{ position: 'sticky', top: 0, zIndex: 15, display: 'flex', justifyContent: 'flex-end', padding: '0.4rem 0.5rem', background: C.panel, borderBottom: `1px solid ${C.border}` }}>
           <ZoomBtn panel="right" zoomed={zoomed} setZoomed={setZoomed} />
