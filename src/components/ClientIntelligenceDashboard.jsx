@@ -248,6 +248,26 @@ function BackBtn({ onClose }) {
   )
 }
 
+// ── Panel zoom button ──────────────────────────────────────────────────────────
+function ZoomBtn({ panel, zoomed, setZoomed }) {
+  const on = zoomed === panel
+  return (
+    <button
+      onClick={() => setZoomed(on ? null : panel)}
+      title={on ? 'ESC — zatvoriť' : 'Rozbaliť panel'}
+      style={{
+        background: on ? `${C.orange}1a` : 'rgba(7,9,13,0.85)',
+        border: `1px solid ${on ? C.orange + '66' : '#1e2530'}`,
+        color: on ? C.orange : '#4b5563',
+        borderRadius: 3, cursor: 'pointer', lineHeight: 1,
+        padding: '0.22rem 0.45rem', fontFamily: mono, fontSize: '0.75rem',
+        transition: 'all 0.15s', flexShrink: 0,
+        boxShadow: on ? `0 0 10px ${C.orange}22` : 'none',
+      }}
+    >{on ? '⊠' : '⛶'}</button>
+  )
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 export default function ClientIntelligenceDashboard({ target: initialT, onClose }) {
   const [t]              = useState(initialT)
@@ -264,6 +284,24 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
   )
   const [photoUrl,  setPhotoUrl]  = useState(t.photoUrl || null)
   const [photoLoad, setPhotoLoad] = useState(!t.photoUrl)
+  const [zoomed,    setZoomed]    = useState(null) // null | 'left' | 'center' | 'right'
+
+  useEffect(() => {
+    const fn = e => { if (e.key === 'Escape' && zoomed) setZoomed(null) }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [zoomed])
+
+  const TZ = 'all 0.28s cubic-bezier(0.4,0,0.2,1)'
+  const lStyle = zoomed === 'left'   ? { flex: '1 1 0', minWidth: 0,  transition: TZ }
+               : zoomed              ? { width: 0, minWidth: 0, overflow: 'hidden', opacity: 0, flexShrink: 0, transition: TZ }
+               :                      { width: 255, flexShrink: 0, transition: TZ }
+  const cStyle = zoomed === 'center' ? { flex: '1 1 0', minWidth: 0,  transition: TZ }
+               : zoomed              ? { width: 0, minWidth: 0, overflow: 'hidden', opacity: 0, flexShrink: 0, flex: 'none', transition: TZ }
+               :                      { flex: 1, minWidth: 0, transition: TZ }
+  const rStyle = zoomed === 'right'  ? { flex: '1 1 0', minWidth: 0,  transition: TZ }
+               : zoomed              ? { width: 0, minWidth: 0, overflow: 'hidden', opacity: 0, flexShrink: 0, transition: TZ }
+               :                      { width: 265, flexShrink: 0, transition: TZ }
 
   useEffect(() => {
     if (t.photoUrl) return
@@ -698,12 +736,14 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     <div style={{ position: 'fixed', inset: 0, background: C.bg, zIndex: 300, display: 'flex', overflow: 'hidden' }}>
 
       {/* ── LEFT ── */}
-      <div style={{ width: 255, flexShrink: 0, background: '#07090d', borderRight: `1px solid ${C.border2}`, display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingTop: 38 }}>
-
-        {/* Back button — position:fixed, rendered outside scroll flow */}
+      <div style={{ ...lStyle, background: '#07090d', borderRight: `1px solid ${C.border2}`, display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingTop: 38 }}>
         <BackBtn onClose={onClose} />
 
-        {/* Photo / Placeholder */}
+        {/* Zoom bar */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 15, display: 'flex', justifyContent: 'flex-end', padding: '0.28rem 0.5rem', background: '#07090d', borderBottom: `1px solid ${C.border}` }}>
+          <ZoomBtn panel="left" zoomed={zoomed} setZoomed={setZoomed} />
+        </div>
+
         <HotelPhoto t={t} photoUrl={photoUrl} loading={photoLoad} />
 
         {/* Company info */}
@@ -736,68 +776,80 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.75rem 2rem', borderRight: `1px solid ${C.border}` }}>
-        <Center />
+      <div style={{ ...cStyle, overflowY: 'auto', borderRight: `1px solid ${C.border}` }}>
+        {/* Zoom bar */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 15, display: 'flex', justifyContent: 'flex-end', padding: '0.4rem 0.75rem', background: C.bg, borderBottom: `1px solid ${C.border}` }}>
+          <ZoomBtn panel="center" zoomed={zoomed} setZoomed={setZoomed} />
+        </div>
+        <div style={{ padding: '1.5rem 2rem' }}>
+          <Center />
+        </div>
       </div>
 
-      {/* ── RIGHT — always visible ── */}
-      <div style={{ width: 265, flexShrink: 0, overflowY: 'auto', padding: '1.25rem 1rem', background: C.panel, display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-        {/* Pipeline status */}
-        <div>
-          <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Stav obchodu</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-            {INTEL_STATUS_LIST.slice(0, 5).map(s => (
-              <button key={s.key} onClick={() => updateTarget(t.id, { status: s.key })}
-                style={{ display: 'block', width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.6rem', border: `1px solid ${t.status === s.key ? s.color + '55' : C.border}`, background: t.status === s.key ? s.bg : 'transparent', color: t.status === s.key ? s.color : C.ghost, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
-                {s.label}
-              </button>
-            ))}
-          </div>
+      {/* ── RIGHT ── */}
+      <div style={{ ...rStyle, overflowY: 'auto', background: C.panel }}>
+        {/* Zoom bar */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 15, display: 'flex', justifyContent: 'flex-end', padding: '0.4rem 0.5rem', background: C.panel, borderBottom: `1px solid ${C.border}` }}>
+          <ZoomBtn panel="right" zoomed={zoomed} setZoomed={setZoomed} />
         </div>
+        <div style={{ padding: '1.25rem 1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-        {/* Contacts */}
-        <div>
-          <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Kontakty</div>
-          {t.email && (
-            <div style={{ padding: '0.5rem 0.65rem', background: C.card, border: `1px solid ${C.border}`, borderRadius: 3, marginBottom: '0.4rem' }}>
-              <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green }}>✉ {t.email}</a>
+          {/* Pipeline status */}
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Stav obchodu</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              {INTEL_STATUS_LIST.slice(0, 5).map(s => (
+                <button key={s.key} onClick={() => updateTarget(t.id, { status: s.key })}
+                  style={{ display: 'block', width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.28rem 0.6rem', border: `1px solid ${t.status === s.key ? s.color + '55' : C.border}`, background: t.status === s.key ? s.bg : 'transparent', color: t.status === s.key ? s.color : C.ghost, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
+                  {s.label}
+                </button>
+              ))}
             </div>
-          )}
-          {(t.contacts || []).slice(0, 3).map((c, i) => <ContactCard key={i} c={c} />)}
-          {!t.contacts?.length && !t.email && <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.ghost, fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>}
-          <button onClick={() => { setNav('contacts'); doContacts() }} disabled={cLoad}
-            style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem', border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, borderRadius: 3, cursor: 'pointer', marginTop: '0.4rem', opacity: cLoad ? 0.6 : 1 }}>
-            {cLoad ? '⏳' : '🔍 Nájsť kontakty'}
-          </button>
-        </div>
-
-        {/* Quick actions */}
-        <div>
-          <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Rýchle akcie</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-            {[
-              { l: '✉ Emaily',          c: C.green,  a: () => setNav('email')                               },
-              { l: '⚡ Signal Engine',  c: C.orange, a: () => { doSignals(); setNav('signals') }             },
-              { l: '🧠 AI Analýza',    c: C.amber,  a: () => { doAnalysis(); setNav('profile') }            },
-              { l: '🔍 Kontakty',      c: C.purple, a: () => { setNav('contacts'); doContacts() }           },
-            ].map(({ l, c, a }) => (
-              <button key={l} onClick={a}
-                style={{ fontFamily: mono, fontSize: '0.51rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.35rem 0.7rem', border: `1px solid ${c}33`, background: `${c}07`, color: c, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
-                {l}
-              </button>
-            ))}
           </div>
-        </div>
 
-        {/* Data freshness */}
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, padding: '0.7rem 0.85rem', marginTop: 'auto' }}>
-          <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.35rem' }}>Aktuálnosť dát</div>
-          <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', marginBottom: '0.18rem' }}>
-            <Badge type={live ? 'live' : 'ai'} small />
-            <span style={{ fontFamily: mono, fontSize: '0.52rem', color: live ? C.green : C.dim }}>{live ? 'Živé Google dáta' : 'AI simulácia'}</span>
+          {/* Contacts */}
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Kontakty</div>
+            {t.email && (
+              <div style={{ padding: '0.5rem 0.65rem', background: C.card, border: `1px solid ${C.border}`, borderRadius: 3, marginBottom: '0.4rem' }}>
+                <a href={`mailto:${t.email}`} style={{ fontFamily: mono, fontSize: '0.58rem', color: C.green }}>✉ {t.email}</a>
+              </div>
+            )}
+            {(t.contacts || []).slice(0, 3).map((c, i) => <ContactCard key={i} c={c} />)}
+            {!t.contacts?.length && !t.email && <div style={{ fontFamily: mono, fontSize: '0.55rem', color: C.ghost, fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>}
+            <button onClick={() => { setNav('contacts'); doContacts() }} disabled={cLoad}
+              style={{ width: '100%', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', textTransform: 'uppercase', padding: '0.3rem', border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, borderRadius: 3, cursor: 'pointer', marginTop: '0.4rem', opacity: cLoad ? 0.6 : 1 }}>
+              {cLoad ? '⏳' : '🔍 Nájsť kontakty'}
+            </button>
           </div>
-          {t.reviewsCachedAt && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: C.ghost }}>{new Date(t.reviewsCachedAt).toLocaleDateString('sk-SK')}</div>}
+
+          {/* Quick actions */}
+          <div>
+            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.6rem' }}>Rýchle akcie</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              {[
+                { l: '✉ Emaily',          c: C.green,  a: () => setNav('email')                               },
+                { l: '⚡ Signal Engine',  c: C.orange, a: () => { doSignals(); setNav('signals') }             },
+                { l: '🧠 AI Analýza',    c: C.amber,  a: () => { doAnalysis(); setNav('profile') }            },
+                { l: '🔍 Kontakty',      c: C.purple, a: () => { setNav('contacts'); doContacts() }           },
+              ].map(({ l, c, a }) => (
+                <button key={l} onClick={a}
+                  style={{ fontFamily: mono, fontSize: '0.51rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.35rem 0.7rem', border: `1px solid ${c}33`, background: `${c}07`, color: c, borderRadius: 3, cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s' }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Data freshness */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 4, padding: '0.7rem 0.85rem', marginTop: 'auto' }}>
+            <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.ghost, marginBottom: '0.35rem' }}>Aktuálnosť dát</div>
+            <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', marginBottom: '0.18rem' }}>
+              <Badge type={live ? 'live' : 'ai'} small />
+              <span style={{ fontFamily: mono, fontSize: '0.52rem', color: live ? C.green : C.dim }}>{live ? 'Živé Google dáta' : 'AI simulácia'}</span>
+            </div>
+            {t.reviewsCachedAt && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: C.ghost }}>{new Date(t.reviewsCachedAt).toLocaleDateString('sk-SK')}</div>}
+          </div>
         </div>
       </div>
     </div>
