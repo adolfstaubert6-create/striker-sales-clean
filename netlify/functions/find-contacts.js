@@ -15,25 +15,66 @@ const CONTACT_PATHS = [
   '/management', '/karriere', '/datenschutz', '/uber-uns',
 ]
 
-// Decision-maker roles we specifically look for
-const DECISION_ROLES = [
-  'Geschäftsführer(?:in)?(?:\\/in)?', 'Direktor(?:in)?', 'Director',
-  'General\\s+Manager', 'Hotel\\s+(?:Manager|Director)', 'Hoteldirektor(?:in)?',
-  'Facility\\s+Manager', 'Facility\\s+Management',
-  'Technisch(?:er|e)\\s+Leiter(?:in)?', 'Techniker(?:in)?', 'Haustechnik(?:er(?:in)?)?',
-  'Energy\\s+Manager', 'Energiemanager(?:in)?',
-  'Einkauf(?:sleiter(?:in)?)?', 'Procurement(?:\\s+Manager)?',
-  'Operations?\\s+(?:Manager|Director|Leiter(?:in)?)',
-  'Betriebsleiter(?:in)?',
-  'Kaufmännisch(?:er|e)\\s+Leiter(?:in)?', 'Kaufmännisch(?:er|e)\\s+Geschäftsführer(?:in)?',
-  'F&B\\s+Manager', 'Food\\s+(?:and|&)\\s+Beverage\\s+Manager',
-  'Sales\\s+(?:Manager|Director|Leiter(?:in)?)',
-  'Front\\s+Office\\s+Manager', 'Revenue\\s+Manager',
-  'IT\\s+(?:Leiter(?:in)?|Manager)', 'Marketing\\s+(?:Manager|Leiter(?:in)?)',
-  'Reservierungsleiter(?:in)?', 'Restaurantleiter(?:in)?', 'Hausleiter(?:in)?',
-  'Inhaber(?:in)?', 'Eigentümer(?:in)?', 'Geschäftsinhaber(?:in)?',
+// Priority 1 — Technical decision makers (STRIKER target: energy/facility control)
+const TECH_ROLE_PATTERNS = [
+  'Facility\\s+Manager(?:in)?', 'Facility\\s+Management',
+  'Technisch(?:er|e)\\s+Leiter(?:in)?', 'Technical\\s+(?:Manager|Director)',
+  'Energy\\s+Manager(?:in)?', 'Energiemanager(?:in)?',
+  'Operations?\\s+Manager(?:in)?',
+  'Haustechnik(?:er(?:in)?)?', 'Hausleiter(?:in)?',
+  'Techniker(?:in)?',
 ]
-const ROLE_RE = new RegExp(`(?:${DECISION_ROLES.join('|')})`, 'gi')
+
+// Priority 2 — Business decision makers (budget approval)
+const BIZ_ROLE_PATTERNS = [
+  'Geschäftsführer(?:in)?(?:\\/in)?',
+  'Direktor(?:in)?', 'Director',
+  'General\\s+Manager',
+  'Hotel\\s+(?:Manager|Director)', 'Hoteldirektor(?:in)?',
+  'Operations?\\s+Director',
+  'Inhaber(?:in)?', 'Eigentümer(?:in)?', 'Geschäftsinhaber(?:in)?',
+  'Kaufmännisch(?:er|e)\\s+(?:Leiter(?:in)?|Geschäftsführer(?:in)?)',
+  'Betriebsleiter(?:in)?',
+]
+
+// Roles to ignore entirely — not relevant for STRIKER outreach
+const IGNORE_ROLE_PATTERNS = [
+  'HR', 'Human\\s+Resources?', 'Personal(?:leiter(?:in)?|abteilung)?',
+  'Empfang(?:sleiter(?:in)?)?', 'Rezeptionist(?:in)?', 'Front\\s+Desk',
+  'Marketing(?:\\s+(?:Manager|Leiter(?:in)?))?',
+  'Sales\\s+(?:Manager|Director|Leiter(?:in)?)',
+  'Reservierung(?:sleiter(?:in)?)?',
+  'Karriere', 'Bewerbung(?:en)?',
+  'Reinigung(?:sleiter(?:in)?)?', 'Housekeeping\\s+Manager',
+  'Restaurantleiter(?:in)?', 'F&B\\s+Manager', 'Food(?:\\s+and|&)\\s+Beverage',
+  'Revenue\\s+Manager', 'Front\\s+Office\\s+Manager',
+  'IT\\s+(?:Leiter(?:in)?|Manager)',
+]
+
+const ROLE_RE   = new RegExp(`(?:${[...TECH_ROLE_PATTERNS, ...BIZ_ROLE_PATTERNS].join('|')})`, 'gi')
+const IGNORE_RE = new RegExp(`(?:${IGNORE_ROLE_PATTERNS.join('|')})`, 'i')
+
+function classifyRole(role) {
+  if (!role) return null
+  const r = role.toLowerCase()
+  if (new RegExp(TECH_ROLE_PATTERNS.join('|'), 'i').test(r)) return 'technical'
+  if (new RegExp(BIZ_ROLE_PATTERNS.join('|'), 'i').test(r))  return 'business'
+  return null
+}
+
+function selectBestContacts(contacts) {
+  const score = c => {
+    const conf = { HIGH: 30, MEDIUM: 20, LOW: 10 }[c.confidence] || 0
+    return conf + (c.email ? 8 : 0) + (c.name ? 5 : 0) + (c.phone ? 2 : 0)
+  }
+  const techList = contacts.filter(c => c.contactCategory === 'technical').sort((a, b) => score(b) - score(a))
+  const bizList  = contacts.filter(c => c.contactCategory === 'business' ).sort((a, b) => score(b) - score(a))
+  const result   = []
+  if (techList[0]) result.push(techList[0])
+  if (bizList[0])  result.push(bizList[0])
+  console.log(`[find-contacts] selectBest: tech=${techList.length}→${techList[0]?.name || '-'} biz=${bizList.length}→${bizList[0]?.name || '-'}`)
+  return result
+}
 
 // German full name: optional title + Firstname + optional middle + Lastname
 const NAME_SRC = '(?:(?:Dr|Prof|Dipl\\.?(?:\\s*\\w+)?|Ing|Mag|MBA|MSc)\\.?\\s+)?[A-ZÄÖÜ][a-zäöüß]{1,20}(?:-[A-ZÄÖÜ][a-zäöüß]{1,20})?\\s+(?:(?:van|von|de|der|den)\\s+)?[A-ZÄÖÜ][a-zäöüß]{1,25}'
@@ -124,10 +165,20 @@ function extractPersonsRegex(text, sourceUrl, pageType) {
   while ((rm = ROLE_RE.exec(text)) !== null) {
     const role    = rm[0].replace(/\s+/g, ' ').trim()
     const rolePos = rm.index
+
+    // Skip ignored roles
+    if (IGNORE_RE.test(role)) {
+      console.log(`[regex] ignored role "${role}"`)
+      continue
+    }
+
+    const category = classifyRole(role)
+    if (!category) continue  // must be tech or biz
+
     // ±400 chars around the role
-    const wStart  = Math.max(0, rolePos - 400)
-    const wEnd    = Math.min(text.length, rolePos + 400)
-    const window  = text.slice(wStart, wEnd)
+    const wStart = Math.max(0, rolePos - 400)
+    const wEnd   = Math.min(text.length, rolePos + 400)
+    const window = text.slice(wStart, wEnd)
 
     nameRe.lastIndex = 0
     let nm
@@ -142,15 +193,13 @@ function extractPersonsRegex(text, sourceUrl, pageType) {
       if (seen.has(key)) continue
       seen.add(key)
 
-      // Look for personal email in same window
-      const emails  = extractEmails(window)
+      const emails   = extractEmails(window)
       const personal = emails.find(e => !isGeneralEmail(e)) || null
-
       const confidence = personal ? 'HIGH' : 'MEDIUM'
-      console.log(`[regex] found: "${name}" — "${role}" [${confidence}] src=${pageType}`)
 
+      console.log(`[regex] found [${category}]: "${name}" — "${role}" [${confidence}] src=${pageType}`)
       found.push({
-        name, role, email: personal,
+        name, role, contactCategory: category, email: personal,
         emailType: personal ? 'PERSONAL' : null,
         phone: null, source: sourceUrl, sourceType: pageType, confidence,
       })
@@ -313,10 +362,23 @@ PRE-EXTRACTED (verified — ONLY use these):
 EMAILS: ${emailList}
 PHONES: ${phoneList}
 
-TARGET ROLES (look specifically for people with these roles):
-Geschäftsführer, Direktor, General Manager, Facility Manager, Technischer Leiter,
-Energy Manager, Einkauf, Procurement, Operations Manager, Betriebsleiter,
-Hoteldirektor, Sales Manager, Front Office Manager, Inhaber, Eigentümer
+TARGET ROLES — find ONLY people with these roles (two categories):
+
+TECHNICAL (contactCategory: "technical"):
+Facility Manager, Facility Managerin, Technischer Leiter, Technische Leiterin,
+Energy Manager, Energiemanager, Operations Manager, Haustechniker, Hausleiter,
+Technical Manager, Technical Director
+
+BUSINESS (contactCategory: "business"):
+Geschäftsführer, Geschäftsführerin, Direktor, Direktorin, Director,
+General Manager, Hotel Manager, Hoteldirektor, Operations Director,
+Inhaber, Inhaberin, Eigentümer, Eigentümerin, Betriebsleiter, Betriebsleiterin,
+Kaufmännischer Leiter, Kaufmännische Leiterin
+
+IGNORE completely (do NOT include):
+HR, Marketing, Sales Manager, Front Office Manager, Rezeptionist, Empfang,
+Reservierung, Revenue Manager, Housekeeping, Restaurantleiter, F&B Manager,
+IT Leiter, Karriere — these roles are NOT relevant
 
 SOURCE PAGES (each tagged with type):
 ${combined}
@@ -331,6 +393,7 @@ STRICT RULES:
 7. generalEmail: best info@/kontakt@ style email from the list
 8. REJECT: generic words, company names, city names, product names as person names
 9. Return empty contacts array if no real persons found — do NOT invent people
+10. contactCategory MUST be "technical" or "business" — never null for named contacts
 
 Return ONLY valid JSON (no markdown fences):
 {
@@ -338,6 +401,7 @@ Return ONLY valid JSON (no markdown fences):
     {
       "name": "Full Name or null",
       "role": "exact title from text or null",
+      "contactCategory": "technical|business",
       "email": "from EMAILS list or null",
       "emailType": "PERSONAL|GENERAL|null",
       "phone": "from PHONES list or null",
@@ -460,14 +524,23 @@ exports.handler = async (event) => {
       }
     }
 
-    // 6. Fallback: if still no named contacts but personal emails exist
+    // 6. Ensure contactCategory is set on all contacts (fill gaps from Claude)
+    result.contacts = result.contacts.map(c => ({
+      ...c,
+      contactCategory: c.contactCategory || classifyRole(c.role) || null,
+    })).filter(c => c.contactCategory) // drop contacts with no relevant category
+
+    // 7. Select at most 1 technical + 1 business (best scored)
+    result.contacts = selectBestContacts(result.contacts)
+
+    // 8. Fallback: if still no named contacts but personal emails exist
     if (!result.contacts.filter(c => c.name).length) {
       const personal = allEmails.filter(e => !isGeneralEmail(e))
-      personal.slice(0, 2).forEach(email => {
+      personal.slice(0, 1).forEach(email => {
         const alreadyIn = result.contacts.some(c => c.email === email)
         if (!alreadyIn) {
           result.contacts.push({
-            name: null, role: null, email, emailType: 'PERSONAL',
+            name: null, role: null, contactCategory: null, email, emailType: 'PERSONAL',
             phone: allPhones[0] || null, source: baseUrl || 'web',
             sourceType: 'website', confidence: 'LOW',
           })
@@ -478,7 +551,7 @@ exports.handler = async (event) => {
       }
     }
 
-    // 7. Final debug summary
+    // 10. Final debug summary
     const ms = Date.now() - t0
     console.log(`[find-contacts] DONE ${ms}ms — ${result.contacts.length} contacts, generalEmail=${result.generalEmail}`)
     result.contacts.forEach((c, i) => {

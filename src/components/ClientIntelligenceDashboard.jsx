@@ -254,10 +254,8 @@ function BackBtn({ onClose }) {
 
 // ── Demo contacts ─────────────────────────────────────────────────────────────
 const DEMO_CONTACTS = [
-  { _id: 'd1', role: 'General Manager',       decisionPower: 'HIGH',   priority: 'PRIMARY',   status: 'NEEDS ENRICHMENT', aiScore: 85, source: 'demo' },
-  { _id: 'd2', role: 'Facility Manager',      decisionPower: 'HIGH',   priority: 'PRIMARY',   status: 'NEEDS ENRICHMENT', aiScore: 78, source: 'demo' },
-  { _id: 'd3', role: 'Technical Manager',     decisionPower: 'MEDIUM', priority: 'SECONDARY', status: 'NEEDS ENRICHMENT', aiScore: 62, source: 'demo' },
-  { _id: 'd4', role: 'Procurement / Einkauf', decisionPower: 'MEDIUM', priority: 'SUPPORT',   status: 'NEEDS ENRICHMENT', aiScore: 55, source: 'demo' },
+  { _id: 'd1', role: 'Facility Manager', contactCategory: 'technical', decisionPower: 'MEDIUM', priority: 'PRIMARY', status: 'NEEDS ENRICHMENT', aiScore: 82, source: 'demo' },
+  { _id: 'd2', role: 'Geschäftsführer',  contactCategory: 'business',  decisionPower: 'HIGH',   priority: 'PRIMARY', status: 'NEEDS ENRICHMENT', aiScore: 85, source: 'demo' },
 ]
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -918,6 +916,12 @@ function detectAiScore(role) {
   const dp = detectDecisionPower(role)
   return dp === 'HIGH' ? 82 : dp === 'MEDIUM' ? 65 : 48
 }
+function detectContactCategory(role) {
+  if (!role) return null
+  if (/facility|technisch|energy|operations?\s+manager|haustechnik|techniker|technical\s+(manager|director)/i.test(role)) return 'technical'
+  if (/geschäftsführ|direktor|director|general\s+manager|hotel\s+manager|inhaber|eigentümer|betriebsleiter/i.test(role)) return 'business'
+  return null
+}
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 export default function ClientIntelligenceDashboard({ target: initialT, onClose }) {
@@ -1057,17 +1061,24 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         if (newContacts.length > 0) {
           const enriched = newContacts.map(c => ({
             ...c,
-            source:        c.source       || t.web || 'web',
-            sourceType:    c.sourceType   || 'website',
-            confidence:    c.confidence   || 'MEDIUM',
-            status:        c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT',
-            decisionPower: detectDecisionPower(c.role),
-            priority:      detectPriority(c.role),
-            aiScore:       detectAiScore(c.role),
+            source:          c.source          || t.web || 'web',
+            sourceType:      c.sourceType      || 'website',
+            confidence:      c.confidence      || 'MEDIUM',
+            status:          c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT',
+            contactCategory: c.contactCategory || detectContactCategory(c.role),
+            decisionPower:   detectDecisionPower(c.role),
+            priority:        detectPriority(c.role),
+            aiScore:         detectAiScore(c.role),
           }))
           await updateTarget(t.id, { contacts: enriched })
           setLocalContacts(enriched)
-          setCMsg(`✅ ${enriched.length} kontaktov nájdených`)
+          const techC = enriched.find(c => c.contactCategory === 'technical')
+          const bizC  = enriched.find(c => c.contactCategory === 'business')
+          const msg = techC && bizC ? '✅ Technický aj manažérsky kontakt nájdený'
+                    : techC        ? '✅ Technický kontakt nájdený'
+                    : bizC         ? '✅ Manažérsky kontakt nájdený'
+                    : `✅ ${enriched.length} kontakt${enriched.length > 1 ? 'y' : ''} nájdené`
+          setCMsg(msg)
         } else {
           setCMsg('Officiálny kontakt hotela je dostupný.')
         }
@@ -1564,28 +1575,63 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           {cMsg && <div style={{ fontFamily: mono, fontSize: '0.48rem', color: cMsg.startsWith('✅') || cMsg.startsWith('Ofic') ? C.green : C.amber, textAlign: 'center' }}>{cMsg}</div>}
 
           {/* Level 2 — Person contacts */}
-          <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151', paddingTop: '0.2rem' }}>
-            Kontaktné osoby
-          </div>
+          {(() => {
+            const techContact = localContacts.find(c => c.contactCategory === 'technical')
+            const bizContact  = localContacts.find(c => c.contactCategory === 'business')
+            const hasResults  = cSearched
 
-          {localContacts.length > 0
-            ? localContacts.map((c, i) => <RightContactCard key={i} c={c} onSelect={setSelectedContact} />)
-            : cSearched
-            ? (
-              <div style={{ background: '#0c0f15', border: '1px solid #1a2030', borderRadius: 4, padding: '0.85rem 0.9rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                <div style={{ fontFamily: mono, fontSize: '0.46rem', color: C.green }}>✓ Officiálny kontakt hotela je dostupný.</div>
-                <div style={{ fontFamily: mono, fontSize: '0.44rem', color: '#4b5563' }}>Kontaktné osoby zatiaľ neboli nájdené.</div>
+            const chainStatus = hasResults
+              ? techContact && bizContact ? { label: '◈ KOMPLETNÝ DECISION CHAIN', color: C.green }
+              : techContact               ? { label: '◫ Čaká sa na manažérsky kontakt', color: C.amber }
+              : bizContact                ? { label: '◫ Čaká sa na technický kontakt', color: C.amber }
+              : null
+              : null
+
+            const WaitingSlot = ({ label }) => (
+              <div style={{ border: '1px dashed #1e2a3a', borderRadius: 4, padding: '0.7rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#0d1117', border: '1px dashed #2a3548', flexShrink: 0 }} />
+                <div style={{ fontFamily: mono, fontSize: '0.42rem', color: '#374151', fontStyle: 'italic', lineHeight: 1.5 }}>{label}</div>
               </div>
             )
-            : (
-              <>
-                {DEMO_CONTACTS.map(c => <RightContactCard key={c._id} c={c} onSelect={setSelectedContact} />)}
-                <div style={{ fontFamily: mono, fontSize: '0.43rem', color: '#4b5563', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.7, padding: '0.25rem 0.5rem' }}>
-                  Spusti „Nájsť kontakty" pre reálne mená a emaily
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', paddingTop: '0.15rem' }}>
+                {chainStatus && (
+                  <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: chainStatus.color, textAlign: 'center', padding: '0.2rem 0', borderTop: `1px solid ${chainStatus.color}22`, borderBottom: `1px solid ${chainStatus.color}22` }}>
+                    {chainStatus.label}
+                  </div>
+                )}
+
+                {/* Technical slot */}
+                <div>
+                  <div style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#60a5fa', marginBottom: '0.3rem' }}>Technický kontakt</div>
+                  {!hasResults
+                    ? <RightContactCard c={DEMO_CONTACTS[0]} onSelect={setSelectedContact} />
+                    : techContact
+                    ? <RightContactCard c={techContact} onSelect={setSelectedContact} />
+                    : <WaitingSlot label="Čaká sa na technický kontakt" />
+                  }
                 </div>
-              </>
+
+                {/* Business slot */}
+                <div>
+                  <div style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.orange, marginBottom: '0.3rem' }}>Manažérsky kontakt</div>
+                  {!hasResults
+                    ? <RightContactCard c={DEMO_CONTACTS[1]} onSelect={setSelectedContact} />
+                    : bizContact
+                    ? <RightContactCard c={bizContact} onSelect={setSelectedContact} />
+                    : <WaitingSlot label="Čaká sa na manažérsky kontakt" />
+                  }
+                </div>
+
+                {!hasResults && (
+                  <div style={{ fontFamily: mono, fontSize: '0.43rem', color: '#4b5563', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.7, padding: '0.15rem 0.5rem' }}>
+                    Spusti „Nájsť kontakty" pre reálne mená a emaily
+                  </div>
+                )}
+              </div>
             )
-          }
+          })()}
         </div>
       </div>
     </div>
