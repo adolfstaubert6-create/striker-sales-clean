@@ -72,7 +72,7 @@ function KPI({ label, value, unit = '', source, color, note, max = 100 }) {
           {note && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: '#8a96a6', lineHeight: 1.4, marginTop: '0.1rem' }}>{note}</div>}
         </>
       ) : (
-        <div style={{ fontFamily: mono, fontSize: '0.54rem', color: '#4b5a6d', fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>
+        <div style={{ fontFamily: mono, fontSize: '0.54rem', color: '#8a96a6', fontStyle: 'italic' }}>Dáta zatiaľ neoverené</div>
       )}
     </div>
   )
@@ -468,7 +468,7 @@ function AIAnalysisOverlay({ contact: c, onClose }) {
               ].map(([label, value]) => (
                 <div key={label}>
                   <div style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.14rem' }}>{label}</div>
-                  <div style={{ fontFamily: mono, fontSize: '0.56rem', fontWeight: 600, color: '#b8c4d4' }}>{value}</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.56rem', fontWeight: 600, color: '#ccd4e0' }}>{value}</div>
                 </div>
               ))}
             </div>
@@ -547,7 +547,7 @@ function AIAnalysisOverlay({ contact: c, onClose }) {
 function CField({ label, value, element }) {
   return (
     <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
-      <span style={{ fontFamily: mono, fontSize: '0.44rem', color: '#4b5a6d', textTransform: 'uppercase', letterSpacing: '1px', width: 72, flexShrink: 0, paddingTop: '0.06rem' }}>{label}</span>
+      <span style={{ fontFamily: mono, fontSize: '0.44rem', color: '#8a96a6', textTransform: 'uppercase', letterSpacing: '1px', width: 72, flexShrink: 0, paddingTop: '0.06rem' }}>{label}</span>
       {value
         ? element || <span style={{ fontFamily: mono, fontSize: '0.58rem', color: '#c0c8d4' }}>{value}</span>
         : <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span>
@@ -570,7 +570,7 @@ function mdBtn(col) {
 }
 function SectionLabel({ children }) {
   return (
-    <div style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#4b5a6d', marginBottom: '0.7rem', paddingBottom: '0.35rem', borderBottom: '1px solid #1a2030' }}>{children}</div>
+    <div style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#8a96a6', marginBottom: '0.7rem', paddingBottom: '0.35rem', borderBottom: '1px solid #1a2030' }}>{children}</div>
   )
 }
 
@@ -597,7 +597,7 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
   const influence    = c.decisionPower === 'HIGH' ? 'Priamy vplyv' : c.decisionPower === 'MEDIUM' ? 'Nepriamy vplyv' : 'Minimálny vplyv'
   const missing      = [!c.name && 'Chýba meno', !c.email && 'Chýba email', !c.phone && 'Chýba telefón', !c.linkedin && 'Chýba LinkedIn'].filter(Boolean)
   const missingCount = [c.name, c.email, c.phone, c.mobile, c.linkedin, c.department].filter(v => !v).length
-  const fbs          = { fontFamily: mono, fontSize: '0.36rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.08rem 0.42rem', border: '1px solid #1e2a38', background: 'transparent', color: '#374151', borderRadius: 2, cursor: 'pointer', whiteSpace: 'nowrap' }
+  const fbs          = { fontFamily: mono, fontSize: '0.37rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.1rem 0.48rem', border: '1px solid #2a3850', background: 'rgba(255,255,255,0.025)', color: '#9aaabb', borderRadius: 2, cursor: 'pointer', whiteSpace: 'nowrap' }
 
   return (
     <div
@@ -644,16 +644,16 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
           {missing.length > 0 && (
             <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
               {missing.map(m => (
-                <span key={m} style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#ef4444', padding: '0.1rem 0.42rem', border: '1px solid #ef444430', borderRadius: 2, background: '#ef44440a' }}>⚠ {m}</span>
+                <span key={m} style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#f87171', padding: '0.12rem 0.48rem', border: '1px solid #ef444455', borderRadius: 2, background: '#ef44441e' }}>⚠ {m}</span>
               ))}
             </div>
           )}
 
           {/* A — Osobné údaje */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #1a2030' }}>
-              <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.orange, fontWeight: 700 }}>A</span>
-              <span style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#4b5a6d' }}>Osobné údaje</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #252f3e' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.44rem', color: C.orange, fontWeight: 700 }}>A</span>
+              <span style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#8a96a6', fontWeight: 600 }}>Osobné údaje</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
               {[
@@ -664,10 +664,10 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
                 { label: 'Lokalita',  val: tgt ? [tgt.city, tgt.country].filter(Boolean).join(', ') : null, col: null, fill: false },
               ].map(({ label, val, col, fill }) => (
                 <div key={label} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                  <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>{label}</span>
+                  <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>{label}</span>
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     {val ? <span style={{ fontFamily: mono, fontSize: '0.56rem', color: col || '#b8c4d4' }}>{val}</span>
-                         : <span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#2a3344', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span>}
+                         : <span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#52626f', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span>}
                     {fill && <span style={fbs}>+ {fill}</span>}
                   </div>
                 </div>
@@ -677,56 +677,56 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
 
           {/* B — Kontaktné údaje */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #1a2030' }}>
-              <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.orange, fontWeight: 700 }}>B</span>
-              <span style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#4b5a6d' }}>Kontaktné údaje</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #252f3e' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.44rem', color: C.orange, fontWeight: 700 }}>B</span>
+              <span style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#8a96a6', fontWeight: 600 }}>Kontaktné údaje</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
               {/* Email */}
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>Email</span>
+                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>Email</span>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   {c.email ? <a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: '#4ade80', textDecoration: 'none' }}>✉ {c.email}</a>
-                           : <><span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#2a3344', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span><span style={fbs}>+ Doplniť email</span></>}
+                           : <><span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#52626f', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span><span style={fbs}>+ Doplniť email</span></>}
                 </div>
               </div>
               {/* Telefón */}
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>Telefón</span>
+                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>Telefón</span>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   {c.phone ? <a href={`tel:${c.phone}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: C.amber, textDecoration: 'none' }}>📞 {c.phone}</a>
-                           : <><span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#2a3344', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span><span style={fbs}>+ Doplniť telefón</span></>}
+                           : <><span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#52626f', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span><span style={fbs}>+ Doplniť telefón</span></>}
                 </div>
               </div>
               {/* Mobil */}
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>Mobil</span>
+                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>Mobil</span>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   {c.mobile ? <a href={`tel:${c.mobile}`} style={{ fontFamily: mono, fontSize: '0.56rem', color: C.amber, textDecoration: 'none' }}>📱 {c.mobile}</a>
-                            : <><span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#2a3344', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span><span style={fbs}>+ Doplniť mobil</span></>}
+                            : <><span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#52626f', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span><span style={fbs}>+ Doplniť mobil</span></>}
                 </div>
               </div>
               {/* LinkedIn */}
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>LinkedIn</span>
+                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>LinkedIn</span>
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   {c.linkedin ? <a href={c.linkedin} target="_blank" rel="noreferrer" style={{ fontFamily: mono, fontSize: '0.56rem', color: '#818cf8', textDecoration: 'none' }}>🔗 Otvoriť profil</a>
-                              : <><span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#2a3344', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span><span style={fbs}>+ Doplniť LinkedIn</span></>}
+                              : <><span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#52626f', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span><span style={fbs}>+ Doplniť LinkedIn</span></>}
                 </div>
               </div>
               {/* Zdroj */}
               <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>Zdroj</span>
-                <span style={{ fontFamily: mono, fontSize: '0.56rem', color: '#7a8898' }}>{c.source === 'demo' ? 'Demo dáta' : c.source || '—'}</span>
+                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px', width: 76, flexShrink: 0 }}>Zdroj</span>
+                <span style={{ fontFamily: mono, fontSize: '0.56rem', color: '#9aaabb' }}>{c.source === 'demo' ? 'Demo dáta' : c.source || '—'}</span>
               </div>
             </div>
           </div>
 
           {/* C — Obchodná rola */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #1a2030' }}>
-              <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.orange, fontWeight: 700 }}>C</span>
-              <span style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#4b5a6d' }}>Obchodná rola</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #252f3e' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.44rem', color: C.orange, fontWeight: 700 }}>C</span>
+              <span style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#8a96a6', fontWeight: 600 }}>Obchodná rola</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.48rem' }}>
               {[
@@ -736,8 +736,8 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
                 ['Status',         status],
               ].map(([label, value]) => (
                 <div key={label} style={{ background: '#0b0e13', border: '1px solid #1a2030', borderRadius: 4, padding: '0.58rem 0.75rem' }}>
-                  <div style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.16rem' }}>{label}</div>
-                  <div style={{ fontFamily: mono, fontSize: '0.57rem', fontWeight: 600, color: '#b8c4d4' }}>{value}</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.36rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#6b7a8d', marginBottom: '0.16rem' }}>{label}</div>
+                  <div style={{ fontFamily: mono, fontSize: '0.57rem', fontWeight: 600, color: '#d8e0ec' }}>{value}</div>
                 </div>
               ))}
             </div>
@@ -745,18 +745,18 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
 
           {/* D — Dátová kvalita */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #1a2030' }}>
-              <span style={{ fontFamily: mono, fontSize: '0.36rem', color: C.orange, fontWeight: 700 }}>D</span>
-              <span style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#4b5a6d' }}>Dátová kvalita</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #252f3e' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.44rem', color: C.orange, fontWeight: 700 }}>D</span>
+              <span style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#8a96a6', fontWeight: 600 }}>Dátová kvalita</span>
             </div>
             <div style={{ background: '#0b0e13', border: '1px solid #1a2030', borderRadius: 5, padding: '0.85rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px' }}>Zdroj dát</span>
-                <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#7a8898' }}>{c.source === 'demo' ? 'Demo dáta' : c.source || '—'}</span>
+                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px' }}>Zdroj dát</span>
+                <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#9aaabb' }}>{c.source === 'demo' ? 'Demo dáta' : c.source || '—'}</span>
               </div>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.28rem' }}>
-                  <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px' }}>Spoľahlivosť</span>
+                  <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px' }}>Spoľahlivosť</span>
                   <span style={{ fontFamily: mono, fontSize: '0.52rem', color: confCol, fontWeight: 600 }}>{c.confidence || '—'}{confPct ? ` · ${confPct}%` : ''}</span>
                 </div>
                 <div style={{ height: 4, background: '#101520', borderRadius: 2, overflow: 'hidden' }}>
@@ -764,11 +764,11 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px' }}>Posledné overenie</span>
+                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px' }}>Posledné overenie</span>
                 <span style={{ fontFamily: mono, fontSize: '0.52rem', color: c.lastVerified ? '#7a8898' : '#2a3344', fontStyle: c.lastVerified ? 'normal' : 'italic' }}>{c.lastVerified || 'Neoverené'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#3a4555', textTransform: 'uppercase', letterSpacing: '1px' }}>Chýbajúce dáta</span>
+                <span style={{ fontFamily: mono, fontSize: '0.39rem', color: '#9aaabb', textTransform: 'uppercase', letterSpacing: '1px' }}>Chýbajúce dáta</span>
                 <span style={{ fontFamily: mono, fontSize: '0.52rem', color: missingCount > 3 ? '#ef4444' : missingCount > 1 ? C.amber : C.green, fontWeight: 600 }}>{missingCount} polí chýba</span>
               </div>
             </div>
@@ -776,13 +776,13 @@ function ContactDetailModal({ contact: c, target: tgt, onClose }) {
 
           {/* Interná poznámka */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #1a2030' }}>
-              <span style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#4b5a6d' }}>Interná poznámka ku kontaktu</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem', paddingBottom: '0.32rem', borderBottom: '1px solid #252f3e' }}>
+              <span style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#8a96a6', fontWeight: 600 }}>Interná poznámka ku kontaktu</span>
             </div>
             {c.notes
-              ? <p style={{ fontFamily: sans, fontSize: '0.75rem', color: '#b0bac8', lineHeight: 1.75, margin: 0, background: '#0b0e13', border: '1px solid #1a2030', borderRadius: 4, padding: '0.85rem 1rem' }}>{c.notes}</p>
+              ? <p style={{ fontFamily: sans, fontSize: '0.75rem', color: '#c8d2de', lineHeight: 1.75, margin: 0, background: '#0b0e13', border: '1px solid #1a2030', borderRadius: 4, padding: '0.85rem 1rem' }}>{c.notes}</p>
               : <div style={{ background: '#0b0e13', border: '1px dashed #1e2a38', borderRadius: 4, padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#2a3344', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span>
+                  <span style={{ fontFamily: mono, fontSize: '0.49rem', color: '#52626f', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span>
                   <span style={fbs}>+ Pridať poznámku</span>
                 </div>
             }
