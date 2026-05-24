@@ -9,7 +9,7 @@ const APOLLO_KEY  = process.env.APOLLO_API_KEY
 
 const EMAIL_RE   = /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g
 const PHONE_RE   = /(?:(?:\+49|0049|0)[0-9\s()\-\/\.]{6,20})/g
-const LINKEDIN_RE = /https?:\/\/(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9\-_%]+\/?/g
+const LINKEDIN_RE = /https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/in\/[A-Za-z0-9\-_%]+\/?/g
 
 const GENERAL_PREFIXES = [
   'info','kontakt','contact','office','verwaltung','direktion','reception',
@@ -206,6 +206,7 @@ exports.handler = async (event) => {
     // Extract LinkedIn from link OR snippet
     for (const l of (textFull.match(LINKEDIN_RE) || [])) {
       const clean = l.replace(/\/$/, '').replace(/\?.*$/, '')
+                     .replace(/https?:\/\/[a-z]{2,3}\.linkedin\.com/, 'https://www.linkedin.com')
       console.log(`[enrich-contact] LinkedIn candidate: ${clean}`)
       foundLinkedins.add(clean)
     }
