@@ -312,12 +312,17 @@ function RightContactCard({ c, onSelect }) {
         </div>
       </div>
 
-      {/* Status badge */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+      {/* Status + source badges */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontFamily: mono, fontSize: '0.39rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: st.color, padding: '0.12rem 0.4rem', border: `1px solid ${st.color}55`, borderRadius: 3, background: st.bg }}>
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: st.color, display: 'inline-block', flexShrink: 0 }} />
           {status}
         </span>
+        {c.sourceType && c.sourceType !== 'demo' && (() => {
+          const ST = { impressum: { label: 'IMPRESSUM', col: C.purple }, team: { label: 'TEAM PAGE', col: '#60a5fa' }, management: { label: 'MANAGEMENT', col: C.orange }, contact: { label: 'CONTACT', col: C.amber }, website: { label: 'WEB', col: C.dim } }
+          const s = ST[c.sourceType] || ST.website
+          return <span style={{ fontFamily: mono, fontSize: '0.35rem', letterSpacing: '1px', textTransform: 'uppercase', color: s.col, padding: '0.1rem 0.28rem', border: `1px solid ${s.col}44`, borderRadius: 2, background: `${s.col}0d` }}>{s.label}</span>
+        })()}
       </div>
 
       {/* Contact info */}
@@ -1053,6 +1058,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           const enriched = newContacts.map(c => ({
             ...c,
             source:        c.source       || t.web || 'web',
+            sourceType:    c.sourceType   || 'website',
             confidence:    c.confidence   || 'MEDIUM',
             status:        c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT',
             decisionPower: detectDecisionPower(c.role),
