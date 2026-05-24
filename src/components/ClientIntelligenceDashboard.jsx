@@ -744,10 +744,9 @@ function CompanyContactCard({ cc }) {
 
 // ── Contact discovery helpers ─────────────────────────────────────────────────
 const SCAN_STEPS = [
-  { key: 'scan',    label: 'Scanning website'   },
-  { key: 'impress', label: 'Searching impressum' },
-  { key: 'extract', label: 'Extracting contacts' },
-  { key: 'save',    label: 'Saving contacts'     },
+  { key: 'native', label: 'Scanning website'       },
+  { key: 'deep',   label: 'Deep search + AI'       },
+  { key: 'save',   label: 'Saving contacts'        },
 ]
 
 function detectDecisionPower(role) {
@@ -901,56 +900,84 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
     setCLoad(true); setCMsg(''); setNav('contacts')
     setCSteps(SCAN_STEPS.map((s, i) => ({ ...s, state: i === 0 ? 'scanning' : 'pending' })))
 
-    const t1 = setTimeout(() => setCSteps(p => p.map((s, i) => i === 0 ? { ...s, state: 'done' } : i === 1 ? { ...s, state: 'scanning' } : s)), 1500)
-    const t2 = setTimeout(() => setCSteps(p => p.map((s, i) => i === 1 ? { ...s, state: 'done' } : i === 2 ? { ...s, state: 'scanning' } : s)), 3500)
+    function saveResults(d) {
+      const scanned = (d.sourceNote || '').includes('Native') || (d.sourceNote || '').includes('Firecrawl')
+      const cc = {
+        name:       t.name,
+        address:    t.address || null,
+        city:       t.city,
+        country:    t.country,
+        website:    t.web,
+        email:      d.generalEmail || t.email || null,
+        phone:      (d.allPhones || [])[0] || t.phone || null,
+        allPhones:  d.allPhones  || [],
+        allEmails:  d.allEmails  || [],
+        sourceType: scanned ? 'website' : 'target',
+        confidence: d.generalEmail ? 'HIGH' : t.email ? 'MEDIUM' : 'LOW',
+        updatedAt:  new Date().toISOString(),
+      }
+      setLocalCompanyContact(cc)
+
+      const newContacts = d.contacts || []
+      if (newContacts.length > 0) {
+        const enriched = newContacts.map(c => ({
+          ...c,
+          source:          c.source          || t.web || 'web',
+          sourceType:      c.sourceType      || 'website',
+          confidence:      c.confidence      || 'MEDIUM',
+          status:          c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT',
+          contactCategory: c.contactCategory || detectContactCategory(c.role),
+          decisionPower:   detectDecisionPower(c.role),
+          priority:        detectPriority(c.role),
+          aiScore:         detectAiScore(c.role),
+        }))
+        setLocalContacts(enriched)
+        return { cc, enriched }
+      }
+      return { cc, enriched: [] }
+    }
 
     try {
-      const r = await fetch('/.netlify/functions/find-contacts', {
+      // ── Phase 1: native scrape (~8s) ────────────────────────────────────────
+      const r1 = await fetch('/.netlify/functions/find-contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companyName: t.name, website: t.web, city: t.city, country: t.country || 'DE' }),
       })
-      const d = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }))
+      const d1 = await r1.json().catch(() => ({ ok: true, contacts: [], allEmails: [], allPhones: [], generalEmail: null }))
 
-      clearTimeout(t1); clearTimeout(t2)
-      setCSteps(SCAN_STEPS.map((s, i) => ({ ...s, state: i <= 2 ? 'done' : 'scanning' })))
+      // Phase 1 done — start phase 2
+      setCSteps(p => p.map((s, i) => i === 0 ? { ...s, state: 'done' } : i === 1 ? { ...s, state: 'scanning' } : s))
+
+      // ── Phase 2: SerpAPI + Firecrawl + Claude (~20s) ─────────────────────────
+      const r2 = await fetch('/.netlify/functions/find-contacts-deep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName: t.name, website: t.web, city: t.city, country: t.country || 'DE',
+          phase1: {
+            contacts:  d1.contacts  || [],
+            allEmails: d1.allEmails || [],
+            allPhones: d1.allPhones || [],
+          },
+        }),
+      })
+      const d2 = await r2.json().catch(() => ({ ok: false, error: `HTTP ${r2.status}` }))
+
+      // Use phase2 result if ok, otherwise fall back to phase1
+      const d = d2.ok ? d2 : (d1.ok ? d1 : { ok: false })
+
+      setCSteps(p => p.map((s, i) => i <= 1 ? { ...s, state: 'done' } : i === 2 ? { ...s, state: 'scanning' } : s))
 
       if (d.ok) {
-        // Build & save Level 1 company contact
-        const scanned = (d.sourceNote || '').includes('Native') || (d.sourceNote || '').includes('Firecrawl')
-        const cc = {
-          name:       t.name,
-          address:    t.address || null,
-          city:       t.city,
-          country:    t.country,
-          website:    t.web,
-          email:      d.generalEmail || t.email || null,
-          phone:      (d.allPhones || [])[0] || t.phone || null,
-          allPhones:  d.allPhones  || [],
-          allEmails:  d.allEmails  || [],
-          sourceType: scanned ? 'website' : 'target',
-          confidence: d.generalEmail ? 'HIGH' : t.email ? 'MEDIUM' : 'LOW',
-          updatedAt:  new Date().toISOString(),
-        }
-        setLocalCompanyContact(cc)
-        await updateTarget(t.id, { companyContact: cc, ...(cc.email && !t.email ? { email: cc.email } : {}) })
+        const { cc, enriched } = saveResults(d)
+        await updateTarget(t.id, {
+          companyContact: cc,
+          ...(cc.email && !t.email ? { email: cc.email } : {}),
+          ...(enriched.length > 0 ? { contacts: enriched } : {}),
+        })
 
-        // Level 2 — person contacts
-        const newContacts = d.contacts || []
-        if (newContacts.length > 0) {
-          const enriched = newContacts.map(c => ({
-            ...c,
-            source:          c.source          || t.web || 'web',
-            sourceType:      c.sourceType      || 'website',
-            confidence:      c.confidence      || 'MEDIUM',
-            status:          c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT',
-            contactCategory: c.contactCategory || detectContactCategory(c.role),
-            decisionPower:   detectDecisionPower(c.role),
-            priority:        detectPriority(c.role),
-            aiScore:         detectAiScore(c.role),
-          }))
-          await updateTarget(t.id, { contacts: enriched })
-          setLocalContacts(enriched)
+        if (enriched.length > 0) {
           const techC = enriched.find(c => c.contactCategory === 'technical')
           const bizC  = enriched.find(c => c.contactCategory === 'business')
           const msg = techC && bizC ? '✅ Technický aj manažérsky kontakt nájdený'
@@ -966,7 +993,6 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       }
       setCSearched(true)
     } catch (e) {
-      clearTimeout(t1); clearTimeout(t2)
       setCMsg('⚠ ' + e.message)
       setCSearched(true)
     } finally {
