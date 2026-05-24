@@ -263,7 +263,7 @@ exports.handler = async (event) => {
   let finalPhone    = [...foundPhones][0] || null
   let sourceType    = 'GOOGLE'
 
-  if (!bestEmail && APOLLO_KEY) {
+  if ((!bestEmail || !isPersonalEmail(bestEmail)) && APOLLO_KEY) {
     apolloResult = await apolloSearch(contactName, hotelName, domain)
     if (apolloResult && !apolloResult.error) {
       if (apolloResult.email)    finalEmail    = apolloResult.email
@@ -320,7 +320,7 @@ exports.handler = async (event) => {
           linkedins:    [...foundLinkedins],
           matchedPages: matchedPages.length,
         },
-        apollo: apolloResult || { skipped: 'SerpAPI found personal email' },
+        apollo: apolloResult || { skipped: 'SerpAPI found personal/work email — Apollo not needed' },
         ms,
       },
     }),
