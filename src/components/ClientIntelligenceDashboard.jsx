@@ -561,7 +561,7 @@ function ContactDetailModal({ contact: c, onClose }) {
     : `Kontakt je vhodný ako doplnkový bod kontaktu v rámci outreach kampane pre toto zariadenie.`
   const nextAction = c.email
     ? `Poslať personalizovaný email na ${c.email} s dôrazom na konkrétny problém oddelenia.`
-    : `Najprv obohatiť profil — spusti „Obohatiť email" na karte kontaktu pre získanie pracovného emailu.`
+    : `Odporúčame doplniť kontaktné údaje osoby pre kvalitnejší outreach. Kompletizujte profil kontaktu.`
 
   function SecHead({ label, col }) {
     return <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: col || `${C.orange}cc`, marginBottom: '0.65rem', paddingBottom: '0.28rem', borderBottom: `1px solid #2a3040` }}>{label}</div>
@@ -577,13 +577,18 @@ function ContactDetailModal({ contact: c, onClose }) {
     )
   }
 
-  function ActionBtn({ href, target, color, disabled, children }) {
-    const base = { flex: 1, minWidth: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.7rem 0.6rem', borderRadius: 5, fontFamily: mono, fontSize: '0.5rem', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none', transition: 'background 0.12s', cursor: disabled ? 'not-allowed' : 'pointer', border: `1px solid ${disabled ? '#1e2530' : color + '55'}`, background: disabled ? '#0b0e15' : color + '18', color: disabled ? C.ghost : color, opacity: disabled ? 0.4 : 1 }
+  function ActionBtn({ href, target, color, disabled, onClick, children }) {
+    const base = { flex: 1, minWidth: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.72rem 0.65rem', borderRadius: 5, fontFamily: mono, fontSize: '0.52rem', fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none', transition: 'all 0.12s', cursor: disabled ? 'not-allowed' : 'pointer', border: `1px solid ${disabled ? '#252d3a' : color + '66'}`, background: disabled ? '#0d1018' : color + '1c', color: disabled ? '#3d4a58' : color, opacity: disabled ? 0.55 : 1, boxShadow: disabled ? 'none' : `inset 0 0 0 0 ${color}` }
+    if (onClick) return <button onClick={onClick} style={{ ...base, outline: 'none' }}
+      onMouseEnter={e => { e.currentTarget.style.background = color + '2e'; e.currentTarget.style.borderColor = color + '99'; e.currentTarget.style.boxShadow = `0 0 10px ${color}22` }}
+      onMouseLeave={e => { e.currentTarget.style.background = color + '1c'; e.currentTarget.style.borderColor = color + '66'; e.currentTarget.style.boxShadow = 'none' }}>
+      {children}
+    </button>
     if (disabled) return <span style={base}>{children}</span>
     return <a href={href} target={target} rel={target === '_blank' ? 'noreferrer' : undefined}
       style={base}
-      onMouseEnter={e => e.currentTarget.style.background = color + '28'}
-      onMouseLeave={e => e.currentTarget.style.background = color + '18'}>
+      onMouseEnter={e => { e.currentTarget.style.background = color + '2e'; e.currentTarget.style.borderColor = color + '99'; e.currentTarget.style.boxShadow = `0 0 10px ${color}22` }}
+      onMouseLeave={e => { e.currentTarget.style.background = color + '1c'; e.currentTarget.style.borderColor = color + '66'; e.currentTarget.style.boxShadow = 'none' }}>
       {children}
     </a>
   }
@@ -709,14 +714,17 @@ function ContactDetailModal({ contact: c, onClose }) {
             </div>
           </div>
 
-          {/* F) Actions */}
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.2rem', borderTop: `1px solid ${C.border}` }}>
-            <ActionBtn href={`mailto:${c.email}`} color="#4ade80" disabled={!c.email}>✉ Poslať email</ActionBtn>
-            <ActionBtn href={`tel:${c.phone}`}    color={C.amber}  disabled={!c.phone}>📞 Zavolať</ActionBtn>
-            <ActionBtn href={c.linkedin} target="_blank" color="#818cf8" disabled={!c.linkedin}>🔗 LinkedIn</ActionBtn>
-          </div>
-
         </div>
+
+        {/* F) Actions — sticky bottom bar */}
+        <div style={{ flexShrink: 0, borderTop: `1px solid #2a3040`, background: '#070a0f', padding: '0.85rem 1.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <ActionBtn href={`mailto:${c.email}`} color="#4ade80" disabled={!c.email}>✉ Poslať email</ActionBtn>
+          <ActionBtn href={`tel:${c.phone}`} color={C.amber} disabled={!c.phone}>📞 Zavolať</ActionBtn>
+          <ActionBtn href={c.linkedin} target="_blank" color="#818cf8" disabled={!c.linkedin}>🔗 LinkedIn</ActionBtn>
+          <ActionBtn onClick={() => {}} color="#60a5fa">📝 Poznámka</ActionBtn>
+          <ActionBtn onClick={() => {}} color={C.orange}>◈ Kompletizovať profil</ActionBtn>
+        </div>
+
       </div>
     </div>
   )
