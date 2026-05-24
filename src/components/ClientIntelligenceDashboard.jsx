@@ -270,7 +270,7 @@ const CONTACT_STATUS = {
 }
 
 // ── Right panel contact card ───────────────────────────────────────────────────
-function RightContactCard({ c }) {
+function RightContactCard({ c, onSelect }) {
   const [hov, setHov]   = useState(false)
   const init            = (c.name || c.role || '?').charAt(0).toUpperCase()
   const AC              = [C.orange, C.purple, C.green, C.amber, '#60a5fa', '#f472b6']
@@ -284,7 +284,8 @@ function RightContactCard({ c }) {
   return (
     <div
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ background: hov ? '#181d26' : '#13171e', border: `1px solid ${hov ? '#2d3444' : '#1e2530'}`, borderLeft: `3px solid ${priCol}`, borderRadius: 6, padding: '0.9rem 0.9rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', transition: 'all 0.15s' }}
+      onClick={() => onSelect && onSelect(c)}
+      style={{ background: hov ? '#181d26' : '#13171e', border: `1px solid ${hov ? '#2d3444' : '#1e2530'}`, borderLeft: `3px solid ${priCol}`, borderRadius: 6, padding: '0.9rem 0.9rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem', transition: 'all 0.15s', cursor: 'pointer' }}
     >
 
       {/* Priority label */}
@@ -359,6 +360,173 @@ function qaBtn(col, disabled) {
   }
 }
 
+// ── Contact detail modal helpers ─────────────────────────────────────────────
+function CField({ label, value, element }) {
+  return (
+    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+      <span style={{ fontFamily: mono, fontSize: '0.44rem', color: '#4b5a6d', textTransform: 'uppercase', letterSpacing: '1px', width: 72, flexShrink: 0, paddingTop: '0.06rem' }}>{label}</span>
+      {value
+        ? element || <span style={{ fontFamily: mono, fontSize: '0.58rem', color: '#c0c8d4' }}>{value}</span>
+        : <span style={{ fontFamily: mono, fontSize: '0.52rem', color: '#374151', fontStyle: 'italic' }}>Dáta zatiaľ nenájdené</span>
+      }
+    </div>
+  )
+}
+function CCard({ label, value }) {
+  return (
+    <div style={{ background: '#0b0e13', border: '1px solid #1a2030', borderRadius: 4, padding: '0.6rem 0.75rem' }}>
+      <div style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.22rem' }}>{label}</div>
+      <div style={{ fontFamily: mono, fontSize: '0.6rem', fontWeight: 600, color: value ? '#c8d0dc' : '#374151', fontStyle: value ? 'normal' : 'italic' }}>
+        {value || 'Nenájdené'}
+      </div>
+    </div>
+  )
+}
+function mdBtn(col) {
+  return { fontFamily: mono, fontSize: '0.47rem', letterSpacing: '0.5px', textTransform: 'uppercase', padding: '0.3rem 0.7rem', border: `1px solid ${col}55`, background: `${col}12`, color: col, borderRadius: 3, textDecoration: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }
+}
+function SectionLabel({ children }) {
+  return (
+    <div style={{ fontFamily: mono, fontSize: '0.41rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#4b5a6d', marginBottom: '0.7rem', paddingBottom: '0.35rem', borderBottom: '1px solid #1a2030' }}>{children}</div>
+  )
+}
+
+// ── Contact Detail Modal ───────────────────────────────────────────────────────
+function ContactDetailModal({ contact: c, onClose }) {
+  useEffect(() => {
+    const fn = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [])
+
+  const init    = (c.name || c.role || '?').charAt(0).toUpperCase()
+  const AC      = [C.orange, C.purple, C.green, C.amber, '#60a5fa', '#f472b6']
+  const ac      = AC[(init.charCodeAt(0) || 0) % AC.length]
+  const status  = c.status || (c.email ? 'READY TO CONTACT' : 'NEEDS ENRICHMENT')
+  const st      = CONTACT_STATUS[status] || CONTACT_STATUS['NEEDS ENRICHMENT']
+  const priority = c.priority || (c.decisionPower === 'HIGH' ? 'PRIMARY' : c.decisionPower === 'MEDIUM' ? 'SECONDARY' : 'SUPPORT')
+  const priCol  = priority === 'PRIMARY' ? C.orange : priority === 'SECONDARY' ? C.amber : C.dim
+  const isDemo  = c.source === 'demo'
+
+  return (
+    <div
+      onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: '1.25rem' }}
+    >
+      <div style={{ background: '#0d1117', border: '1px solid #252b36', borderRadius: 8, width: '100%', maxWidth: 540, maxHeight: '88vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: `0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px ${ac}18` }}>
+
+        {/* ── Modal header ── */}
+        <div style={{ background: `linear-gradient(135deg, #0d1117 0%, ${ac}0d 100%)`, padding: '1.4rem 1.5rem 1.2rem', borderBottom: '1px solid #1e2530', position: 'sticky', top: 0, zIndex: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+              <div style={{ width: 60, height: 60, borderRadius: '50%', background: `${ac}1e`, border: `2px solid ${ac}66`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `0 0 20px ${ac}28` }}>
+                <span style={{ fontFamily: sans, fontSize: '1.55rem', fontWeight: 700, color: ac }}>{init}</span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: '1.05rem', fontWeight: 700, color: c.name ? '#f4f6f9' : '#4b5563', lineHeight: 1.25, marginBottom: '0.22rem' }}>
+                  {c.name || <span style={{ fontSize: '0.88rem', fontStyle: 'italic' }}>Meno zatiaľ nenájdené</span>}
+                </div>
+                <div style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.38rem' }}>{c.role || '—'}</div>
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', textTransform: 'uppercase', color: priCol, padding: '0.06rem 0.3rem', border: `1px solid ${priCol}44`, borderRadius: 2, background: `${priCol}10` }}>
+                    {priority === 'PRIMARY' ? '▲ Primary' : priority === 'SECONDARY' ? '◆ Secondary' : '◇ Support'}
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.22rem', fontFamily: mono, fontSize: '0.37rem', letterSpacing: '1px', textTransform: 'uppercase', color: st.color, padding: '0.06rem 0.3rem', border: `1px solid ${st.color}55`, borderRadius: 2, background: st.bg }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: st.color, display: 'inline-block', flexShrink: 0 }} />
+                    {status}
+                  </span>
+                  {isDemo && <span style={{ fontFamily: mono, fontSize: '0.35rem', color: '#374151', padding: '0.06rem 0.3rem', border: '1px solid #1e2530', borderRadius: 2 }}>DEMO</span>}
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose}
+              style={{ background: 'transparent', border: '1px solid #252b36', color: '#6b7280', borderRadius: 3, padding: '0.25rem 0.6rem', fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1px', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }}>
+              ✕ Zavrieť
+            </button>
+          </div>
+        </div>
+
+        {/* ── Modal body ── */}
+        <div style={{ padding: '1.3rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
+
+          {/* Contact info */}
+          <div>
+            <SectionLabel>Kontaktné údaje</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <CField label="Email" value={c.email} element={<a href={`mailto:${c.email}`} style={{ fontFamily: mono, fontSize: '0.58rem', color: '#4ade80' }}>✉ {c.email}</a>} />
+              <CField label="Telefón" value={c.phone} element={<a href={`tel:${c.phone}`} style={{ fontFamily: mono, fontSize: '0.58rem', color: C.amber }}>📞 {c.phone}</a>} />
+              <CField label="LinkedIn" value={c.linkedin} element={<a href={c.linkedin} target="_blank" rel="noreferrer" style={{ fontFamily: mono, fontSize: '0.58rem', color: '#818cf8' }}>🔗 Otvoriť profil</a>} />
+            </div>
+          </div>
+
+          {/* Professional profile */}
+          <div>
+            <SectionLabel>Profesionálny profil</SectionLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.55rem' }}>
+              <CCard label="Oddelenie"      value={c.department} />
+              <CCard label="Decision Power" value={c.decisionPower} />
+              <CCard label="AI Relevancia"  value={c.aiScore ? `${c.aiScore} / 100` : null} />
+              <CCard label="Confidence"     value={c.confidence} />
+              <CCard label="Zdroj dát"      value={c.source === 'demo' ? 'Demo dáta' : c.source} />
+              <CCard label="Priorita"       value={priority} />
+            </div>
+          </div>
+
+          {/* AI summary */}
+          <div>
+            <SectionLabel>AI Zhrnutie kontaktu</SectionLabel>
+            {c.aiSummary
+              ? <p style={{ fontFamily: sans, fontSize: '0.76rem', color: '#b0bac8', lineHeight: 1.75, margin: 0 }}>{c.aiSummary}</p>
+              : <div style={{ background: '#0b0e13', border: '1px solid #1a2030', borderRadius: 4, padding: '0.85rem 1rem', fontFamily: mono, fontSize: '0.52rem', color: '#374151', fontStyle: 'italic', lineHeight: 1.6 }}>
+                  Dáta zatiaľ nenájdené — AI zhrnutie bude vygenerované po spustení analýzy kontaktu.
+                </div>
+            }
+          </div>
+
+          {/* Notes */}
+          <div>
+            <SectionLabel>Poznámky</SectionLabel>
+            {c.notes
+              ? <p style={{ fontFamily: sans, fontSize: '0.76rem', color: '#b0bac8', lineHeight: 1.75, margin: 0 }}>{c.notes}</p>
+              : <div style={{ background: '#0b0e13', border: '1px solid #1a2030', borderRadius: 4, padding: '0.85rem 1rem', fontFamily: mono, fontSize: '0.52rem', color: '#374151', fontStyle: 'italic' }}>
+                  Dáta zatiaľ nenájdené
+                </div>
+            }
+          </div>
+
+          {/* Communication timeline skeleton */}
+          <div>
+            <SectionLabel>Komunikačná história</SectionLabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+              {[{ w: '72%' }, { w: '58%' }, { w: '65%' }].map(({ w }, i) => (
+                <div key={i} style={{ display: 'flex', gap: '0.8rem', alignItems: 'flex-start', opacity: 0.3 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#252b36', flexShrink: 0, marginTop: '0.3rem' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: 9, background: '#1a2030', borderRadius: 2, marginBottom: '0.3rem', width: w }} />
+                    <div style={{ height: 7, background: '#1a2030', borderRadius: 2, width: '38%' }} />
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontFamily: mono, fontSize: '0.46rem', color: '#374151', fontStyle: 'italic', textAlign: 'center', paddingTop: '0.3rem', lineHeight: 1.6 }}>
+                História bude dostupná po prvom kontakte
+              </div>
+            </div>
+          </div>
+
+          {/* Quick actions */}
+          <div style={{ borderTop: '1px solid #1e2530', paddingTop: '1rem', display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+            {c.email    ? <a href={`mailto:${c.email}`} style={mdBtn('#4ade80')}>✉ Poslať email</a> : <span style={{ ...mdBtn('#374151'), opacity: 0.4, cursor: 'default' }}>✉ Email</span>}
+            {c.phone    ? <a href={`tel:${c.phone}`}   style={mdBtn(C.amber)}>📞 Zavolať</a>      : <span style={{ ...mdBtn('#374151'), opacity: 0.4, cursor: 'default' }}>📞 Zavolať</span>}
+            {c.linkedin ? <a href={c.linkedin} target="_blank" rel="noreferrer" style={mdBtn('#818cf8')}>🔗 LinkedIn</a> : <span style={{ ...mdBtn('#374151'), opacity: 0.4, cursor: 'default' }}>🔗 LinkedIn</span>}
+            <span style={mdBtn(C.orange)}>🧠 AI Analýza</span>
+            <span style={mdBtn('#5a6878')}>📝 Poznámka</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Panel zoom button ──────────────────────────────────────────────────────────
 function ZoomBtn({ panel, zoomed, setZoomed }) {
   const on = zoomed === panel
@@ -396,6 +564,7 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
   const [photoUrl,  setPhotoUrl]  = useState(t.photoUrl || null)
   const [photoLoad, setPhotoLoad] = useState(!t.photoUrl)
   const [zoomed,    setZoomed]    = useState(null) // null | 'left' | 'center' | 'right'
+  const [selectedContact, setSelectedContact] = useState(null)
 
   useEffect(() => {
     const fn = e => { if (e.key === 'Escape' && zoomed) setZoomed(null) }
@@ -897,6 +1066,10 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
         </div>
       </div>
 
+      {selectedContact && (
+        <ContactDetailModal contact={selectedContact} onClose={() => setSelectedContact(null)} />
+      )}
+
       {/* ── RIGHT ── */}
       <div style={{ ...rStyle, overflowY: 'auto', background: C.panel }}>
         {/* Zoom bar */}
@@ -954,13 +1127,13 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
 
           {/* Contact cards */}
           {(t.contacts || []).length > 0
-            ? (t.contacts).map((c, i) => <RightContactCard key={i} c={c} />)
+            ? (t.contacts).map((c, i) => <RightContactCard key={i} c={c} onSelect={setSelectedContact} />)
             : (
               <>
                 <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151' }}>
                   Typické rozhodovacie pozície
                 </div>
-                {DEMO_CONTACTS.map(c => <RightContactCard key={c._id} c={c} />)}
+                {DEMO_CONTACTS.map(c => <RightContactCard key={c._id} c={c} onSelect={setSelectedContact} />)}
                 <div style={{ fontFamily: mono, fontSize: '0.43rem', color: '#4b5563', fontStyle: 'italic', textAlign: 'center', lineHeight: 1.7, padding: '0.25rem 0.5rem' }}>
                   Spusti „Nájsť kontakty" pre reálne mená a emaily
                 </div>
