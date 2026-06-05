@@ -53,9 +53,9 @@ function toFsFields(obj) {
   return f
 }
 async function fsPatch(docId, data) {
-  const fields    = toFsFields(data)
-  const fieldMask = Object.keys(fields).join(',')
-  const url       = `${FS_BASE()}/intelligence_targets/${docId}?key=${FB_API_KEY}&updateMask.fieldPaths=${encodeURIComponent(fieldMask)}`
+  const fields = toFsFields(data)
+  const mask   = Object.keys(fields).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&')
+  const url    = `${FS_BASE()}/intelligence_targets/${docId}?key=${FB_API_KEY}&${mask}`
   const res = await fetch(url, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body:   JSON.stringify({ fields }),
