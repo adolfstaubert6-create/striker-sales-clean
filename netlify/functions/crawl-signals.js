@@ -1,7 +1,8 @@
 /**
  * crawl-signals — Phase 1D
  * Crawls company website pages, extracts readable text, runs keyword-based
- * signal analysis, and saves results to Firestore.
+ * signal analysis WITH concrete evidence (snippet + URL per keyword hit),
+ * and saves results to Firestore.
  *
  * POST /.netlify/functions/crawl-signals
  * Body: { web, name, segment, segmentLabel, city, docId }
@@ -45,7 +46,7 @@ async function fsPatch(docId, data) {
   return res.json()
 }
 
-// ── Signal keyword groups (mirrors src/utils/signalAnalysis.js) ────────────────
+// ── Signal keyword groups ──────────────────────────────────────────────────────
 
 const SIGNAL_GROUPS = [
   { id: 'energy_efficiency',      label: 'Energy Efficiency',      weight: 10, keywords: ['energie', 'energieeffizienz', 'energy efficiency', 'energiesparen', 'energieverbrauch', 'stromverbrauch', 'wärmepumpe', 'heat pump', 'energiekosten', 'energy costs', 'energieverantwortlich', 'niedrigenergie', 'low energy', 'energieoptimierung'] },
@@ -60,27 +61,7 @@ const SIGNAL_GROUPS = [
   { id: 'decarbonization',        label: 'Dekarbonisierung',        weight: 10, keywords: ['dekarbonisierung', 'decarbonization', 'decarbonisation', 'klimaneutralität', 'climate neutrality', 'klimaziele', 'paris agreement', 'pariser abkommen', '1.5 grad', '1.5 degree', 'energiewende', 'energy transition', 'erneuerbare energien', 'renewable energy', 'solarenergie', 'solar', 'photovoltaik', 'windenergie', 'geothermie', 'geothermal'] },
 ]
 
-function analyzeSignals(text) {
-  const t   = (text || '').toLowerCase()
-  const detected = []
-  let   total    = 0
-  for (const g of SIGNAL_GROUPS) {
-    const matched = g.keywords.filter(kw => t.includes(kw.toLowerCase()))
-    if (matched.length > 0) {
-      detected.push({ id: g.id, label: g.label, weight: g.weight, matches: matched, hitCount: matched.length })
-      total += g.weight * Math.min(matched.length, 3)
-    }
-  }
-  const maxPossible = SIGNAL_GROUPS.reduce((s, g) => s + g.weight * 3, 0)
-  const score       = Math.min(100, Math.round((total / maxPossible) * 100))
-  const top3        = detected.sort((a, b) => b.weight * b.hitCount - a.weight * a.hitCount).slice(0, 3).map(s => s.label)
-  const reason      = detected.length > 0
-    ? `Detekované oblasti: ${top3.join(', ')}${detected.length > 3 ? ` a ${detected.length - 3} ďalšie` : ''}.`
-    : 'Web sa nepodarilo analyzovať.'
-  return { detectedSignals: detected, signalCount: detected.length, strikerNeedScore: score, signalReason: reason }
-}
-
-// ── Page paths to try ──────────────────────────────────────────────────────────
+// ── Page paths to crawl ────────────────────────────────────────────────────────
 
 const SIGNAL_PATHS = [
   '',
@@ -104,7 +85,7 @@ function extractText(html) {
     .slice(0, 12000)
 }
 
-// ── Crawl one page ─────────────────────────────────────────────────────────────
+// ── Fetch one page ─────────────────────────────────────────────────────────────
 
 async function fetchPage(url, timeoutMs = 4000) {
   const ctrl = new AbortController()
@@ -127,18 +108,17 @@ async function fetchPage(url, timeoutMs = 4000) {
   }
 }
 
-// ── Main crawl ─────────────────────────────────────────────────────────────────
+// ── Crawl company website — returns per-page objects ─────────────────────────
 
-async function crawlCompanySignals(web, name) {
-  if (!web) return { text: '', sources: [] }
+async function crawlCompanySignals(web) {
+  if (!web) return { pages: [], sources: [] }
 
   const base = web.startsWith('http') ? web.replace(/\/$/, '') : `https://${web.replace(/\/$/, '')}`
 
-  // Parse domain for same-domain check
   let domain = ''
-  try { domain = new URL(base).hostname } catch { return { text: '', sources: [] } }
+  try { domain = new URL(base).hostname } catch { return { pages: [], sources: [] } }
 
-  const texts   = []
+  const pages   = []
   const sources = []
   let   tried   = 0
 
@@ -149,18 +129,97 @@ async function crawlCompanySignals(web, name) {
 
     const text = await fetchPage(url)
     if (text && text.length > 100) {
-      texts.push(text)
+      pages.push({ url, text })
       sources.push(url)
     }
 
-    // Stop early if we already have enough material
-    if (texts.join(' ').length > 30000) break
+    if (pages.reduce((s, p) => s + p.text.length, 0) > 30000) break
   }
 
-  return {
-    text:    texts.join(' ').slice(0, 40000),
-    sources,
+  return { pages, sources }
+}
+
+// ── Signal analysis WITH evidence extraction ───────────────────────────────────
+//
+// Returns:
+//   detectedSignals — existing format [{ id, label, weight, matches[], hitCount }]
+//   signalCount     — number of groups that fired
+//   strikerNeedScore — 0–100
+//   signalReason    — human-readable summary
+//   signalEvidence  — NEW: [{ groupId, groupLabel, keyword, snippet, url }]
+//                     max 2 per group, max 30 total
+
+function analyzeSignalsWithEvidence(pages) {
+  const detectedMap = {}   // groupId -> aggregated signal entry
+  const allEvidence = []
+  const seenKwUrl   = new Set()
+
+  for (const { url, text } of pages) {
+    const tLow = text.toLowerCase()
+
+    for (const g of SIGNAL_GROUPS) {
+      for (const kw of g.keywords) {
+        const kwLow = kw.toLowerCase()
+        const idx   = tLow.indexOf(kwLow)
+        if (idx === -1) continue
+
+        const dedupeKey = `${kwLow}::${url}`
+        if (!seenKwUrl.has(dedupeKey)) {
+          seenKwUrl.add(dedupeKey)
+
+          // Extract 120-char context window around the keyword
+          const start   = Math.max(0, idx - 120)
+          const end     = Math.min(text.length, idx + kw.length + 120)
+          const raw     = text.slice(start, end).replace(/\s+/g, ' ').trim()
+          const snippet = (start > 0 ? '…' : '') + raw + (end < text.length ? '…' : '')
+
+          allEvidence.push({ groupId: g.id, groupLabel: g.label, keyword: kw, snippet, url })
+        }
+
+        // Aggregate for detectedSignals (keyword counted once per group across all pages)
+        if (!detectedMap[g.id]) {
+          detectedMap[g.id] = { id: g.id, label: g.label, weight: g.weight, matches: new Set(), hitCount: 0 }
+        }
+        if (!detectedMap[g.id].matches.has(kw)) {
+          detectedMap[g.id].matches.add(kw)
+          detectedMap[g.id].hitCount++
+        }
+      }
+    }
   }
+
+  // Convert Sets to arrays for serialisation
+  const detectedSignals = Object.values(detectedMap).map(g => ({
+    id:       g.id,
+    label:    g.label,
+    weight:   g.weight,
+    matches:  [...g.matches],
+    hitCount: g.hitCount,
+  }))
+
+  const total       = detectedSignals.reduce((s, g) => s + g.weight * Math.min(g.hitCount, 3), 0)
+  const maxPossible = SIGNAL_GROUPS.reduce((s, g) => s + g.weight * 3, 0)
+  const strikerNeedScore = Math.min(100, Math.round((total / maxPossible) * 100))
+
+  const top3 = [...detectedSignals]
+    .sort((a, b) => b.weight * b.hitCount - a.weight * a.hitCount)
+    .slice(0, 3)
+    .map(s => s.label)
+
+  const signalReason = detectedSignals.length > 0
+    ? `Detekované oblasti: ${top3.join(', ')}${detectedSignals.length > 3 ? ` a ${detectedSignals.length - 3} ďalšie` : ''}.`
+    : 'Web sa nepodarilo analyzovať.'
+
+  // Cap evidence: max 2 entries per group, 30 total
+  const byGroup       = {}
+  const signalEvidence = []
+  for (const ev of allEvidence) {
+    byGroup[ev.groupId] = (byGroup[ev.groupId] || 0) + 1
+    if (byGroup[ev.groupId] <= 2) signalEvidence.push(ev)
+    if (signalEvidence.length >= 30) break
+  }
+
+  return { detectedSignals, signalCount: detectedSignals.length, strikerNeedScore, signalReason, signalEvidence }
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -181,34 +240,36 @@ exports.handler = async (event) => {
   console.log(`[crawl-signals] START "${name}" web=${web} docId=${docId}`)
   const t0 = Date.now()
 
-  // Crawl
-  const { text, sources } = await crawlCompanySignals(web, name)
+  // Crawl — returns per-page objects with url+text
+  const { pages, sources } = await crawlCompanySignals(web)
 
-  const crawled   = sources.length
-  const textLen   = text.length
-  console.log(`[crawl-signals] crawled=${crawled} chars=${textLen} ${Date.now()-t0}ms`)
+  // Prepend metadata pseudo-page so name/segment/city contribute to scoring
+  const metaText = [name, segment, segmentLabel, city].filter(Boolean).join(' ')
+  const allPages = metaText
+    ? [{ url: 'meta', text: metaText }, ...pages]
+    : pages
 
-  // Build shallow company object for analyzeSignals (mirrors analyzeCompanySignals input)
-  const companyText = [name, segment, segmentLabel, city].join(' ') + ' ' + text
-  const signals     = analyzeSignals(companyText)
+  console.log(`[crawl-signals] crawled=${sources.length} pages, chars=${allPages.reduce((s,p) => s+p.text.length, 0)} ${Date.now()-t0}ms`)
 
-  const noSignals = crawled === 0 || textLen < 100
-  if (noSignals) {
-    signals.signalReason = 'Web sa nepodarilo analyzovať.'
+  const result = analyzeSignalsWithEvidence(allPages)
+
+  // If crawl failed entirely, override signalReason
+  if (sources.length === 0 || allPages.every(p => p.url === 'meta')) {
+    result.signalReason = 'Web sa nepodarilo analyzovať.'
   }
 
-  const result = {
-    ...signals,
+  const payload = {
+    ...result,
     signalSources: sources,
     analyzedAt:    new Date().toISOString(),
   }
 
-  console.log(`[crawl-signals] score=${result.strikerNeedScore} count=${result.signalCount} sources=${sources.length}`)
+  console.log(`[crawl-signals] score=${result.strikerNeedScore} groups=${result.signalCount} evidence=${result.signalEvidence.length} sources=${sources.length}`)
 
   // Persist to Firestore
   if (docId && FB_API_KEY && FB_PROJECT) {
     try {
-      await fsPatch(docId, result)
+      await fsPatch(docId, payload)
       console.log(`[crawl-signals] Firestore updated ${docId} ${Date.now()-t0}ms`)
     } catch (e) {
       console.warn(`[crawl-signals] Firestore PATCH failed: ${e.message}`)
@@ -216,5 +277,5 @@ exports.handler = async (event) => {
   }
 
   console.log(`[crawl-signals] DONE "${name}" ${Date.now()-t0}ms`)
-  return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true, name, ...result }) }
+  return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true, name, ...payload }) }
 }

@@ -368,22 +368,69 @@ function TabEnergy({ t, onSignal, signalLoading, signalMsg, signalTimeoutMsg }) 
         <MetricGauge label="Ochota riešiť problém"  value={t.willingnessToSolve}    reason={t.willingnessToSolveReason} />
       </div>
 
-      {/* Signály podľa kategórie */}
-      {Object.keys(signalsCats).length > 0 && (
+      {/* Detekované signály zo stránky */}
+      {(t.detectedSignals || []).length > 0 && (
         <div style={{ marginBottom: '1rem' }}>
-          <SectionTitle>Detekované signály podľa kategórie</SectionTitle>
-          {Object.entries(signalsCats).map(([key, data]) => (
-            <div key={key} style={{ marginBottom: '0.6rem' }}>
-              <div style={{ fontFamily: mono, fontSize: '0.5rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#818cf8', marginBottom: '0.2rem' }}>
-                {data.label || key}
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.22rem' }}>
-                {(data.found || []).map((kw, i) => (
-                  <span key={i} style={{ fontFamily: mono, fontSize: '0.52rem', padding: '0.08rem 0.38rem', border: '1px solid #818cf844', borderRadius: 2, color: '#818cf8', background: 'rgba(129,140,248,0.08)' }}>{kw}</span>
-                ))}
-              </div>
-            </div>
-          ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.85rem',
+            paddingBottom: '0.5rem', borderBottom: '1px solid #1e2530' }}>
+            <span style={{ fontFamily: mono, fontSize: '0.52rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: '#ff5c00' }}>
+              Detekované signály zo stránky
+            </span>
+            {(t.signalEvidence || []).length > 0 && (
+              <span style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151' }}>
+                {t.signalEvidence.length} citácií → záložka Dôkazy
+              </span>
+            )}
+          </div>
+          {(t.detectedSignals || [])
+            .slice()
+            .sort((a, b) => b.weight * b.hitCount - a.weight * a.hitCount)
+            .map((sig, i) => {
+              const evidenceForGroup = (t.signalEvidence || []).filter(ev => ev.groupId === sig.id)
+              return (
+                <div key={i} style={{ marginBottom: '0.7rem', padding: '0.5rem 0.7rem',
+                  background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+                  {/* Group header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#818cf8', fontWeight: 700 }}>
+                      {sig.label}
+                    </span>
+                    <span style={{ fontFamily: mono, fontSize: '0.44rem', color: '#374151' }}>w={sig.weight} · {sig.hitCount} kľúčových slov</span>
+                    {evidenceForGroup.length > 0 && (
+                      <span style={{ fontFamily: mono, fontSize: '0.44rem', padding: '0.03rem 0.28rem',
+                        border: '1px solid #00cc8833', borderRadius: 2, color: '#00cc88', background: 'rgba(0,204,136,0.07)' }}>
+                        {evidenceForGroup.length} citáci{evidenceForGroup.length === 1 ? 'a' : 'e'}
+                      </span>
+                    )}
+                  </div>
+                  {/* Keyword badges */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginBottom: evidenceForGroup.length > 0 ? '0.35rem' : 0 }}>
+                    {(sig.matches || []).map((kw, j) => (
+                      <span key={j} style={{ fontFamily: mono, fontSize: '0.49rem', padding: '0.05rem 0.32rem',
+                        border: '1px solid #818cf844', borderRadius: 2,
+                        color: '#818cf8', background: 'rgba(129,140,248,0.08)' }}>{kw}</span>
+                    ))}
+                  </div>
+                  {/* First evidence snippet inline */}
+                  {evidenceForGroup[0] && (
+                    <div style={{ paddingTop: '0.3rem', borderTop: '1px solid #1e2530' }}>
+                      <div style={{ fontFamily: mono, fontSize: '0.56rem', color: '#6b7280', fontStyle: 'italic',
+                        lineHeight: 1.55, borderLeft: '2px solid #818cf833', paddingLeft: '0.45rem', marginBottom: '0.15rem' }}>
+                        {evidenceForGroup[0].snippet}
+                      </div>
+                      {evidenceForGroup[0].url && evidenceForGroup[0].url !== 'meta' && (
+                        <a href={evidenceForGroup[0].url} target="_blank" rel="noreferrer"
+                          style={{ fontFamily: mono, fontSize: '0.44rem', color: '#374151', textDecoration: 'none' }}
+                          onMouseOver={e => e.currentTarget.style.color = '#818cf8'}
+                          onMouseOut={e => e.currentTarget.style.color = '#374151'}>
+                          🔗 {evidenceForGroup[0].url.replace(/^https?:\/\//, '').slice(0, 55)}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
         </div>
       )}
 
@@ -517,57 +564,179 @@ function TabAI({ t, onGather, gathering, gatherMsg, analysisResult, lang, setLan
   )
 }
 
+// ── Group signal evidence by groupLabel for display ───────────────────────────
+
+function groupEvidence(signalEvidence) {
+  const groups = {}
+  for (const ev of (signalEvidence || [])) {
+    if (!groups[ev.groupId]) groups[ev.groupId] = { label: ev.groupLabel, items: [] }
+    groups[ev.groupId].items.push(ev)
+  }
+  return Object.values(groups)
+}
+
+function EvidenceItem({ ev }) {
+  const isReal = ev.url && ev.url !== 'meta'
+  const shortUrl = isReal ? ev.url.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 60) : null
+
+  return (
+    <div style={{ marginBottom: '0.55rem', padding: '0.55rem 0.7rem', background: '#080b10', border: '1px solid #1e2530', borderRadius: 3 }}>
+      {/* Keyword badge */}
+      <div style={{ marginBottom: '0.3rem' }}>
+        <span style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '1.5px', textTransform: 'uppercase',
+          padding: '0.06rem 0.35rem', border: '1px solid #818cf844',
+          background: 'rgba(129,140,248,0.1)', color: '#818cf8', borderRadius: 2 }}>
+          {ev.keyword}
+        </span>
+      </div>
+
+      {/* Text snippet / quote */}
+      {ev.snippet && (
+        <div style={{ fontFamily: mono, fontSize: '0.61rem', color: '#9ca3af', lineHeight: 1.65,
+          fontStyle: 'italic', marginBottom: '0.3rem',
+          borderLeft: '2px solid #818cf833', paddingLeft: '0.5rem' }}>
+          {ev.snippet}
+        </div>
+      )}
+
+      {/* Source URL */}
+      {isReal ? (
+        <a href={ev.url} target="_blank" rel="noreferrer"
+          style={{ fontFamily: mono, fontSize: '0.48rem', color: '#374151',
+            display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+            textDecoration: 'none', wordBreak: 'break-all' }}
+          onMouseOver={e => e.currentTarget.style.color = '#818cf8'}
+          onMouseOut={e => e.currentTarget.style.color = '#374151'}>
+          🔗 {shortUrl}
+        </a>
+      ) : (
+        <span style={{ fontFamily: mono, fontSize: '0.46rem', color: '#2d3748' }}>ℹ segment/name meta</span>
+      )}
+    </div>
+  )
+}
+
 function TabSources({ t }) {
-  const sources   = t.sources   || []
-  const evidence  = t.keyEvidence || []
-  const crawlPages = t.scrapedPages || []
+  const signalEvidence = t.signalEvidence || []
+  const signalSources  = t.signalSources  || []
+  const manualSources  = t.sources        || []
+  const grouped        = groupEvidence(signalEvidence)
+
+  const hasEvidence = grouped.length > 0
 
   return (
     <div>
-      <SectionTitle>Kľúčové dôkazy a citácie</SectionTitle>
-      {evidence.length === 0 ? (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '1rem', fontStyle: 'italic' }}>Spustiť Firecrawl pre extrakciu dôkazov</div>
-      ) : (
-        <div style={{ marginBottom: '1rem' }}>
-          {evidence.map((ev, i) => (
-            <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.4rem', padding: '0.5rem 0.7rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
-              <span style={{ color: '#ffaa00', fontFamily: mono, fontSize: '0.7rem', flexShrink: 0 }}>„</span>
-              <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#9ca3af', lineHeight: 1.5, fontStyle: 'italic' }}>{ev}</span>
+      {/* ── Header stats ────────────────────────────────────────────────────── */}
+      {(t.strikerNeedScore != null || t.signalCount != null) && (
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.1rem', flexWrap: 'wrap' }}>
+          <div style={{ padding: '0.5rem 0.85rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.1rem' }}>Signal score</div>
+            <div style={{ fontFamily: mono, fontSize: '1.1rem', fontWeight: 700, color: (t.strikerNeedScore||0) >= 50 ? '#00cc88' : '#ffaa00' }}>{t.strikerNeedScore ?? '–'}/100</div>
+          </div>
+          <div style={{ padding: '0.5rem 0.85rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.1rem' }}>Skupiny signálov</div>
+            <div style={{ fontFamily: mono, fontSize: '1.1rem', fontWeight: 700, color: '#e8eaed' }}>{t.signalCount ?? '–'}</div>
+          </div>
+          <div style={{ padding: '0.5rem 0.85rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+            <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.1rem' }}>Dôkazy</div>
+            <div style={{ fontFamily: mono, fontSize: '1.1rem', fontWeight: 700, color: '#e8eaed' }}>{signalEvidence.length}</div>
+          </div>
+          {signalSources.length > 0 && (
+            <div style={{ padding: '0.5rem 0.85rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3 }}>
+              <div style={{ fontFamily: mono, fontSize: '0.42rem', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.1rem' }}>Prehľadané stránky</div>
+              <div style={{ fontFamily: mono, fontSize: '1.1rem', fontWeight: 700, color: '#e8eaed' }}>{signalSources.length}</div>
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      <SectionTitle>Zdroje a URL</SectionTitle>
-      {sources.length === 0 ? (
-        <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', marginBottom: '1rem', fontStyle: 'italic' }}>Žiadne zdroje — spustiť Firecrawl analýzu</div>
-      ) : (
-        <div style={{ marginBottom: '1rem' }}>
-          {sources.map((s, i) => (
-            <div key={i} style={{ padding: '0.55rem 0.75rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '0.35rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
-                <span style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase', color: '#374151', background: '#1e2530', padding: '0.06rem 0.3rem', borderRadius: 2 }}>{s.type || 'web'}</span>
-                {s.title && <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#e8eaed', fontWeight: 600 }}>{s.title}</span>}
-              </div>
-              {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ fontFamily: mono, fontSize: '0.58rem', color: '#818cf8', display: 'block', wordBreak: 'break-all' }}>{s.url}</a>}
-              {s.description && <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280', marginTop: '0.15rem' }}>{s.description}</div>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {crawlPages.length > 0 && (
-        <div>
-          <SectionTitle>Naskenované stránky</SectionTitle>
+      {/* ── Crawled page URLs ────────────────────────────────────────────────── */}
+      {signalSources.length > 0 && (
+        <div style={{ marginBottom: '1.1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.46rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#374151', marginBottom: '0.4rem' }}>
+            Prehľadané URL
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-            {crawlPages.map((p, i) => (
-              <span key={i} style={{ fontFamily: mono, fontSize: '0.5rem', padding: '0.12rem 0.45rem', borderRadius: 2,
-                color: p.found ? '#00cc88' : '#374151',
-                background: p.found ? 'rgba(0,204,136,0.08)' : 'transparent',
-                border: `1px solid ${p.found ? '#00cc8833' : '#1e2530'}`,
-              }}>
-                {p.found ? `✓ ${p.categoryLabel || p.category}` : `— ${p.categoryLabel || p.category}`}
-              </span>
+            {signalSources.map((url, i) => (
+              <a key={i} href={url} target="_blank" rel="noreferrer"
+                style={{ fontFamily: mono, fontSize: '0.48rem', padding: '0.1rem 0.4rem',
+                  border: '1px solid #1e2530', borderRadius: 2, color: '#4b5563',
+                  textDecoration: 'none', wordBreak: 'break-all' }}
+                onMouseOver={e => e.currentTarget.style.color = '#818cf8'}
+                onMouseOut={e => e.currentTarget.style.color = '#4b5563'}>
+                {url.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 55)}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Signal reason summary ────────────────────────────────────────────── */}
+      {t.signalReason && (
+        <div style={{ marginBottom: '1.1rem', padding: '0.6rem 0.8rem',
+          background: 'rgba(129,140,248,0.05)', border: '1px solid #818cf822', borderRadius: 3 }}>
+          <div style={{ fontFamily: mono, fontSize: '0.6rem', color: '#818cf8', lineHeight: 1.55 }}>
+            📡 {t.signalReason}
+          </div>
+        </div>
+      )}
+
+      {/* ── Concrete signal evidence — grouped by category ───────────────────── */}
+      <SectionTitle>Konkrétne dôkazy zo stránky</SectionTitle>
+
+      {!hasEvidence ? (
+        <div style={{ padding: '1.5rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3,
+          textAlign: 'center', marginBottom: '1.1rem' }}>
+          <div style={{ fontFamily: mono, fontSize: '0.62rem', color: '#374151', fontStyle: 'italic', marginBottom: '0.4rem' }}>
+            Žiadne signály zatiaľ nenájdené.
+          </div>
+          <div style={{ fontFamily: mono, fontSize: '0.55rem', color: '#2d3748' }}>
+            Spustiť „🔍 Crawl signálov" v záložke Energia pre analýzu webu.
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginBottom: '1.1rem' }}>
+          {grouped.map((group, gi) => (
+            <div key={gi} style={{ marginBottom: '1rem' }}>
+              {/* Group header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.45rem',
+                paddingBottom: '0.3rem', borderBottom: '1px solid #1e2530' }}>
+                <span style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '2px',
+                  textTransform: 'uppercase', color: '#ff5c00', fontWeight: 700 }}>
+                  {group.label}
+                </span>
+                <span style={{ fontFamily: mono, fontSize: '0.44rem', color: '#374151' }}>
+                  · {group.items.length} {group.items.length === 1 ? 'záznam' : 'záznamy'}
+                </span>
+              </div>
+
+              {/* Evidence items */}
+              {group.items.map((ev, ei) => (
+                <EvidenceItem key={ei} ev={ev} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Manually added sources ───────────────────────────────────────────── */}
+      {manualSources.length > 0 && (
+        <div>
+          <SectionTitle>Manuálne pridané zdroje</SectionTitle>
+          <div style={{ marginBottom: '1rem' }}>
+            {manualSources.map((s, i) => (
+              <div key={i} style={{ padding: '0.55rem 0.75rem', background: '#0d1117', border: '1px solid #1e2530', borderRadius: 3, marginBottom: '0.35rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
+                  <span style={{ fontFamily: mono, fontSize: '0.48rem', letterSpacing: '1px', textTransform: 'uppercase',
+                    color: '#374151', background: '#1e2530', padding: '0.06rem 0.3rem', borderRadius: 2 }}>
+                    {s.type || 'web'}
+                  </span>
+                  {s.title && <span style={{ fontFamily: mono, fontSize: '0.62rem', color: '#e8eaed', fontWeight: 600 }}>{s.title}</span>}
+                </div>
+                {s.url && <a href={s.url} target="_blank" rel="noreferrer"
+                  style={{ fontFamily: mono, fontSize: '0.58rem', color: '#818cf8', display: 'block', wordBreak: 'break-all' }}>{s.url}</a>}
+                {s.description && <div style={{ fontFamily: mono, fontSize: '0.58rem', color: '#6b7280', marginTop: '0.15rem' }}>{s.description}</div>}
+              </div>
             ))}
           </div>
         </div>
@@ -953,7 +1122,8 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
     setSignalMsg('')
     setSignalTimeoutMsg(null)
     try {
-      const payload = {
+      // Run SerpAPI reviews + website crawl in parallel
+      const reviewPayload = {
         companyName:     t.name,
         segment:         t.segment,
         segmentLabel:    t.segmentLabel,
@@ -963,43 +1133,78 @@ export default function IntelCompanyDetail({ target: t, initialTab = 'overview',
         painPoints:      analysisResult?.painPoints || t.signals || [],
         aiReasoning:     analysisResult?.reasoning  || t.aiReasoning || '',
       }
+      const crawlPayload = {
+        web:          t.web || t.website || '',
+        name:         t.name,
+        segment:      t.segment,
+        segmentLabel: t.segmentLabel,
+        city:         t.city,
+        docId:        t.id,
+      }
 
-      // Try live SerpAPI reviews first
-      const res  = await fetch('/.netlify/functions/serpapi-reviews', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json().catch(() => ({ ok: false }))
-      if (!data.ok) throw new Error('Signal engine error')
+      const [reviewRes, crawlRes] = await Promise.all([
+        fetch('/.netlify/functions/serpapi-reviews', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reviewPayload),
+        }),
+        t.web || t.website
+          ? fetch('/.netlify/functions/crawl-signals', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(crawlPayload),
+            })
+          : Promise.resolve(null),
+      ])
 
-      await updateTarget(t.id, {
-        heatPressure:               data.heatPressure,
-        heatPressureReason:         data.heatPressureReason,
-        thermalDependency:          data.thermalDependency,
-        thermalDependencyReason:    data.thermalDependencyReason,
-        operatingCostPressure:      data.operatingCostPressure,
-        operatingCostPressureReason:data.operatingCostPressureReason,
-        modernizationNeed:          data.modernizationNeed,
-        modernizationNeedReason:    data.modernizationNeedReason,
-        boilerDependencyProb:       data.boilerDependencyProb,
-        boilerDependencyProbReason: data.boilerDependencyProbReason,
-        willingnessToSolve:         data.willingnessToSolve,
-        willingnessToSolveReason:   data.willingnessToSolveReason,
-        reviewsSource:              data.reviewsSource   || 'simulated',
-        reviewsCachedAt:            data.reviewsCachedAt || new Date().toISOString(),
-        reviewRating:               data.reviewRating    || null,
-        reviewCount:                data.reviewCount     || null,
-        reviewSummary:              data.reviewSummary   || null,
-        liveSignals:                data.liveSignals     || [],
-      })
+      const reviewData = await reviewRes.json().catch(() => ({ ok: false }))
+      const crawlData  = crawlRes ? await crawlRes.json().catch(() => null) : null
 
-      const isLive = data.reviewsSource === 'serpapi'
+      if (!reviewData.ok) throw new Error('Signal engine error')
+
+      // Merge both results into Firestore
+      const update = {
+        heatPressure:               reviewData.heatPressure,
+        heatPressureReason:         reviewData.heatPressureReason,
+        thermalDependency:          reviewData.thermalDependency,
+        thermalDependencyReason:    reviewData.thermalDependencyReason,
+        operatingCostPressure:      reviewData.operatingCostPressure,
+        operatingCostPressureReason:reviewData.operatingCostPressureReason,
+        modernizationNeed:          reviewData.modernizationNeed,
+        modernizationNeedReason:    reviewData.modernizationNeedReason,
+        boilerDependencyProb:       reviewData.boilerDependencyProb,
+        boilerDependencyProbReason: reviewData.boilerDependencyProbReason,
+        willingnessToSolve:         reviewData.willingnessToSolve,
+        willingnessToSolveReason:   reviewData.willingnessToSolveReason,
+        reviewsSource:              reviewData.reviewsSource   || 'simulated',
+        reviewsCachedAt:            reviewData.reviewsCachedAt || new Date().toISOString(),
+        reviewRating:               reviewData.reviewRating    || null,
+        reviewCount:                reviewData.reviewCount     || null,
+        reviewSummary:              reviewData.reviewSummary   || null,
+        liveSignals:                reviewData.liveSignals     || [],
+      }
+
+      // crawl-signals already patched Firestore directly via docId,
+      // but we also update local state via updateTarget for reactive UI
+      if (crawlData?.ok) {
+        update.detectedSignals  = crawlData.detectedSignals  || []
+        update.signalCount      = crawlData.signalCount      ?? 0
+        update.strikerNeedScore = crawlData.strikerNeedScore ?? 0
+        update.signalReason     = crawlData.signalReason     || ''
+        update.signalEvidence   = crawlData.signalEvidence   || []
+        update.signalSources    = crawlData.signalSources    || []
+        update.analyzedAt       = crawlData.analyzedAt       || new Date().toISOString()
+      }
+
+      await updateTarget(t.id, update)
+
+      const isLive    = reviewData.reviewsSource === 'serpapi'
+      const evidCount = (crawlData?.signalEvidence || []).length
       setSignalMsg(
-        isLive
-          ? `✅ LIVE · ${data.reviewCount || 0} Google recenzií · ${(data.liveSignals||[]).length} signálov`
-          : '✓ AI simulácia (Google recenzie nedostupné)'
+        (isLive
+          ? `✅ LIVE · ${reviewData.reviewCount || 0} recenzií · ${(reviewData.liveSignals||[]).length} signálov`
+          : '✓ AI simulácia') +
+        (evidCount > 0 ? ` · ${evidCount} dôkazov zo stránky` : '')
       )
-      if (data.usedFallback) setSignalTimeoutMsg('Analýza trvala príliš dlho – použil sa záložný odhad.')
+      if (reviewData.usedFallback) setSignalTimeoutMsg('Analýza trvala príliš dlho – použil sa záložný odhad.')
     } catch (e) {
       setSignalMsg('⚠ ' + e.message)
     } finally {
