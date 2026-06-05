@@ -503,8 +503,8 @@ exports.handler = async (event) => {
   const payload = {
     ...signals,
     signalSources: allSources,
-    reviewCount:   reviews.length,
-    reviewRating:  place?.rating  || null,
+    reviewCount:   place?.reviews  ?? reviews.length,
+    reviewRating:  place?.rating   ?? null,
     analyzedAt:    new Date().toISOString(),
   }
 
