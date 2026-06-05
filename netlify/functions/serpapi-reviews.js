@@ -211,8 +211,8 @@ exports.handler = async (event) => {
     return {
       ...result,
       reviewsSource:    'serpapi',
-      reviewRating:     place.rating     || null,
-      reviewCount:      place.reviews    || null,
+      reviewRating:     place.rating     ?? null,
+      reviewCount:      place.reviews    ?? null,
       reviewsCachedAt:  new Date().toISOString(),
     }
   }

@@ -208,6 +208,25 @@ const INTELLIGENCE_PATHS = [
   '/energie', '/energieeffizienz', '/klima', '/co2', '/umwelt',
 ]
 
+// Third-party booking/loyalty/aggregator domains — never crawl as a hotel's own site
+const BLOCKED_DOMAINS = new Set([
+  'hrewards.com', 'booking.com', 'tripadvisor.com', 'tripadvisor.de',
+  'hotels.com', 'expedia.com', 'expedia.de', 'hrs.com', 'hrs.de',
+  'hotel.de', 'trivago.com', 'trivago.de', 'agoda.com',
+  'airbnb.com', 'airbnb.de', 'hilton.com', 'marriott.com',
+  'accorhotels.com', 'accor.com', 'ihg.com', 'bestwestern.com',
+  'melia.com', 'radissonhotels.com', 'hyatt.com', 'wyndham.com',
+  'holidaycheck.com', 'holidaycheck.de', 'yelp.com', 'yelp.de',
+  'google.com', 'maps.google.com', 'facebook.com', 'instagram.com',
+])
+
+function isBlockedDomain(hostname) {
+  const h = hostname.replace(/^www\./, '').toLowerCase()
+  if (BLOCKED_DOMAINS.has(h)) return true
+  // Also block subdomains of blocked domains
+  return [...BLOCKED_DOMAINS].some(d => h.endsWith('.' + d))
+}
+
 // ── HTML → plain text ──────────────────────────────────────────────────────────
 
 function htmlToText(html) {
@@ -221,7 +240,9 @@ function htmlToText(html) {
     .slice(0, 10000)
 }
 
-async function fetchPage(url, timeoutMs = 4000) {
+// fetchPage validates that the final URL (after any redirects) stays on expectedDomain.
+// This prevents redirect chains that land on hrewards.com, booking.com, etc.
+async function fetchPage(url, expectedDomain, timeoutMs = 4000) {
   const ctrl = new AbortController()
   const t    = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
@@ -232,6 +253,18 @@ async function fetchPage(url, timeoutMs = 4000) {
     })
     clearTimeout(t)
     if (!res.ok) return null
+
+    // Reject if redirect took us off the company's own domain
+    if (expectedDomain && res.url) {
+      try {
+        const finalHost = new URL(res.url).hostname.replace(/^www\./, '')
+        if (finalHost !== expectedDomain) {
+          console.warn(`[crawl-signals] Off-domain redirect: ${url} → ${res.url} (expected ${expectedDomain})`)
+          return null
+        }
+      } catch { return null }
+    }
+
     const ct = res.headers.get('content-type') || ''
     if (!ct.includes('html') && !ct.includes('text')) return null
     const text = htmlToText(await res.text())
@@ -245,12 +278,23 @@ async function fetchPage(url, timeoutMs = 4000) {
 async function crawlIntelligencePages(web) {
   if (!web) return { pages: [], sources: [] }
   const base = web.startsWith('http') ? web.replace(/\/$/, '') : `https://${web.replace(/\/$/, '')}`
+
+  let expectedDomain
+  try { expectedDomain = new URL(base).hostname.replace(/^www\./, '') }
+  catch { return { pages: [], sources: [] } }
+
+  // Refuse to crawl known third-party booking/loyalty sites
+  if (isBlockedDomain(expectedDomain)) {
+    console.warn(`[crawl-signals] Blocked third-party domain: ${expectedDomain} (from web="${web}")`)
+    return { pages: [], sources: [] }
+  }
+
   const pages = [], sources = []
   let tried = 0
   for (const path of INTELLIGENCE_PATHS) {
     if (tried >= 6) break
     tried++
-    const page = await fetchPage(base + path)
+    const page = await fetchPage(base + path, expectedDomain)
     if (page) { pages.push({ ...page, pageType: path.replace('/', '') }); sources.push(page.url) }
     if (pages.reduce((s, p) => s + p.text.length, 0) > 40000) break
   }
