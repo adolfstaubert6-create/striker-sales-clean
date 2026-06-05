@@ -49,6 +49,9 @@
 [functions.find-contacts]
   timeout = 26
 
+[functions.translate-snippets]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

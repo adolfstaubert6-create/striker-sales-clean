@@ -946,6 +946,38 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
   )
   const [cSearched, setCSearched] = useState(false)
   const [enrichState, setEnrichState] = useState({}) // { [contactCategory]: { loading, steps, msg, error } }
+  const [translatedSnippets, setTranslatedSnippets] = useState(null) // null = not yet translated
+  const [translating, setTranslating] = useState(false)
+
+  // Auto-translate evidence snippets when entering the sources tab
+  useEffect(() => {
+    if (nav !== 'sources') return
+    const evidence = t.signalEvidence || []
+    if (evidence.length === 0) return
+    if (translatedSnippets !== null || translating) return
+    async function run() {
+      setTranslating(true)
+      try {
+        const snippets = evidence.map(ev => ev.snippet || '')
+        const res  = await fetch('/.netlify/functions/translate-snippets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ snippets }),
+        })
+        const data = await res.json()
+        if (data.ok && Array.isArray(data.translated)) {
+          setTranslatedSnippets(data.translated)
+          // Cache in Firestore — skips re-translation on next visit
+          updateTarget(t.id, { signalEvidenceSk: data.translated }).catch(() => {})
+        }
+      } catch (e) {
+        console.warn('[translate-snippets]', e.message)
+      } finally {
+        setTranslating(false)
+      }
+    }
+    run()
+  }, [nav]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const fn = e => { if (e.key === 'Escape' && zoomed) setZoomed(null) }
@@ -1600,12 +1632,12 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       const evidence = t.signalEvidence || []
       const sources  = t.signalSources  || []
 
-      // Group evidence by signal category
+      // Group evidence by signal category, carrying the per-item index for translation lookup
       const grouped = {}
-      for (const ev of evidence) {
+      evidence.forEach((ev, idx) => {
         if (!grouped[ev.groupId]) grouped[ev.groupId] = { label: ev.groupLabel, items: [] }
-        grouped[ev.groupId].items.push(ev)
-      }
+        grouped[ev.groupId].items.push({ ...ev, _idx: idx })
+      })
       const groups = Object.values(grouped)
 
       return (
@@ -1677,22 +1709,50 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
 
                   {/* Evidence items */}
                   {group.items.map((ev, ei) => {
-                    const isReal = ev.url && ev.url !== 'meta'
-                    const shortUrl = isReal ? ev.url.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 60) : null
+                    const isReal    = ev.url && ev.url !== 'meta'
+                    const shortUrl  = isReal ? ev.url.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 60) : null
+                    const skSnippet = translatedSnippets?.[ev._idx]
+                    const showSk    = !!skSnippet
                     return (
                       <div key={ei} style={{ marginBottom: '0.6rem', padding: '0.7rem 0.85rem', background: '#0c1018', border: `1px solid ${C.border}`, borderRadius: 4 }}>
-                        {/* Keyword badge */}
-                        <div style={{ marginBottom: '0.35rem' }}>
+
+                        {/* Keyword badge — always in original language */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.4rem' }}>
                           <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.05rem 0.35rem', border: `1px solid ${C.purple}44`, background: `${C.purple}0f`, color: C.purple, borderRadius: 2 }}>
                             {ev.keyword}
                           </span>
+                          {translating && !showSk && (
+                            <span style={{ fontFamily: mono, fontSize: '0.39rem', color: C.dim, letterSpacing: '1px' }}>
+                              ⏳ prekladám...
+                            </span>
+                          )}
                         </div>
-                        {/* Quoted snippet */}
-                        {ev.snippet && (
-                          <div style={{ fontFamily: mono, fontSize: '0.59rem', color: C.sub, lineHeight: 1.7, fontStyle: 'italic', borderLeft: `2px solid ${C.purple}33`, paddingLeft: '0.55rem', marginBottom: '0.3rem' }}>
-                            {ev.snippet}
+
+                        {/* Slovak translation (primary display) */}
+                        {showSk && (
+                          <div style={{ fontFamily: mono, fontSize: '0.59rem', color: C.sub, lineHeight: 1.7, fontStyle: 'italic', borderLeft: `2px solid ${C.purple}55`, paddingLeft: '0.55rem', marginBottom: '0.25rem' }}>
+                            {skSnippet}
                           </div>
                         )}
+
+                        {/* Original German — shown as collapsed source when SK is available, or as primary when not yet translated */}
+                        {ev.snippet && (
+                          showSk ? (
+                            <details style={{ marginBottom: '0.3rem' }}>
+                              <summary style={{ fontFamily: mono, fontSize: '0.4rem', color: C.ghost, cursor: 'pointer', letterSpacing: '0.5px', listStyle: 'none', userSelect: 'none' }}>
+                                ▸ originál (DE)
+                              </summary>
+                              <div style={{ fontFamily: mono, fontSize: '0.52rem', color: '#4a5568', lineHeight: 1.6, fontStyle: 'italic', borderLeft: `2px solid ${C.border2}`, paddingLeft: '0.5rem', marginTop: '0.2rem' }}>
+                                {ev.snippet}
+                              </div>
+                            </details>
+                          ) : (
+                            <div style={{ fontFamily: mono, fontSize: '0.59rem', color: C.sub, lineHeight: 1.7, fontStyle: 'italic', borderLeft: `2px solid ${C.purple}33`, paddingLeft: '0.55rem', marginBottom: '0.3rem' }}>
+                              {ev.snippet}
+                            </div>
+                          )
+                        )}
+
                         {/* Source URL */}
                         {isReal ? (
                           <a href={ev.url} target="_blank" rel="noreferrer"
