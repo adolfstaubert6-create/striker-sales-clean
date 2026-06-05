@@ -1,32 +1,31 @@
 /**
- * crawl-signals — Intelligence Signal Engine
+ * crawl-signals — Energy Pressure Intelligence Engine
  *
- * PHILOSOPHY:
- *   We don't look for companies. We look for companies with a REAL ENERGY
- *   PROBLEM who are publicly signaling they're solving it.
+ * CORE DEFINITION:
+ *   Find companies under ENERGY PRESSURE — organizations that publicly signal
+ *   an energy problem, high costs, modernization of heating/energy systems,
+ *   or need for more efficient heat production.
  *
- * TWO-SOURCE ANALYSIS:
+ * TWO SOURCES:
+ *   1. Website — targeted pages only: /news /aktuelles /presse /projekte
+ *                /esg /nachhaltigkeit /energie /klima /co2 /umwelt
+ *   2. Google Reviews (hotels/wellness) — ONLY cold room / hot water / heating complaints
  *
- *   1. WEBSITE INTELLIGENCE — targeted pages only:
- *      /aktuelles /news /presse /blog /projekte /investitionen
- *      /nachhaltigkeit /sustainability /esg /energie /klima /co2 /umwelt
- *      — NOT homepage, NOT rooms, NOT restaurant, NOT spa amenities
+ * CONTEXT RULE (hard, no exceptions):
+ *   A keyword match is ONLY valid when, within ±200 characters:
+ *     • AT LEAST ONE energy pressure indicator is present
+ *     • NO marketing/room/food discard term is present
  *
- *   2. REVIEW INTELLIGENCE — Google Reviews via SerpAPI (hotels/wellness):
- *      Heating complaints, cold rooms, hot water issues reveal real problems.
+ *   Energy indicators: Heizung, Energie, Kosten, Wärme, Verbrauch, Effizienz,
+ *                      CO2, Kessel, Anlage, Technik, Betriebskosten, Energiekosten
+ *   Discard terms:     Zimmer, Suite, Design, Luxus, Ausstattung, Einrichtung,
+ *                      Speise, Restaurant, Möbel, Massage
  *
- * SIGNAL TIERS (scored once per detected group, cumulative):
- *   VERY_STRONG  +35  Active investment in heating/energy project
- *   STRONG       +25  Concrete modernization news, cost-pressure statements
- *   MEDIUM       +15  ESG reports, CO₂ targets, structured sustainability
- *   WEAK          +5  Generic marketing sustainability claims (noise)
+ * SCORING (once per detected group, cumulative, capped 100):
+ *   VERY_STRONG +35 · STRONG +25 · MEDIUM +15 · WEAK +5
  *
  * POST /.netlify/functions/crawl-signals
- * Body: { name, city, country?, segment?, segmentLabel?, web?, docId? }
- *
- * Response (same field names as before — callers unchanged):
- *   { ok, detectedSignals, signalCount, strikerNeedScore, signalReason,
- *     signalEvidence, signalSources, reviewCount, reviewRating, analyzedAt }
+ * Body: { name, city, country?, segment?, web?, docId? }
  */
 
 const SERPAPI_KEY = process.env.SERPAPI_API_KEY
@@ -67,86 +66,60 @@ async function fsPatch(docId, data) {
   return res.json()
 }
 
-// ── Signal groups — 4 tiers ───────────────────────────────────────────────────
+// ── Signal keyword groups ─────────────────────────────────────────────────────
 //
-// Keyword design principle:
-//   VERY_STRONG = action verbs + energy/heating objects  → "We are doing it"
-//   STRONG      = concrete nouns for projects/costs      → "We are affected"
-//   MEDIUM      = structured reporting / targets          → "We declared it"
-//   WEAK        = vague brand sustainability claims       → "We say it"
-//
-// Scoring: each group adds its weight ONCE when detected, regardless of how
-// many keywords match. This prevents keyword-stuffed pages from inflating score.
+// These are what we SEARCH for in page text.
+// They do NOT score on their own — they must also pass the context check below.
 
 const SIGNAL_GROUPS = [
-
-  // ── VERY STRONG (+35) ── Active investment or project in heating / energy ──
+  // VERY STRONG (+35) — Active energy/heating investment
   {
-    id: 'active_energy_investment',
-    label: 'Aktívna energetická investícia',
-    tier: 'VERY_STRONG',
-    weight: 35,
+    id: 'active_energy_investment', label: 'Aktívna energetická investícia',
+    tier: 'VERY_STRONG', weight: 35,
     keywords: [
-      // Heating system actions
       'heizungsanlage ersetzen', 'heizungsanlage ersetzt', 'heizungsanlage austausch',
       'neue heizungsanlage', 'neuer heizkessel', 'heizkessel ersetzt',
       'heiztechnik modernisiert', 'heizungssystem erneuert',
       'wärmepumpe einbau', 'wärmepumpe installiert', 'wärmepumpe projekt',
       'neue wärmeanlage', 'wärmeerzeugung modernisiert',
-      // Energy project actions
       'energieprojekt', 'energetische sanierung', 'energetische modernisierung',
       'investition in energie', 'investition in heizung',
-      'heizprojekt', 'wärmeprojekt',
     ],
   },
-
-  // ── STRONG (+25) ── Concrete modernization news or cost-pressure signals ──
+  // STRONG (+25) — Concrete modernization or cost-pressure
   {
-    id: 'modernization_news',
-    label: 'Modernizácia / rekonštrukcia',
-    tier: 'STRONG',
-    weight: 25,
+    id: 'modernization_news', label: 'Modernizácia / rekonštrukcia',
+    tier: 'STRONG', weight: 25,
     keywords: [
       'modernisierung', 'modernisiert', 'sanierung', 'saniert',
       'renovierung', 'renoviert', 'umbau', 'umgebaut',
-      'erweiterung', 'neubau', 'infrastrukturprojekt',
-      'bauarbeiten', 'generalüberholung',
+      'erweiterung', 'neubau', 'infrastrukturprojekt', 'generalüberholung',
     ],
   },
   {
-    id: 'cost_pressure',
-    label: 'Tlak nákladov / efektivita',
-    tier: 'STRONG',
-    weight: 25,
+    id: 'cost_pressure', label: 'Tlak nákladov / efektivita',
+    tier: 'STRONG', weight: 25,
     keywords: [
       'energiekosten', 'heizkosten', 'wärmekosten', 'betriebskosten',
       'kostenreduktion', 'kostensenkung', 'kosten reduzieren',
       'effizienzsteigerung', 'energieverbrauch reduzieren',
       'energieoptimierung', 'energieeffizienz steigern',
-      'wirtschaftlichkeit verbessern',
     ],
   },
-
-  // ── MEDIUM (+15) ── Structured ESG / declared climate targets ──
+  // MEDIUM (+15) — ESG / declared climate targets
   {
-    id: 'esg_climate',
-    label: 'ESG / Klimastratégia',
-    tier: 'MEDIUM',
-    weight: 15,
+    id: 'esg_climate', label: 'ESG / Klimastratégia',
+    tier: 'MEDIUM', weight: 15,
     keywords: [
       'esg', 'nachhaltigkeitsbericht', 'sustainability report',
       'klimastrategie', 'klimaziele', 'co2 reduktion', 'co₂ reduktion',
       'co2-neutral', 'klimaneutral', 'dekarbonisierung', 'klimaschutzprogramm',
-      'energiewende', 'klimaneutralität bis',
     ],
   },
-
-  // ── WEAK (+5) ── Generic brand sustainability claims (noise, not signal) ──
+  // WEAK (+5) — Generic sustainability mentions
   {
-    id: 'sustainability_generic',
-    label: 'Udržateľnosť (marketing)',
-    tier: 'WEAK',
-    weight: 5,
+    id: 'sustainability_generic', label: 'Udržateľnosť (marketing)',
+    tier: 'WEAK', weight: 5,
     keywords: [
       'nachhaltigkeit', 'nachhaltig', 'umweltfreundlich',
       'ökologisch', 'ressourcenschonung', 'verantwortung',
@@ -154,12 +127,10 @@ const SIGNAL_GROUPS = [
   },
 ]
 
-// Review signals — only activated for hotel/wellness/spa segments
+// Review signals — hotel/wellness only
 const REVIEW_SIGNAL_GROUP = {
-  id:      'guest_complaint',
-  label:   'Sťažnosti hostí (teplota/kúrenie)',
-  tier:    'STRONG',
-  weight:  25,
+  id: 'guest_complaint', label: 'Sťažnosti hostí (teplota/kúrenie)',
+  tier: 'STRONG', weight: 25,
   keywords: [
     'kalt', 'kälte', 'warm', 'heizung', 'warmwasser',
     'temperatur', 'friert', 'defekt', 'kaputt', 'störung',
@@ -167,13 +138,68 @@ const REVIEW_SIGNAL_GROUP = {
   ],
 }
 
-// Segments that benefit from review analysis
 const REVIEW_SEGMENTS = new Set(['hotel', 'wellness', 'spa', 'hospital'])
 
-// ── Website intelligence — targeted pages ONLY ────────────────────────────────
+// ── Context validation ─────────────────────────────────────────────────────────
 //
-// These paths are where REAL intelligence lives.
-// Homepage and amenity pages are deliberately excluded.
+// Both checks operate on a ±200-char window around each keyword match.
+
+// At least one of these must appear for a match to be counted
+const ENERGY_PRESSURE_TERMS = [
+  'heizung', 'heizkessel', 'heizungsanlage', 'heiztechnik', 'heizsystem',
+  'heizkosten', 'heizbedarf',
+  'energie', 'energiekosten', 'energieverbrauch', 'energieeffizienz',
+  'energieeinsparung', 'energieoptimierung', 'energieprojekt',
+  'kosten', 'betriebskosten', 'kostenreduktion', 'kostensenkung',
+  'wärme', 'wärmeversorgung', 'wärmeerzeugung', 'wärmepumpe',
+  'warmwasser', 'wärmekosten', 'wärmebedarf',
+  'verbrauch', 'stromverbrauch',
+  'effizienz', 'effizienzsteigerung',
+  'co2', 'co₂', 'emission', 'treibhausgas',
+  'kessel', 'dampfkessel',
+  'anlage', 'haustechnik', 'gebäudetechnik', 'technische anlage',
+  'infrastruktur', 'technik', 'technologie',
+  'investition', 'projekt',
+]
+
+// If ANY of these appear in the context → discard the match
+const MARKETING_DISCARD_TERMS = [
+  'zimmer', 'suite', 'doppelzimmer', 'einzelzimmer', 'appartement',
+  'inneneinrichtung', 'einrichtung', 'eingerichtet', 'möbel', 'mobiliar',
+  'dekor', 'interieur', 'interior', 'design', 'luxus', 'ausstattung',
+  'restaurant', 'speisekarte', 'menü', 'frühstück', 'abendessen', 'buffet',
+  'massage', 'körperpflege', 'schönheitspflege', 'behandlung',
+]
+
+// Reviews: if the text is primarily about food/service (not heating) → skip
+const REVIEW_DISCARD_TERMS = [
+  'essen', 'speise', 'mahlzeit', 'frühstück', 'abendessen', 'restaurant',
+  'küche', 'speisekarte', 'menü', 'gericht', 'buffet',
+  'service', 'personal', 'mitarbeiter', 'rezeption', 'empfang',
+  'freundlich', 'unfreundlich', 'bedienung', 'kellner',
+  'lage', 'aussicht', 'parkplatz', 'preis', 'teuer', 'günstig',
+]
+
+function hasEnergyContext(ctx) {
+  const c = ctx.toLowerCase()
+  return ENERGY_PRESSURE_TERMS.some(t => c.includes(t))
+}
+
+function hasMarketingContext(ctx) {
+  const c = ctx.toLowerCase()
+  return MARKETING_DISCARD_TERMS.some(t => c.includes(t))
+}
+
+// Returns true if the review is about food/service and NOT about heating
+function isNonHeatingReview(text) {
+  const t           = text.toLowerCase()
+  const heatingHits = REVIEW_SIGNAL_GROUP.keywords.filter(k => t.includes(k)).length
+  if (heatingHits > 0) return false                                    // has heating content → keep
+  const discardHits = REVIEW_DISCARD_TERMS.filter(d => t.includes(d)).length
+  return discardHits > 0                                               // only food/service → discard
+}
+
+// ── Targeted intelligence pages ───────────────────────────────────────────────
 
 const INTELLIGENCE_PATHS = [
   '/aktuelles', '/news', '/presse', '/pressemitteilungen', '/blog',
@@ -181,6 +207,8 @@ const INTELLIGENCE_PATHS = [
   '/nachhaltigkeit', '/sustainability', '/esg',
   '/energie', '/energieeffizienz', '/klima', '/co2', '/umwelt',
 ]
+
+// ── HTML → plain text ──────────────────────────────────────────────────────────
 
 function htmlToText(html) {
   return html
@@ -217,25 +245,19 @@ async function fetchPage(url, timeoutMs = 4000) {
 async function crawlIntelligencePages(web) {
   if (!web) return { pages: [], sources: [] }
   const base = web.startsWith('http') ? web.replace(/\/$/, '') : `https://${web.replace(/\/$/, '')}`
-
-  const pages   = []
-  const sources = []
-  let   tried   = 0
-
+  const pages = [], sources = []
+  let tried = 0
   for (const path of INTELLIGENCE_PATHS) {
     if (tried >= 6) break
     tried++
     const page = await fetchPage(base + path)
-    if (page) {
-      pages.push({ ...page, pageType: path.replace('/', '') || 'root' })
-      sources.push(page.url)
-    }
+    if (page) { pages.push({ ...page, pageType: path.replace('/', '') }); sources.push(page.url) }
     if (pages.reduce((s, p) => s + p.text.length, 0) > 40000) break
   }
   return { pages, sources }
 }
 
-// ── Google Reviews via SerpAPI ─────────────────────────────────────────────────
+// ── SerpAPI ───────────────────────────────────────────────────────────────────
 
 async function searchGoogleMaps(name, city, country) {
   const gl  = ['at', 'ch'].includes((country || '').toLowerCase()) ? country.toLowerCase() : 'de'
@@ -248,13 +270,10 @@ async function searchGoogleMaps(name, city, country) {
     clearTimeout(t)
     if (!res.ok) throw new Error(`SerpAPI Maps HTTP ${res.status}`)
     const data = await res.json()
-    const hits  = data.local_results || []
+    const hits = data.local_results || []
     if (!hits.length) throw new Error('No Google Maps results')
     return hits[0]
-  } catch (e) {
-    clearTimeout(t)
-    throw e
-  }
+  } catch (e) { clearTimeout(t); throw e }
 }
 
 async function fetchReviews(dataId) {
@@ -268,18 +287,19 @@ async function fetchReviews(dataId) {
     if (!res.ok) return []
     const data = await res.json()
     return data.reviews || []
-  } catch {
-    clearTimeout(t)
-    return []
-  }
+  } catch { clearTimeout(t); return [] }
 }
 
-// ── Signal analysis — website pages ───────────────────────────────────────────
+// ── Website signal analysis — with context validation ─────────────────────────
+//
+// Every keyword match must pass two context checks on the ±200-char window:
+//   PASS  → at least one ENERGY_PRESSURE_TERM present
+//   FAIL  → any MARKETING_DISCARD_TERM present  (immediately discarded)
 
 function analyzeWebPages(pages) {
-  const detectedMap  = {}
-  const allEvidence  = []
-  const seenKwPage   = new Set()
+  const detectedMap = {}
+  const allEvidence = []
+  const seenKwPage  = new Set()
 
   for (const { url, text, pageType } of pages) {
     const tLow = text.toLowerCase()
@@ -290,13 +310,26 @@ function analyzeWebPages(pages) {
         const idx   = tLow.indexOf(kwLow)
         if (idx === -1) continue
 
+        // Extract ±200-char context window
+        const ctxStart = Math.max(0, idx - 200)
+        const ctxEnd   = Math.min(text.length, idx + kw.length + 200)
+        const ctx      = text.slice(ctxStart, ctxEnd)
+
+        // Rule 1: discard if marketing/room/food context detected
+        if (hasMarketingContext(ctx)) continue
+
+        // Rule 2: only count if energy pressure context confirmed
+        if (!hasEnergyContext(ctx)) continue
+
+        // Passed both checks — record evidence
         const dedupeKey = `${kwLow}::${url}`
         if (!seenKwPage.has(dedupeKey)) {
           seenKwPage.add(dedupeKey)
-          const start   = Math.max(0, idx - 110)
-          const end     = Math.min(text.length, idx + kw.length + 110)
-          const raw     = text.slice(start, end).replace(/\s+/g, ' ').trim()
-          const snippet = (start > 0 ? '…' : '') + raw + (end < text.length ? '…' : '')
+          // Snippet: ±110 chars (tighter than context window)
+          const sStart  = Math.max(0, idx - 110)
+          const sEnd    = Math.min(text.length, idx + kw.length + 110)
+          const raw     = text.slice(sStart, sEnd).replace(/\s+/g, ' ').trim()
+          const snippet = (sStart > 0 ? '…' : '') + raw + (sEnd < text.length ? '…' : '')
           allEvidence.push({ groupId: g.id, groupLabel: g.label, tier: g.tier, keyword: kw, snippet, url, pageType, source: 'web' })
         }
 
@@ -314,7 +347,11 @@ function analyzeWebPages(pages) {
   return { detectedMap, allEvidence }
 }
 
-// ── Signal analysis — Google Reviews ─────────────────────────────────────────
+// ── Review signal analysis — heating complaints ONLY ─────────────────────────
+//
+// A review is processed only if:
+//   • It contains a heating/temperature keyword (REVIEW_SIGNAL_GROUP.keywords)
+//   • It is NOT primarily about food, service, or ambiance
 
 function analyzeReviews(reviews, placeUrl) {
   const detectedMap = {}
@@ -325,6 +362,10 @@ function analyzeReviews(reviews, placeUrl) {
   for (const review of reviews) {
     const text = (review.snippet || review.text || '').trim()
     if (!text) continue
+
+    // Discard: not about heating (food/service/ambiance review)
+    if (isNonHeatingReview(text)) continue
+
     const tLow  = text.toLowerCase()
     const rating = typeof review.rating === 'number' ? review.rating : null
 
@@ -336,10 +377,10 @@ function analyzeReviews(reviews, placeUrl) {
       const dedupeKey = `${kwLow}::${text.slice(0, 40)}`
       if (!seenKwRev.has(dedupeKey)) {
         seenKwRev.add(dedupeKey)
-        const start   = Math.max(0, idx - 60)
-        const end     = Math.min(text.length, idx + kw.length + 60)
-        const raw     = text.slice(start, end).replace(/\s+/g, ' ').trim()
-        const snippet = (start > 0 ? '…' : '') + raw + (end < text.length ? '…' : '')
+        const sStart  = Math.max(0, idx - 70)
+        const sEnd    = Math.min(text.length, idx + kw.length + 70)
+        const raw     = text.slice(sStart, sEnd).replace(/\s+/g, ' ').trim()
+        const snippet = (sStart > 0 ? '…' : '') + raw + (sEnd < text.length ? '…' : '')
         allEvidence.push({ groupId: g.id, groupLabel: g.label, tier: g.tier, keyword: kw, snippet, url: placeUrl, rating, source: 'review' })
       }
 
@@ -359,7 +400,6 @@ function analyzeReviews(reviews, placeUrl) {
 // ── Merge + score ─────────────────────────────────────────────────────────────
 
 function buildResult(webDetected, webEvidence, revDetected, revEvidence) {
-  // Merge detected groups from both sources
   const merged = { ...webDetected }
   for (const [id, g] of Object.entries(revDetected)) {
     if (merged[id]) {
@@ -371,24 +411,17 @@ function buildResult(webDetected, webEvidence, revDetected, revEvidence) {
   }
 
   const detectedSignals = Object.values(merged).map(g => ({
-    id:       g.id,
-    label:    g.label,
-    tier:     g.tier,
-    weight:   g.weight,
-    matches:  [...g.matches],
-    hitCount: g.hitCount,
+    id: g.id, label: g.label, tier: g.tier, weight: g.weight,
+    matches: [...g.matches], hitCount: g.hitCount,
   }))
 
-  // Score: sum of weights per detected group, capped at 100
-  const rawScore      = detectedSignals.reduce((s, g) => s + g.weight, 0)
+  const rawScore         = detectedSignals.reduce((s, g) => s + g.weight, 0)
   const strikerNeedScore = Math.min(100, rawScore)
 
-  // Evidence: cap at 2 per group (prefer VERY_STRONG first), 25 total
+  // Sort evidence: VERY_STRONG first, then STRONG, etc.
+  const tierRank  = { VERY_STRONG: 0, STRONG: 1, MEDIUM: 2, WEAK: 3 }
   const allEvidence = [...webEvidence, ...revEvidence]
-    .sort((a, b) => {
-      const tierRank = { VERY_STRONG: 0, STRONG: 1, MEDIUM: 2, WEAK: 3 }
-      return (tierRank[a.tier] ?? 4) - (tierRank[b.tier] ?? 4)
-    })
+    .sort((a, b) => (tierRank[a.tier] ?? 4) - (tierRank[b.tier] ?? 4))
 
   const byGroup        = {}
   const signalEvidence = []
@@ -398,21 +431,18 @@ function buildResult(webDetected, webEvidence, revDetected, revEvidence) {
     if (signalEvidence.length >= 25) break
   }
 
-  // Signal reason — distinguish real from marketing
   const realSignals = detectedSignals.filter(s => s.tier !== 'WEAK')
-  const topReal     = [...realSignals].sort((a, b) => b.weight - a.weight).slice(0, 2)
+  const top2        = [...realSignals].sort((a, b) => b.weight - a.weight).slice(0, 2)
   const hasWeak     = detectedSignals.some(s => s.tier === 'WEAK')
 
   let signalReason
-  if (topReal.length > 0) {
-    const labels = topReal.map(s => s.label).join(', ')
-    const extra  = realSignals.length > 2 ? ` +${realSignals.length - 2}` : ''
-    signalReason = `Reálny signál: ${labels}${extra}.`
-    if (hasWeak && realSignals.length === 0) signalReason += ' (ostatné sú marketingový obsah)'
+  if (top2.length > 0) {
+    const extra = realSignals.length > 2 ? ` +${realSignals.length - 2}` : ''
+    signalReason = `Reálny signál: ${top2.map(s => s.label).join(', ')}${extra}.`
   } else if (hasWeak) {
-    signalReason = 'Iba marketingový obsah — žiadny reálny energetický signál.'
+    signalReason = 'Iba marketingový obsah — žiadny reálny energetický tlak.'
   } else {
-    signalReason = 'Žiadne signály — skontrolovať ručne alebo firma nemá verejné dáta.'
+    signalReason = 'Žiadne signály — firma nemá verejné energetické dáta.'
   }
 
   return { detectedSignals, signalCount: detectedSignals.length, strikerNeedScore, signalReason, signalEvidence }
@@ -446,26 +476,31 @@ exports.handler = async (event) => {
   catch { return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Invalid JSON' }) } }
 
   const {
-    name         = '',
-    city         = '',
-    country      = 'DE',
-    segment      = '',
-    segmentLabel = '',
-    web          = '',      // still accepted — used for website intelligence
+    name    = '',
+    city    = '',
+    country = 'DE',
+    segment = '',
+    web     = '',
     docId,
   } = body
 
   if (!name) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'name required' }) }
 
-  console.log(`[crawl-signals] START "${name}" city=${city} segment=${segment} web=${web || '—'} docId=${docId}`)
+  if (!SERPAPI_KEY && !web) {
+    const result = emptyResult('SERPAPI_API_KEY nie je nastavený a web nie je k dispozícii.')
+    if (docId && FB_API_KEY && FB_PROJECT) await fsPatch(docId, result).catch(() => {})
+    return { statusCode: 200, headers: CORS, body: JSON.stringify({ ok: true, name, ...result }) }
+  }
+
+  console.log(`[crawl-signals] START "${name}" city=${city} seg=${segment} web=${web || '—'} docId=${docId}`)
   const t0 = Date.now()
 
-  // ── SOURCE 1: Website intelligence (targeted pages) ──────────────────────────
+  // ── Source 1: website (targeted pages) ────────────────────────────────────
   const webTask = web
     ? crawlIntelligencePages(web)
     : Promise.resolve({ pages: [], sources: [] })
 
-  // ── SOURCE 2: Google Reviews (hotels/wellness only) ───────────────────────────
+  // ── Source 2: Google Reviews (hotels/wellness only) ───────────────────────
   const isReviewSegment = REVIEW_SEGMENTS.has(segment.toLowerCase())
   let reviewTask = Promise.resolve({ reviews: [], place: null })
 
@@ -485,7 +520,7 @@ exports.handler = async (event) => {
 
   console.log(`[crawl-signals] pages=${pages.length} reviews=${reviews.length} ${Date.now() - t0}ms`)
 
-  // ── Analyse ───────────────────────────────────────────────────────────────────
+  // ── Analyse ───────────────────────────────────────────────────────────────
   const { detectedMap: webDet, allEvidence: webEv } = analyzeWebPages(pages)
 
   const placeUrl = place?.link || (SERPAPI_KEY && isReviewSegment
@@ -495,22 +530,16 @@ exports.handler = async (event) => {
 
   const signals = buildResult(webDet, webEv, revDet, revEv)
 
-  const allSources = [
-    ...sources,
-    ...(placeUrl ? [placeUrl] : []),
-  ]
-
   const payload = {
     ...signals,
-    signalSources: allSources,
+    signalSources: [...sources, ...(placeUrl ? [placeUrl] : [])],
     reviewCount:   place?.reviews  ?? reviews.length,
     reviewRating:  place?.rating   ?? null,
     analyzedAt:    new Date().toISOString(),
   }
 
-  console.log(`[crawl-signals] score=${payload.strikerNeedScore} groups=${payload.signalCount} evidence=${payload.signalEvidence.length} tier=${signals.detectedSignals.map(s=>s.tier).join('+')||'none'} ${Date.now()-t0}ms`)
+  console.log(`[crawl-signals] score=${payload.strikerNeedScore} groups=${payload.signalCount} evidence=${payload.signalEvidence.length} tier=${signals.detectedSignals.map(s => s.tier).join('+') || 'none'} ${Date.now() - t0}ms`)
 
-  // ── Persist ───────────────────────────────────────────────────────────────────
   if (docId && FB_API_KEY && FB_PROJECT) {
     await fsPatch(docId, payload).catch(e =>
       console.warn('[crawl-signals] Firestore PATCH failed:', e.message)
