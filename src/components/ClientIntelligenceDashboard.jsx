@@ -1006,9 +1006,37 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
   async function doSignals() {
     setSLoad(true); setSMsg('')
     try {
-      const r = await fetch('/.netlify/functions/serpapi-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ companyName: t.name, url: t.web, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, country: t.country || 'DE', strikerFitScore: t.strikerFitScore || 50, painPoints: analysis?.painPoints || [], aiReasoning: analysis?.reasoning || '' }) })
-      const d = await r.json()
-      if (d.ok) { await updateTarget(t.id, { heatPressure: d.heatPressure, heatPressureReason: d.heatPressureReason, thermalDependency: d.thermalDependency, thermalDependencyReason: d.thermalDependencyReason, operatingCostPressure: d.operatingCostPressure, operatingCostPressureReason: d.operatingCostPressureReason, modernizationNeed: d.modernizationNeed, modernizationNeedReason: d.modernizationNeedReason, boilerDependencyProb: d.boilerDependencyProb, boilerDependencyProbReason: d.boilerDependencyProbReason, willingnessToSolve: d.willingnessToSolve, willingnessToSolveReason: d.willingnessToSolveReason, reviewsSource: d.reviewsSource, reviewsCachedAt: d.reviewsCachedAt, reviewRating: d.reviewRating, reviewCount: d.reviewCount, reviewSummary: d.reviewSummary, liveSignals: d.liveSignals || [] }); setSMsg(d.reviewsSource === 'serpapi' ? `✅ ${d.reviewCount || 0} Google recenzií · ${(d.liveSignals || []).length} signálov` : '✅ AI signálová analýza') }
+      const reviewPayload = { companyName: t.name, url: t.web, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, country: t.country || 'DE', strikerFitScore: t.strikerFitScore || 50, painPoints: analysis?.painPoints || [], aiReasoning: analysis?.reasoning || '' }
+      const crawlPayload  = { web: t.web || t.website || '', name: t.name, segment: t.segment, segmentLabel: t.segmentLabel, city: t.city, docId: t.id }
+
+      const [reviewRes, crawlRes] = await Promise.all([
+        fetch('/.netlify/functions/serpapi-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reviewPayload) }),
+        (t.web || t.website)
+          ? fetch('/.netlify/functions/crawl-signals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(crawlPayload) })
+          : Promise.resolve(null),
+      ])
+
+      const d  = await reviewRes.json()
+      const cd = crawlRes ? await crawlRes.json().catch(() => null) : null
+
+      if (d.ok) {
+        const update = { heatPressure: d.heatPressure, heatPressureReason: d.heatPressureReason, thermalDependency: d.thermalDependency, thermalDependencyReason: d.thermalDependencyReason, operatingCostPressure: d.operatingCostPressure, operatingCostPressureReason: d.operatingCostPressureReason, modernizationNeed: d.modernizationNeed, modernizationNeedReason: d.modernizationNeedReason, boilerDependencyProb: d.boilerDependencyProb, boilerDependencyProbReason: d.boilerDependencyProbReason, willingnessToSolve: d.willingnessToSolve, willingnessToSolveReason: d.willingnessToSolveReason, reviewsSource: d.reviewsSource, reviewsCachedAt: d.reviewsCachedAt, reviewRating: d.reviewRating, reviewCount: d.reviewCount, reviewSummary: d.reviewSummary, liveSignals: d.liveSignals || [] }
+        if (cd?.ok) {
+          update.detectedSignals  = cd.detectedSignals  || []
+          update.signalCount      = cd.signalCount      ?? 0
+          update.strikerNeedScore = cd.strikerNeedScore ?? 0
+          update.signalReason     = cd.signalReason     || ''
+          update.signalEvidence   = cd.signalEvidence   || []
+          update.signalSources    = cd.signalSources    || []
+          update.analyzedAt       = cd.analyzedAt       || new Date().toISOString()
+        }
+        await updateTarget(t.id, update)
+        const evidCount = (cd?.signalEvidence || []).length
+        setSMsg(
+          (d.reviewsSource === 'serpapi' ? `✅ ${d.reviewCount || 0} Google recenzií · ${(d.liveSignals || []).length} signálov` : '✅ AI signálová analýza') +
+          (evidCount > 0 ? ` · ${evidCount} dôkazov zo stránky` : '')
+        )
+      }
     } catch (e) { setSMsg('⚠ ' + e.message) } finally { setSLoad(false) }
   }
 
@@ -1567,8 +1595,128 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
       </div>
     )
 
-    // Others: generic
-    const names = { activity: 'Aktivity', sources: 'Zdroje a dôkazy', documents: 'Dokumenty' }
+    // ZDROJE A DÔKAZY
+    if (nav === 'sources') {
+      const evidence = t.signalEvidence || []
+      const sources  = t.signalSources  || []
+
+      // Group evidence by signal category
+      const grouped = {}
+      for (const ev of evidence) {
+        if (!grouped[ev.groupId]) grouped[ev.groupId] = { label: ev.groupLabel, items: [] }
+        grouped[ev.groupId].items.push(ev)
+      }
+      const groups = Object.values(grouped)
+
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+          {/* Trigger button + crawl status */}
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <Btn onClick={doSignals} disabled={sLoad} color={C.orange}>{sLoad ? '⏳ Analyzujem...' : '🔍 Načítať dôkazy'}</Btn>
+            {sMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: sMsg.startsWith('✅') ? C.green : C.amber }}>{sMsg}</span>}
+          </div>
+          <ProgressBar running={sLoad} maxSecs={15} type="signal" />
+
+          {/* Stats row */}
+          {(t.strikerNeedScore != null || evidence.length > 0) && (
+            <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+              {[
+                { label: 'Signal score', value: `${t.strikerNeedScore ?? '–'}/100`, color: (t.strikerNeedScore || 0) >= 50 ? C.green : C.amber },
+                { label: 'Skupiny signálov', value: t.signalCount ?? '–', color: C.text },
+                { label: 'Citácie zo stránky', value: evidence.length, color: C.text },
+                { label: 'Prehľadané stránky', value: sources.length || '–', color: C.text },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{ padding: '0.55rem 0.85rem', background: C.card, border: `1px solid ${C.border2}`, borderRadius: 5 }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '2px', textTransform: 'uppercase', color: C.dim, marginBottom: '0.15rem' }}>{label}</div>
+                  <div style={{ fontFamily: mono, fontSize: '1rem', fontWeight: 700, color }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Crawled URL list */}
+          {sources.length > 0 && (
+            <div>
+              <SH label="Prehľadané stránky" />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                {sources.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noreferrer"
+                    style={{ fontFamily: mono, fontSize: '0.46rem', padding: '0.12rem 0.45rem', border: `1px solid ${C.border2}`, borderRadius: 3, color: C.dim, textDecoration: 'none', wordBreak: 'break-all', transition: 'color 0.1s' }}
+                    onMouseOver={e => e.currentTarget.style.color = C.purple}
+                    onMouseOut={e => e.currentTarget.style.color = C.dim}>
+                    {url.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 60)}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Signal reason summary */}
+          {t.signalReason && (
+            <div style={{ padding: '0.7rem 0.9rem', background: `${C.purple}0a`, border: `1px solid ${C.purple}22`, borderRadius: 5 }}>
+              <span style={{ fontFamily: mono, fontSize: '0.57rem', color: C.purple, lineHeight: 1.6 }}>📡 {t.signalReason}</span>
+            </div>
+          )}
+
+          {/* Evidence grouped by category */}
+          <div>
+            <SH label="Konkrétne dôkazy zo stránky" source={evidence.length > 0 ? 'live' : 'unknown'} />
+            {groups.length === 0 ? (
+              <Empty
+                text="Žiadne signály zatiaľ nenájdené."
+                action={<Btn onClick={doSignals} disabled={sLoad} color={C.orange} small>🔍 Načítať dôkazy</Btn>}
+              />
+            ) : (
+              groups.map((group, gi) => (
+                <div key={gi} style={{ marginBottom: '1.25rem' }}>
+                  {/* Group label */}
+                  <div style={{ fontFamily: mono, fontSize: '0.44rem', letterSpacing: '2.5px', textTransform: 'uppercase', color: C.orange, fontWeight: 700, marginBottom: '0.6rem', paddingBottom: '0.4rem', borderBottom: `1px solid ${C.border}` }}>
+                    {group.label} <span style={{ color: C.dim, fontWeight: 400 }}>· {group.items.length} {group.items.length === 1 ? 'záznam' : 'záznamy'}</span>
+                  </div>
+
+                  {/* Evidence items */}
+                  {group.items.map((ev, ei) => {
+                    const isReal = ev.url && ev.url !== 'meta'
+                    const shortUrl = isReal ? ev.url.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 60) : null
+                    return (
+                      <div key={ei} style={{ marginBottom: '0.6rem', padding: '0.7rem 0.85rem', background: '#0c1018', border: `1px solid ${C.border}`, borderRadius: 4 }}>
+                        {/* Keyword badge */}
+                        <div style={{ marginBottom: '0.35rem' }}>
+                          <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.05rem 0.35rem', border: `1px solid ${C.purple}44`, background: `${C.purple}0f`, color: C.purple, borderRadius: 2 }}>
+                            {ev.keyword}
+                          </span>
+                        </div>
+                        {/* Quoted snippet */}
+                        {ev.snippet && (
+                          <div style={{ fontFamily: mono, fontSize: '0.59rem', color: C.sub, lineHeight: 1.7, fontStyle: 'italic', borderLeft: `2px solid ${C.purple}33`, paddingLeft: '0.55rem', marginBottom: '0.3rem' }}>
+                            {ev.snippet}
+                          </div>
+                        )}
+                        {/* Source URL */}
+                        {isReal ? (
+                          <a href={ev.url} target="_blank" rel="noreferrer"
+                            style={{ fontFamily: mono, fontSize: '0.45rem', color: C.ghost, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.2rem', transition: 'color 0.1s' }}
+                            onMouseOver={e => e.currentTarget.style.color = C.purple}
+                            onMouseOut={e => e.currentTarget.style.color = C.ghost}>
+                            🔗 {shortUrl}
+                          </a>
+                        ) : (
+                          <span style={{ fontFamily: mono, fontSize: '0.43rem', color: '#2d3748' }}>ℹ segment/name meta</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    // Others: generic fallback
+    const names = { activity: 'Aktivity', documents: 'Dokumenty' }
     return (
       <div>
         <SH label={names[nav] || nav} />
