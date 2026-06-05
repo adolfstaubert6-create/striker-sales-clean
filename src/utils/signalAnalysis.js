@@ -1,204 +1,162 @@
 /**
- * Live Signal Engine — Phase 1A
- * Keyword-based signal detection on company text.
- * No crawling, no AI calls — pure text matching foundation.
+ * signalAnalysis.js — Frontend preliminary signal scoring
+ *
+ * PHILOSOPHY: We look for companies with a REAL ENERGY PROBLEM who are
+ * publicly signaling they're solving it. Marketing language is noise.
+ *
+ * Same 4-tier system as crawl-signals.js (backend).
+ * Used for card-level preview scoring in IntelTargetCard and IntelAgentPanel.
  */
 
-// ── Signal keyword groups ──────────────────────────────────────────────────────
+// ── Signal groups — 4 tiers ───────────────────────────────────────────────────
 
 const SIGNAL_GROUPS = [
+
+  // VERY STRONG (+35) — Active investment / heating project
   {
-    id:       'energy_efficiency',
-    label:    'Energy Efficiency',
-    weight:   10,
+    id:       'active_energy_investment',
+    label:    'Aktívna energetická investícia',
+    tier:     'VERY_STRONG',
+    weight:   35,
     keywords: [
-      'energie', 'energieeffizienz', 'energy efficiency', 'energiesparen',
-      'energieverbrauch', 'stromverbrauch', 'wärmepumpe', 'heat pump',
-      'energiekosten', 'energy costs', 'energieverantwortlich',
-      'niedrigenergie', 'low energy', 'energieoptimierung',
+      'heizungsanlage ersetzen', 'heizungsanlage ersetzt', 'heizungsanlage austausch',
+      'neue heizungsanlage', 'neuer heizkessel', 'heizkessel ersetzt',
+      'heiztechnik modernisiert', 'heizungssystem erneuert',
+      'wärmepumpe einbau', 'wärmepumpe installiert', 'wärmepumpe projekt',
+      'neue wärmeanlage', 'wärmeerzeugung modernisiert',
+      'energieprojekt', 'energetische sanierung', 'energetische modernisierung',
+      'investition in energie', 'investition in heizung',
+      'heizprojekt', 'wärmeprojekt',
+    ],
+  },
+
+  // STRONG (+25) — Concrete modernization or cost-pressure evidence
+  {
+    id:       'modernization_news',
+    label:    'Modernizácia / rekonštrukcia',
+    tier:     'STRONG',
+    weight:   25,
+    keywords: [
+      'modernisierung', 'modernisiert', 'sanierung', 'saniert',
+      'renovierung', 'renoviert', 'umbau', 'umgebaut',
+      'erweiterung', 'neubau', 'infrastrukturprojekt',
+      'bauarbeiten', 'generalüberholung',
     ],
   },
   {
-    id:       'modernization',
-    label:    'Modernisierung',
-    weight:   9,
+    id:       'cost_pressure',
+    label:    'Tlak nákladov / efektivita',
+    tier:     'STRONG',
+    weight:   25,
     keywords: [
-      'modernisierung', 'modernization', 'modernisiert', 'sanierung',
-      'renovierung', 'renovation', 'umbau', 'refurbishment',
-      'nachrüstung', 'retrofit', 'upgrade', 'erneuerung',
-      'instandhaltung', 'maintenance', 'haustechnik',
+      'energiekosten', 'heizkosten', 'wärmekosten', 'betriebskosten',
+      'kostenreduktion', 'kostensenkung', 'kosten reduzieren',
+      'effizienzsteigerung', 'energieverbrauch reduzieren',
+      'energieoptimierung', 'energieeffizienz steigern',
+      'wirtschaftlichkeit verbessern',
     ],
   },
+
+  // MEDIUM (+15) — Structured ESG / declared CO₂ targets
   {
-    id:       'sustainability',
-    label:    'Nachhaltigkeit',
-    weight:   9,
+    id:       'esg_climate',
+    label:    'ESG / Klimastratégia',
+    tier:     'MEDIUM',
+    weight:   15,
     keywords: [
-      'nachhaltigkeit', 'sustainability', 'nachhaltig', 'sustainable',
-      'umwelt', 'environment', 'ökologie', 'ecology',
-      'ressourcenschonung', 'resource', 'klimaschutz', 'climate protection',
-      'verantwortung', 'responsibility',
+      'esg', 'nachhaltigkeitsbericht', 'sustainability report',
+      'klimastrategie', 'klimaziele', 'co2 reduktion', 'co₂ reduktion',
+      'co2-neutral', 'klimaneutral', 'dekarbonisierung',
+      'klimaschutzprogramm', 'energiewende', 'klimaneutralität bis',
     ],
   },
+
+  // WEAK (+5) — Generic marketing sustainability claims (noise)
   {
-    id:       'esg',
-    label:    'ESG',
-    weight:   8,
+    id:       'sustainability_generic',
+    label:    'Udržateľnosť (marketing)',
+    tier:     'WEAK',
+    weight:   5,
     keywords: [
-      'esg', 'environmental social governance', 'csr',
-      'corporate social responsibility', 'nachhaltigkeitsbericht',
-      'sustainability report', 'non-financial', 'nicht-finanziell',
-      'klimastrategie', 'klimaziele', 'klimaneutral',
-    ],
-  },
-  {
-    id:       'co2_reduction',
-    label:    'CO₂-Reduzierung',
-    weight:   10,
-    keywords: [
-      'co2', 'co₂', 'carbon', 'treibhausgas', 'greenhouse gas',
-      'kohlenstoff', 'emissionen', 'emissions', 'dekarbonisierung',
-      'decarbonization', 'klimaneutral', 'carbon neutral',
-      'net zero', 'netto null', 'scope 1', 'scope 2', 'scope 3',
-      'co2-fußabdruck', 'carbon footprint',
-    ],
-  },
-  {
-    id:       'hvac',
-    label:    'HVAC / Klima',
-    weight:   10,
-    keywords: [
-      'hvac', 'klimaanlage', 'air conditioning', 'lüftung', 'ventilation',
-      'kältetechnik', 'refrigeration', 'heizung', 'heating',
-      'klimatisierung', 'gebäudeklimatik', 'raumlufttechnik',
-      'kühlung', 'cooling', 'heizkessel', 'boiler',
-    ],
-  },
-  {
-    id:       'heating_modernization',
-    label:    'Heizungsmodernisierung',
-    weight:   10,
-    keywords: [
-      'heizungsmodernisierung', 'heating modernization',
-      'fernwärme', 'district heating', 'wärmenetz',
-      'heizungsanlage', 'heating system', 'heiztechnik',
-      'wärmeversorgung', 'heat supply', 'heizkesselersatz',
-      'brennwert', 'condensing boiler', 'pellets', 'biomasse',
-    ],
-  },
-  {
-    id:       'renovation',
-    label:    'Gebäuderenovierung',
-    weight:   8,
-    keywords: [
-      'gebäuderenovierung', 'building renovation', 'fassade', 'facade',
-      'dämmung', 'insulation', 'wärmedämmung', 'thermal insulation',
-      'fenster', 'windows', 'dach', 'roof',
-      'gebäudehülle', 'building envelope', 'altbau', 'old building',
-    ],
-  },
-  {
-    id:       'green_building',
-    label:    'Green Building',
-    weight:   8,
-    keywords: [
-      'green building', 'grünes gebäude', 'leed', 'breeam', 'dgnb',
-      'energieausweis', 'energy certificate', 'effizienzhaus',
-      'passivhaus', 'passive house', 'nullenergiehaus',
-      'zero energy building', 'plusenergiehaus',
-    ],
-  },
-  {
-    id:       'decarbonization',
-    label:    'Dekarbonisierung',
-    weight:   10,
-    keywords: [
-      'dekarbonisierung', 'decarbonization', 'decarbonisation',
-      'klimaneutralität', 'climate neutrality', 'klimaziele',
-      'paris agreement', 'pariser abkommen', '1.5 grad', '1.5 degree',
-      'energiewende', 'energy transition', 'erneuerbare energien',
-      'renewable energy', 'solarenergie', 'solar', 'photovoltaik',
-      'windenergie', 'geothermie', 'geothermal',
+      'nachhaltigkeit', 'nachhaltig', 'umweltfreundlich',
+      'ökologisch', 'ressourcenschonung', 'verantwortung',
     ],
   },
 ]
 
-// ── Core analysis function ─────────────────────────────────────────────────────
+export { SIGNAL_GROUPS }
+
+// ── Core analysis function ────────────────────────────────────────────────────
 
 /**
  * analyzeCompanySignals
- * @param {object} company — company/target object from Firestore
- * @param {string} [extraText] — optional additional scraped page text
+ * @param {object} company   — company/target object (name, segment, city, etc.)
+ * @param {string} extraText — optional additional text (scraped page content)
  * @returns {{ detectedSignals, signalCount, preliminaryNeedScore, reason }}
  */
 export function analyzeCompanySignals(company, extraText = '') {
-  // Build searchable text from available company fields
   const parts = [
-    company.name        || '',
-    company.description || '',
-    company.segment     || '',
-    company.segmentLabel || '',
-    company.city        || '',
-    company.painPoints?.join(' ') || '',
-    company.liveSignals?.join(' ') || '',
+    company.name          || '',
+    company.segment       || '',
+    company.segmentLabel  || '',
+    company.city          || '',
+    // liveSignals from reviews/crawl are already stored on the target
+    ...(company.liveSignals || []),
+    ...(company.signals    || []),
     extraText,
   ]
   const text = parts.join(' ').toLowerCase()
 
   if (!text.trim()) {
-    return {
-      detectedSignals:    [],
-      signalCount:        0,
-      preliminaryNeedScore: 0,
-      reason:             'Žiadny text na analýzu.',
-    }
+    return { detectedSignals: [], signalCount: 0, preliminaryNeedScore: 0, reason: 'Žiadny text na analýzu.' }
   }
 
-  const detectedSignals = []
-  let totalScore = 0
+  const detected = []
 
   for (const group of SIGNAL_GROUPS) {
     const matched = group.keywords.filter(kw => text.includes(kw.toLowerCase()))
     if (matched.length > 0) {
-      detectedSignals.push({
+      detected.push({
         id:       group.id,
         label:    group.label,
+        tier:     group.tier,
         weight:   group.weight,
         matches:  matched,
         hitCount: matched.length,
       })
-      totalScore += group.weight * Math.min(matched.length, 3)
     }
   }
 
-  // Normalize to 0–100
-  const maxPossible = SIGNAL_GROUPS.reduce((s, g) => s + g.weight * 3, 0)
-  const preliminaryNeedScore = Math.min(100, Math.round((totalScore / maxPossible) * 100))
+  // Score: sum of weights per detected group, capped at 100
+  const rawScore           = detected.reduce((s, g) => s + g.weight, 0)
+  const preliminaryNeedScore = Math.min(100, rawScore)
 
-  const topSignals = detectedSignals
-    .sort((a, b) => b.weight * b.hitCount - a.weight * a.hitCount)
-    .slice(0, 3)
-    .map(s => s.label)
+  // Reason — distinguish real signal from marketing
+  const realSignals = detected.filter(s => s.tier !== 'WEAK')
+  const topReal     = [...realSignals].sort((a, b) => b.weight - a.weight).slice(0, 2)
+  const hasWeak     = detected.some(s => s.tier === 'WEAK')
 
-  const reason = detectedSignals.length > 0
-    ? `Detekované oblasti: ${topSignals.join(', ')}${detectedSignals.length > 3 ? ` a ${detectedSignals.length - 3} ďalšie` : ''}.`
-    : 'Žiadne signálne kľúčové slová nenájdené v dostupnom texte.'
+  let reason
+  if (topReal.length > 0) {
+    reason = `Reálny signál: ${topReal.map(s => s.label).join(', ')}${realSignals.length > 2 ? ` +${realSignals.length - 2}` : ''}.`
+  } else if (hasWeak) {
+    reason = 'Iba marketingový obsah — žiadny reálny energetický signál.'
+  } else {
+    reason = 'Žiadne signály nenájdené v dostupných dátach.'
+  }
 
   return {
-    detectedSignals,
-    signalCount:        detectedSignals.length,
+    detectedSignals:    detected,
+    signalCount:        detected.length,
     preliminaryNeedScore,
     reason,
   }
 }
 
-// ── Convenience: batch analyze ────────────────────────────────────────────────
-
+// Batch helper
 export function analyzeCompanySignalsBatch(companies) {
   return companies.map(company => ({
     ...company,
     _signals: analyzeCompanySignals(company),
   }))
 }
-
-export { SIGNAL_GROUPS }

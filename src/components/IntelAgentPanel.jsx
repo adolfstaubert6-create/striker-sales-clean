@@ -60,12 +60,12 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
 
       addLog(`✓ Hotovo: ${data.done} uložených · ${data.dups || 0} duplikátov · ${data.elapsed}`)
 
-      // Phase 1D — real website crawl signal analysis
+      // Phase 1D — Intelligence signal analysis (news/ESG pages + Google Reviews)
       let enrichedReport = data.report || []
-      const crawlTargets = enrichedReport.filter(r => r.docId && !r.duplicate && r.web)
+      const crawlTargets = enrichedReport.filter(r => r.docId && !r.duplicate)
 
       if (crawlTargets.length > 0) {
-        addLog(`🌐 Skenujem weby — ${crawlTargets.length} firiem...`)
+        addLog(`🔍 Analyzujem signály — ${crawlTargets.length} firiem (web + recenzie)...`)
 
         const crawlResults = await Promise.allSettled(
           crawlTargets.map(r =>
@@ -73,11 +73,12 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
               method:  'POST',
               headers: { 'Content-Type': 'application/json' },
               body:    JSON.stringify({
-                web:          r.web,
+                web:          r.web          || '',
                 name:         r.name,
                 segment:      form.segment,
                 segmentLabel: r.segmentLabel || form.segment,
-                city:         r.city || form.locality,
+                city:         r.city         || form.locality,
+                country:      form.country   || 'DE',
                 docId:        r.docId,
               }),
             })
@@ -93,7 +94,11 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
             const d = res.value
             signalMap[d.name] = d
             crawlOk++
-            console.debug('[crawl-signals]', d.name, 'NEED:', d.strikerNeedScore, 'signals:', d.signalCount)
+            const tier = (d.detectedSignals || []).find(s => s.tier === 'VERY_STRONG') ? '🔴 VERY_STRONG'
+                       : (d.detectedSignals || []).find(s => s.tier === 'STRONG')      ? '🟠 STRONG'
+                       : (d.detectedSignals || []).find(s => s.tier === 'MEDIUM')      ? '🟡 MEDIUM'
+                       : '⚪ nič'
+            console.debug('[crawl-signals]', d.name, 'score:', d.strikerNeedScore, tier)
           }
         }
 
@@ -113,7 +118,10 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
           }
         })
 
-        addLog(`✅ Web signály: ${crawlOk}/${crawlTargets.length} stránok analyzovaných`)
+        const strongCount = Object.values(signalMap).filter(d =>
+          (d.detectedSignals || []).some(s => s.tier === 'VERY_STRONG' || s.tier === 'STRONG')
+        ).length
+        addLog(`✅ Signály: ${crawlOk}/${crawlTargets.length} analyzovaných · ${strongCount} silných signálov`)
       }
 
       if (data.done > 0 && onDone) onDone()

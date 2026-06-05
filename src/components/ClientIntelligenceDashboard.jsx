@@ -1716,11 +1716,27 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
                     return (
                       <div key={ei} style={{ marginBottom: '0.6rem', padding: '0.7rem 0.85rem', background: '#0c1018', border: `1px solid ${C.border}`, borderRadius: 4 }}>
 
-                        {/* Keyword badge — always in original language */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.4rem' }}>
+                        {/* Tier badge + keyword — keyword stays in original language */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                          {ev.tier && (() => {
+                            const tierMeta = {
+                              VERY_STRONG: { label: 'VERY STRONG', color: C.red    },
+                              STRONG:      { label: 'STRONG',      color: C.orange },
+                              MEDIUM:      { label: 'MEDIUM',      color: C.amber  },
+                              WEAK:        { label: 'WEAK',        color: C.dim    },
+                            }[ev.tier] || { label: ev.tier, color: C.dim }
+                            return (
+                              <span style={{ fontFamily: mono, fontSize: '0.38rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.04rem 0.3rem', border: `1px solid ${tierMeta.color}55`, background: `${tierMeta.color}12`, color: tierMeta.color, borderRadius: 2 }}>
+                                {tierMeta.label}
+                              </span>
+                            )
+                          })()}
                           <span style={{ fontFamily: mono, fontSize: '0.43rem', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '0.05rem 0.35rem', border: `1px solid ${C.purple}44`, background: `${C.purple}0f`, color: C.purple, borderRadius: 2 }}>
                             {ev.keyword}
                           </span>
+                          {ev.source === 'review' && ev.rating && (
+                            <span style={{ fontFamily: mono, fontSize: '0.42rem', color: C.amber }}>★ {ev.rating}</span>
+                          )}
                           {translating && !showSk && (
                             <span style={{ fontFamily: mono, fontSize: '0.39rem', color: C.dim, letterSpacing: '1px' }}>
                               ⏳ prekladám...
