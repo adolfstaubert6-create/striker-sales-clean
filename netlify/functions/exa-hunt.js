@@ -66,23 +66,23 @@ const SEGMENT_BASE = {
 function buildExaQuery(segment, city) {
   switch (segment) {
     case 'hotel':
-      return `Hotel in ${city} struggling with high heating costs or planning heating system modernization or replacement`
+      return `Hotel ${city} hohe Heizkosten Heizungsanlage modernisieren Lösung suchen`
     case 'wellness':
-      return `Wellness or Spa in ${city} with high energy costs looking for heating solution`
+      return `Wellness Spa ${city} Energiekosten Heizung Modernisierung`
     case 'laundry':
-      return `Wäscherei in ${city} with high steam or energy costs looking for solution`
+      return `Wäscherei ${city} Dampfkosten Energie Modernisierung`
     case 'hospital':
-      return `Krankenhaus or Klinik in ${city} planning energy modernization or facing high heating costs`
+      return `Krankenhaus Klinik ${city} Energieeffizienz Heizung Modernisierung`
     case 'restaurant':
-      return `Restaurant in ${city} with high energy or heating costs seeking reduction`
+      return `Restaurant Gastronomie ${city} Energiekosten Heizung Betriebskosten senken`
     case 'food':
-      return `Food production or bakery or dairy in ${city} with high energy costs seeking heating efficiency`
+      return `Lebensmittelproduktion Bäckerei Molkerei ${city} Energiekosten Wärme Modernisierung`
     case 'brewery':
-      return `Brewery or Brauerei in ${city} with high steam or energy costs looking for savings`
+      return `Brauerei ${city} Dampfkosten Energiekosten Modernisierung Heizung`
     case 'industrial':
-      return `Industrial company or manufacturer in ${city} seeking heating or energy cost reduction`
+      return `Industrie Produktion ${city} Energiekosten Wärme Modernisierung Heizanlage`
     default:
-      return `${segment} company in ${city} looking for energy cost reduction or heating modernization`
+      return `${segment} ${city} Energiekosten Heizung Modernisierung Lösung`
   }
 }
 
