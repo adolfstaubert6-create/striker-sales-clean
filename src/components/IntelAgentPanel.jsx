@@ -39,7 +39,7 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
 
     // Simulácia krokov počas čakania na výsledok (ako v agent.js)
     const timers = [
-      setTimeout(() => { setActiveStep('search');  addLog('AI hľadá firmy (Google Places)...') },     200),
+      setTimeout(() => { setActiveStep('search');  addLog('Exa hľadá firmy s energetickým problémom...') },     200),
       setTimeout(() => { setActiveStep('enrich');  addLog('AI zbiera weby a kontakty...') },          4000),
       setTimeout(() => { setActiveStep('score');   addLog('AI vyhodnocuje STRIKER FIT skóre...') },  10000),
       setTimeout(() => { setActiveStep('analyze'); addLog('AI analyzuje potenciál targetov...') },   16000),
@@ -47,7 +47,7 @@ export default function IntelAgentPanel({ onDone, onAdded }) {
     ]
 
     try {
-      const res  = await fetch('/.netlify/functions/intel-hunt', {
+      const res  = await fetch('/.netlify/functions/exa-hunt', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(form),
