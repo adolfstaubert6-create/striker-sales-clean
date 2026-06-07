@@ -1288,15 +1288,31 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           }
         </div>
 
-        {/* 5 KPI cards */}
+        {/* 3-pillar scoring */}
         <div>
-          <SH label="Kľúčové metriky" />
+          <SH label="STRIKER Scoring — 3 piliere" />
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <KPI label="Zhoda klienta"          value={fit || null}                   source={fit ? 'verified' : 'unknown'}            color={fitCol} max={100} />
-            <KPI label="Teplotný tlak"          value={t.heatPressure ?? null}        source={hasE ? (live ? 'live' : 'ai') : 'unknown'}                       />
-            <KPI label="Potreba modernizácie"   value={t.modernizationNeed ?? null}   source={hasE ? 'ai' : 'unknown'}                                          />
-            <KPI label="Signály z recenzií"     value={live ? (t.liveSignals || []).length : null}  unit=" sig."  source={live ? 'live' : 'unknown'} color={C.green} max={20} note={live && t.reviewRating ? `★ ${t.reviewRating} (${t.reviewCount || 0})` : null} />
-            <KPI label="Potenciál úspory"       value={t.estimatedROI ? null : null}  source="unknown"            note="Spusti AI Analýzu" />
+            <KPI
+              label="STRIKER FIT"
+              value={t.strikerFitScore ?? fit ?? null}
+              source={(t.strikerFitScore ?? fit) ? 'ai' : 'unknown'}
+              color={fitCol} max={100}
+              note={t.strikerFitReason || 'Štrukturálna pravdepodobnosť — typ, veľkosť, vek, prevádzka'}
+            />
+            <KPI
+              label="PRAVD. NÁKLADOV NA TEPLO"
+              value={t.heatCostProbability ?? null}
+              source={t.heatCostProbability != null ? 'ai' : 'unknown'}
+              color={t.heatCostProbability >= 70 ? C.orange : C.amber} max={100}
+              note={t.heatCostProbabilityReason || 'Prevádzkový dopyt po teple — bazén, para, nemocnica...'}
+            />
+            <KPI
+              label="ENERGETICKÁ AKTIVITA"
+              value={t.energyActivity ?? null}
+              source={t.energyActivity != null ? 'ai' : 'unknown'}
+              color={C.purple} max={100}
+              note={t.energyActivityReason || 'Verejné signály — modernizácia, projekty, CO2 záväzky'}
+            />
           </div>
         </div>
 
@@ -1384,6 +1400,36 @@ export default function ClientIntelligenceDashboard({ target: initialT, onClose 
           {sMsg && <span style={{ fontFamily: mono, fontSize: '0.55rem', color: sMsg.startsWith('✅') ? C.green : C.amber }}>{sMsg}</span>}
         </div>
         <ProgressBar running={sLoad} maxSecs={12} type="signal" />
+        {/* Three-pillar summary */}
+        {(t.strikerFitScore != null || t.heatCostProbability != null || t.energyActivity != null) && (
+          <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+            {[
+              { label: 'STRIKER FIT',               v: t.strikerFitScore,      r: t.strikerFitReason,            color: fitCol,    desc: 'Typ · Veľkosť · Vek · Prevádzka' },
+              { label: 'NÁKLADY NA TEPLO',          v: t.heatCostProbability,  r: t.heatCostProbabilityReason,   color: C.orange,  desc: 'Bazén · Para · Nemocnica · Hotel' },
+              { label: 'ENERGETICKÁ AKTIVITA',      v: t.energyActivity,       r: t.energyActivityReason,        color: C.purple,  desc: 'Modernizácia · Projekty · CO2' },
+            ].map(({ label, v, r, color, desc }) => {
+              const col = v != null ? (v >= 70 ? color : v >= 45 ? C.amber : C.dim) : C.dim
+              return (
+                <div key={label} style={{ flex: 1, minWidth: 160, background: '#0e1219', border: `1px solid ${v != null && v >= 60 ? col + '44' : '#252b36'}`, borderRadius: 5, padding: '0.9rem 1rem' }}>
+                  <div style={{ fontFamily: mono, fontSize: '0.4rem', letterSpacing: '2px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '0.35rem' }}>{label}</div>
+                  {v != null ? (
+                    <>
+                      <div style={{ fontFamily: mono, fontSize: '1.6rem', fontWeight: 700, color: col, lineHeight: 1, marginBottom: '0.2rem', textShadow: `0 0 16px ${col}44` }}>{v}</div>
+                      <div style={{ height: 4, background: '#1a2030', borderRadius: 2, overflow: 'hidden', marginBottom: '0.3rem' }}>
+                        <div style={{ width: `${v}%`, height: '100%', background: col, borderRadius: 2 }} />
+                      </div>
+                      {r && <div style={{ fontFamily: mono, fontSize: '0.47rem', color: '#6b7280', lineHeight: 1.45 }}>{r}</div>}
+                    </>
+                  ) : (
+                    <div style={{ fontFamily: mono, fontSize: '0.5rem', color: '#374151', fontStyle: 'italic', lineHeight: 1.5 }}>{desc}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Detailed 6-metric breakdown */}
         {hasE ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
             {[

@@ -31,19 +31,37 @@ Lokalita: ${[city, country].filter(Boolean).join(', ')}
 Web: ${url || 'neuvedený'}
 Kontext: ${extraContext || 'žiadny'}
 
-SCORING (0–100):
-- strikerFitScore: heatDemand×0.40 + financialPower×0.30 + energyPain×0.20 + urgency×0.10
-- heatDemandScore: Wellness/Spa 88–95, Práčovňa 83–90, Pivovar 80+, Hotel 72–85, Nemocnica 68–78
-- recommendation: "immediate" ak fit≥70, "monitor" ak 45–69, "unsuitable" ak <45
+SCORING — TRI PILIERE (0–100 každý):
+
+STRIKER FIT — štrukturálna pravdepodobnosť na základe typu, veľkosti, veku a prevádzky:
+  Hotel s wellness/bazénom/saunou: +30 | Veľký hotel 50+ izieb: +20
+  Stará budova 15+ rokov: +25 | Prevádzka 24/7: +15
+  Práčovňa / potravinárstvo: +30 | Nemocnica / zariadenie opatrovania: +25
+  Plynový/olejový/peletový kotol (pravdepodobný): +20
+
+HEAT COST PROBABILITY — prevádzkový dopyt po teple:
+  Bazén / sauna / wellness: +35 | Priemyselná práčovňa (para): +35
+  Veľký hotel: +25 | Nemocnica: +30 | Potravinárstvo / pivovar: +30
+
+ENERGY ACTIVITY — verejné signály (sekundárne, nie primárne):
+  Aktívna modernizácia / rekonštrukcia vykurovania: +35
+  Energetický projekt: +30 | CO2 / dekarbonizácia záväzok: +20
+  Všeobecný sustainability marketing: +5 IBA
+  Hľadanie Energy/Facility Managera: NIE primárny signál — max +5
+
+overallScore = 0.45 × strikerFitScore + 0.35 × heatCostProbability + 0.20 × energyActivity
+recommendation: "immediate" ak overall≥70, "monitor" ak 45–69, "unsuitable" ak <45
 
 Vráť VÝLUČNE valid JSON (bez markdown), text po SLOVENSKY:
 {
-  "strikerFitScore": <int>,    "strikerFitReason": "<max 10 slov>",
+  "strikerFitScore": <int>,         "strikerFitReason": "<max 10 slov>",
+  "heatCostProbability": <int>,     "heatCostProbabilityReason": "<max 10 slov>",
+  "energyActivity": <int>,          "energyActivityReason": "<max 10 slov>",
   "heatDemandScore": <int>,
-  "energyPainScore": <int>,    "energyPainReason": "<max 10 slov>",
-  "urgencyScore": <int>,       "urgencyReason": "<max 10 slov>",
-  "financialPowerScore": <int>,"financialPowerReason": "<max 10 slov>",
-  "buyingIntentScore": <int>,  "buyingIntent": "weak|medium|strong",
+  "energyPainScore": <int>,         "energyPainReason": "<max 10 slov>",
+  "urgencyScore": <int>,            "urgencyReason": "<max 10 slov>",
+  "financialPowerScore": <int>,     "financialPowerReason": "<max 10 slov>",
+  "buyingIntentScore": <int>,       "buyingIntent": "weak|medium|strong",
   "buyingIntentReason": "<max 10 slov>",
   "overallScore": <int>,
   "estimatedSize": "Malá firma|Stredná firma|Veľká firma|Korporácia",
