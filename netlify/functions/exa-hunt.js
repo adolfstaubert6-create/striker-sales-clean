@@ -130,6 +130,55 @@ function extractName(title, url) {
   return title.split(/\s+[–—|]\s+|\s+-\s+/)[0].trim().slice(0, 80)
 }
 
+// ── Domain filtering — exclude news portals / aggregators ─────────────────────
+//
+// Exa sometimes returns article pages from news portals instead of company sites.
+// We only want results where the domain IS the company's own website.
+
+const BLOCKED_DOMAINS = new Set([
+  // News portals & media
+  'immoclick24.de', 'immobilienscout24.de', 'immowelt.de', 'immonet.de',
+  'focus.de', 'spiegel.de', 'handelsblatt.com', 'welt.de', 'sueddeutsche.de',
+  'faz.net', 'faz.com', 'n-tv.de', 't-online.de', 'stern.de', 'bild.de',
+  'manager-magazin.de', 'wirtschaftswoche.de', 'wiwo.de', 'capital.de',
+  'tagesspiegel.de', 'zeit.de', 'taz.de', 'fr.de', 'rp-online.de',
+  'augsburger-allgemeine.de', 'merkur.de', 'tz.de', 'bz-berlin.de',
+  'heise.de', 'golem.de', 'computerbild.de', 'chip.de',
+  // Industry portals & aggregators
+  'energiezukunft.eu', 'energie-und-management.de', 'solarserver.de',
+  'photovoltaik.eu', 'elektro.net', 'haustec.de', 'sbz-monteur.de',
+  'ikz.de', 'tga-praxis.de', 'tab.de', 'hv-plus.de',
+  // Job / review / listing platforms
+  'xing.com', 'linkedin.com', 'kununu.com', 'stepstone.de', 'indeed.de',
+  'yelp.de', 'yelp.com', 'tripadvisor.com', 'tripadvisor.de',
+  'holidaycheck.de', 'holidaycheck.com', 'booking.com', 'hrs.de',
+  'google.com', 'facebook.com', 'instagram.com', 'twitter.com', 'youtube.com',
+  // Press release aggregators
+  'presseportal.de', 'openpr.de', 'prnews.io', 'businesswire.com',
+  'presse.de', 'pr-gateway.de', 'firmenpresse.de',
+  // Wikipedia / encyclopaedia
+  'wikipedia.org', 'wikipedia.de',
+])
+
+// Domain-name patterns that indicate a portal/aggregator, not a company site
+const BLOCKED_PATTERNS = [
+  /news\d/,          // news24.de, news1.de etc.
+  /portal/,
+  /magazin/,
+  /zeitung/,
+  /verlag/,
+  /nachrichten/,
+  /presse(?!e)/,     // presseportal but not "pressemitteilung" sub-pages on own domain
+  /immobili/,
+  /immo\d/,
+]
+
+function isPortalDomain(domain) {
+  if (!domain) return true
+  if (BLOCKED_DOMAINS.has(domain)) return true
+  return BLOCKED_PATTERNS.some(re => re.test(domain))
+}
+
 // ── Exa search ─────────────────────────────────────────────────────────────────
 
 async function exaSearch(query, numResults) {
@@ -142,6 +191,7 @@ async function exaSearch(query, numResults) {
       body:    JSON.stringify({
         query,
         type:       'neural',
+        category:   'company',
         numResults,
         contents: {
           text:       { maxCharacters: 600 },
@@ -449,28 +499,39 @@ exports.handler = async (event) => {
     const rawResults = await exaSearch(query, numFetch)
     console.log(`[exa-hunt] Exa returned ${rawResults.length} results`)
 
-    if (!rawResults.length) {
+    // Domain filter — strip news portals and aggregators before Claude sees them
+    const filteredResults = rawResults.filter(r => {
+      const domain = extractDomain(r.url || r.id || '')
+      if (isPortalDomain(domain)) {
+        console.log(`[exa-hunt] blocked portal: ${domain} (${(r.url || '').slice(0, 60)})`)
+        return false
+      }
+      return true
+    })
+    console.log(`[exa-hunt] After domain filter: ${filteredResults.length}/${rawResults.length} remain`)
+
+    if (!filteredResults.length) {
       return {
         statusCode: 200,
         body: JSON.stringify({
           ok: true, total: 0, done: 0, dups: 0, errors: 0,
           elapsed: `${((Date.now() - t0) / 1000).toFixed(1)}s`,
           report:  [],
-          message: `Exa nenašla výsledky pre: "${query}"`,
+          message: `Exa nenašla vhodné výsledky pre: "${query}" (všetky boli portály/agregátory)`,
         }),
       }
     }
 
     // ── Step 2: Claude filter — seeking vs. already solved ────────────────────
-    const verdicts = await claudeFilter(rawResults, segment, city)
+    const verdicts = await claudeFilter(filteredResults, segment, city)
 
     // Keep only results Claude marked as seeking, in order, up to safeCount
-    const qualified = rawResults
+    const qualified = filteredResults
       .map((r, i) => ({ result: r, verdict: verdicts.find(v => v.index === i + 1) }))
       .filter(({ verdict }) => verdict?.seeking !== false)
       .slice(0, safeCount)
 
-    console.log(`[exa-hunt] After filter: ${qualified.length}/${rawResults.length} qualify`)
+    console.log(`[exa-hunt] After Claude filter: ${qualified.length}/${filteredResults.length} qualify`)
 
     // ── Step 3: Save qualifying results to Firestore ──────────────────────────
     const seenDomains = new Set()
